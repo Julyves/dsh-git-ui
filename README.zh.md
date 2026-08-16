@@ -1,8 +1,16 @@
 # dsh-git-ui
 
+[![npm version](https://img.shields.io/npm/v/dsh-git-ui.svg)](https://www.npmjs.com/package/dsh-git-ui)
+[![npm license](https://img.shields.io/npm/l/dsh-git-ui.svg)](https://www.npmjs.com/package/dsh-git-ui)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-git-ui.svg)](https://www.npmjs.com/package/dsh-git-ui)
+
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）Web UI 插件：在会话界面中可视化展示当前工程的 Git 状态——分支、HEAD、脏状态计数（已暂存/已修改/未跟踪）、领先/落后、最近提交与变更文件。无需切换终端，扫一眼即得。
 
 > English version: [README.md](README.md)
+
+- 📦 **npm**：<https://www.npmjs.com/package/dsh-git-ui>
+- 🐙 **GitHub**：<https://github.com/Julyves/dsh-git-ui>
+- 🐛 **Issues**：<https://github.com/Julyves/dsh-git-ui/issues>
 
 ## 功能特性
 
@@ -22,20 +30,6 @@
 - **数据自动保鲜，零操作**：进入会话自动拉取、静默轮询（间隔由主机下发，默认 30s，不重叠请求）、**agent 完成一个回合后立即刷新**（尽力而为——此时工作区最可能已变化）、断线重连 resync、面板内手动刷新。
 - **确定性降级**：非 git 目录、无 cwd、git 缺失、超时、巨型仓库等边界显示稳定降级态——不崩溃、不刷屏。
 - **纯只读 UI**：不给模型新增工具、不写会话事件，不改变 agent 的任何行为。
-
-## 截图
-
-> 维护者截图指引：按下方文件名把截图放入 `docs/screenshots/` 后提交即可。
-> 拍摄要点（演示仓库、尺寸、敏感信息规避）见 [docs/screenshots/README.md](docs/screenshots/README.md)。
-
-![会话头部分支 Pill](docs/screenshots/pill.png)
-*会话头部的分支 Pill——分支名、脏状态计数（`+1 −1 ?2`）与领先/落后一览。*
-
-![Git 状态详情面板](docs/screenshots/popup.png)
-*点击 Pill 展开详情面板：计数格、最近提交与带状态 chip 的变更文件列表。*
-
-![降级状态](docs/screenshots/dirty.png)
-*干净 / 脏状态 / 非 git 仓库的对照——非仓库显示弱化占位而非 Pill。*
 
 ## 安装
 
@@ -116,8 +110,6 @@ pnpm test
 pnpm run build        # host（esbuild ESM，禁止压缩）+ client（ModuleLoader factory 闭包）
 dsh plugin --profile web add ./   # 本地安装；重启 dsh web 验证
 ```
-
-架构研究与工程决策见 [PLAN.md](PLAN.md)。
 
 ## 许可证
 

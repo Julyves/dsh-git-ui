@@ -1,8 +1,16 @@
 # dsh-git-ui
 
+[![npm version](https://img.shields.io/npm/v/dsh-git-ui.svg)](https://www.npmjs.com/package/dsh-git-ui)
+[![npm license](https://img.shields.io/npm/l/dsh-git-ui.svg)](https://www.npmjs.com/package/dsh-git-ui)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-git-ui.svg)](https://www.npmjs.com/package/dsh-git-ui)
+
 A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plugin that visualizes Git status in the Web UI: current branch, HEAD, dirty-state counts (staged / modified / untracked), ahead/behind, recent commits, and changed files — right in the session header, no terminal needed.
 
 > Read this in [简体中文](README.zh.md).
+
+- 📦 **npm**: <https://www.npmjs.com/package/dsh-git-ui>
+- 🐙 **GitHub**: <https://github.com/Julyves/dsh-git-ui>
+- 🐛 **Issues**: <https://github.com/Julyves/dsh-git-ui/issues>
 
 ## Features
 
@@ -22,22 +30,6 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plug
 - **Always-fresh data, zero interaction**: automatic fetch on session open, silent polling (host-configured interval, default 30s, no overlapping requests), **immediate refresh when an agent turn completes** (best-effort — the working tree most likely changed right then), resync after reconnect, and a manual refresh button.
 - **Deterministic degradation**: non-git directories, missing cwd, missing git, timeouts, and oversized repositories show stable fallback states — never crashes, never spams.
 - **Pure read-only UI**: no new model tools, no session events, no impact on agent behavior.
-
-## Screenshots
-
-> Screenshot placement guide for maintainers: capture each image, save it
-> under `docs/screenshots/` with the exact filename below, and commit. See
-> [docs/screenshots/README.md](docs/screenshots/README.md) for capture tips
-> (demo repo, sizes, sensitive-info rules).
-
-![Branch pill in the session header](docs/screenshots/pill.png)
-*The branch pill in the session header — branch, dirty-state counts (`+1 −1 ?2`) and ahead/behind at a glance.*
-
-![Git status detail popup](docs/screenshots/popup.png)
-*Click the pill for the detail panel: count grid, recent commits, and the changed-file list with status chips.*
-
-![Degraded states](docs/screenshots/dirty.png)
-*Clean vs dirty vs non-repository states — the dimmed placeholder instead of a pill.*
 
 ## Installation
 
@@ -121,8 +113,6 @@ pnpm test
 pnpm run build        # host (esbuild ESM, never minified) + client (ModuleLoader factory closure)
 dsh plugin --profile web add ./   # local install; restart dsh web to verify
 ```
-
-See [PLAN.md](PLAN.md) for the architecture research and engineering decisions.
 
 ## License
 

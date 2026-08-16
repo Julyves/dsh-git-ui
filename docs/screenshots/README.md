@@ -1,9 +1,10 @@
 # Screenshot Placement Guide
 
-This directory holds the screenshots referenced by the project READMEs
-(`README.md` / `README.zh.md`). Each image must use the **exact filename**
-below — the README references resolve against these paths, so renaming
-breaks the rendered page until fixed.
+This directory holds the screenshots of the plugin (session-header pill,
+detail popup, degraded states). The images are kept here so they can be
+referenced from the READMEs, the npm package page, or GitHub release notes.
+Each image uses the **exact filename** below — renaming breaks any reference
+that already points at these paths.
 
 ## Required images
 
@@ -50,5 +51,6 @@ Never publish screenshots containing:
 ## After capturing
 
 1. Save each file into this directory with the exact name from the table.
-2. `git add docs/screenshots/ && git commit` (the README references already
-   point at these paths — no README edits needed).
+2. `git add docs/screenshots/ && git commit` — then reference the images
+   wherever they are needed (`![alt](docs/screenshots/pill.png)` works on
+   GitHub for repository-relative paths).
