@@ -45,7 +45,7 @@ describe('client bundle artifact', () => {
       throw new Error(`unexpected require: ${spec}`)
     })
     expect(plugin.name).toBe('dsh-git-status')
-    expect(plugin.inject).toEqual(['slots', 'remote', 'remote.gitInfo', 'locale'])
+    expect(plugin.inject).toEqual(['slots', 'remote', 'locale'])
     expect(typeof plugin.apply).toBe('function')
   })
 })

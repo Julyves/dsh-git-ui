@@ -47,8 +47,17 @@ interface ClientContext {
   [key: string]: unknown
 }
 
-/** Required services: slot registry, Remote base + mounted namespace, copy. */
-export const inject = ['slots', 'remote', 'remote.gitInfo', 'locale'] as const
+/**
+ * Required services: slot registry, Remote base (gateway client), and copy.
+ *
+ * NOTE: `remote.gitInfo` must NOT be injected here — that namespace service is
+ * registered by OUR OWN `ctx.remote.$mount(gitInfoRemote)` below. Injecting it
+ * would deadlock: cordis waits for the service before running apply, but the
+ * service only appears when apply runs. (In-repo plugins like ui-message-
+ * feedback can inject their namespace because a separate assembly package
+ * mounts it; a standalone plugin mounts its own.)
+ */
+export const inject = ['slots', 'remote', 'locale'] as const
 
 /** Plugin identity: the factory handoff returns this plus the exports above. */
 export const name = 'dsh-git-status'
