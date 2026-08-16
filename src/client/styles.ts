@@ -215,6 +215,14 @@ const globalCss = [
   '.dsh-git-ui__row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
   '.dsh-git-ui__refresh:hover { color: var(--dsw-alias-state-business-primary); }',
   '.dsh-git-ui__refresh:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }',
+  // Git center dialog: widen the platform Modal card (headless mode).
+  '.dsh-git-ui__center { width: min(880px, 100vw); max-height: min(720px, calc(100vh - 48px)); }',
+  '.dsh-git-ui__center .dsh-git-ui__btn:hover { color: var(--dsw-alias-state-business-primary); }',
+  '.dsh-git-ui__center .dsh-git-ui__btn:disabled { opacity: 0.45; cursor: default; }',
+  '.dsh-git-ui__center .dsh-git-ui__btn--danger:hover { color: var(--dsw-alias-state-error-primary); }',
+  '.dsh-git-ui__center .dsh-git-ui__btn--primary { color: var(--dsw-alias-state-business-primary); font-weight: 600; }',
+  '.dsh-git-ui__center .dsh-git-ui__btn--primary:disabled { color: var(--dsw-alias-label-tertiary); }',
+  '.dsh-git-ui__commit-input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
 ].join('\n')
 
 /** Ensure the global interaction styles exist (idempotent; browser only). */
@@ -226,4 +234,164 @@ export function ensureGlobalCss(): void {
   tag.dataset.plugin = 'dsh-git-ui'
   tag.textContent = globalCss
   document.head.appendChild(tag)
+}
+
+// ── Git center (management panel) styles ──────────────────────────────────
+
+export const centerShell: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  height: '100%',
+  maxHeight: 'min(720px, calc(100vh - 48px))',
+  minHeight: 420,
+  fontSize: 13,
+  lineHeight: '20px',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+export const centerHeader: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  padding: '14px 18px',
+  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+  flex: 'none',
+}
+
+export const centerTitle: CSSProperties = {
+  margin: 0,
+  fontSize: 14,
+  fontWeight: 600,
+  flex: 1,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+}
+
+export const centerClose: CSSProperties = {
+  border: 0,
+  background: 'transparent',
+  padding: '2px 6px',
+  fontSize: 13,
+  cursor: 'pointer',
+  color: 'var(--dsw-alias-label-secondary)',
+  font: 'inherit',
+  borderRadius: 6,
+}
+
+export const centerBody: CSSProperties = {
+  flex: 1,
+  overflowY: 'auto',
+  padding: '10px 18px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+}
+
+export const groupTitle: CSSProperties = {
+  margin: '8px 0 4px',
+  fontSize: 11,
+  fontWeight: 600,
+  color: 'var(--dsw-alias-label-secondary)',
+  textTransform: 'uppercase',
+  letterSpacing: 0.4,
+}
+
+export const centerRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '3px 6px',
+  borderRadius: 6,
+}
+
+export const changeCheckbox: CSSProperties = {
+  flex: 'none',
+  accentColor: 'var(--dsw-alias-state-business-primary)',
+}
+
+export const changePathText: CSSProperties = {
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  flex: 1,
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+export const toolRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  flexWrap: 'wrap',
+  padding: '6px 0',
+}
+
+export const toolButton: CSSProperties = {
+  border: 0,
+  background: 'transparent',
+  padding: '2px 8px',
+  fontSize: 12,
+  cursor: 'pointer',
+  color: 'var(--dsw-alias-label-secondary)',
+  borderRadius: 6,
+  font: 'inherit',
+}
+
+export const commitBox: CSSProperties = {
+  borderTop: '1px solid var(--dsw-alias-border-l1)',
+  padding: '10px 18px 14px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+  flex: 'none',
+  background: 'var(--dsw-alias-bg-layer-1)',
+}
+
+export const commitInput: CSSProperties = {
+  width: '100%',
+  boxSizing: 'border-box',
+  minHeight: 64,
+  resize: 'vertical',
+  border: '1px solid var(--dsw-alias-border-l1)',
+  borderRadius: 8,
+  padding: '6px 8px',
+  fontSize: 13,
+  lineHeight: '20px',
+  fontFamily: 'inherit',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+export const commitFooter: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 8,
+}
+
+export const commitHint: CSSProperties = {
+  fontSize: 11,
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+export const feedbackError: CSSProperties = {
+  padding: '6px 10px',
+  borderRadius: 8,
+  fontSize: 12,
+  lineHeight: '18px',
+  background: 'var(--dsw-alias-state-error-secondary)',
+  color: 'var(--dsw-alias-state-error-primary)',
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+  maxHeight: 120,
+  overflowY: 'auto',
+}
+
+export const feedbackSuccess: CSSProperties = {
+  padding: '6px 10px',
+  borderRadius: 8,
+  fontSize: 12,
+  lineHeight: '18px',
+  background: 'var(--dsw-alias-state-success-secondary)',
+  color: 'var(--dsw-alias-state-success-primary)',
 }

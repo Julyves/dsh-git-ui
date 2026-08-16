@@ -16,6 +16,8 @@ import { createPortal } from 'react-dom'
 import type { JSX } from 'react'
 import { completedTurnCount, type TurnSignalSnapshot } from './turn-signal.ts'
 import type { GitObservable, GitView } from './controller.ts'
+import { GitCenter } from './GitCenter.tsx'
+import type { GitAction, GitActionResult } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
 
@@ -31,6 +33,8 @@ export interface GitInjected {
   }
   /** Force an immediate re-check (same path as polling). */
   refresh: () => Promise<void>
+  /** Execute one management action (host returns a fresh snapshot). */
+  run: (action: GitAction) => Promise<GitActionResult>
 }
 
 /** Selector hook shape the slot runtime binds from `hooks.git`. */
@@ -122,10 +126,11 @@ function DegradedPill({ label, title, t }: { label: string; title?: string; t: (
 
 /** Popup body (rendered inside the portaled card): root, counts, commits, changes, refresh. */
 function GitPopupBody({
-  view, refresh, t,
+  view, refresh, openCenter, t,
 }: {
   view: GitView & { state: 'ready' }
   refresh: () => Promise<void>
+  openCenter: () => void
   t: (key: GitKey) => string
 }): JSX.Element {
   const now = Date.now()
@@ -178,7 +183,12 @@ function GitPopupBody({
         )}
       <div style={css.footerRow}>
         <span style={css.checkedAt}>{t('popup.checkedAt').replace('{time}', new Date(s.checkedAt).toLocaleTimeString())}</span>
-        <PopRefresher refresh={refresh} t={t} />
+        <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+          <button type="button" className="dsh-git-ui__refresh" style={css.refreshButton} onClick={openCenter}>
+            {t('center.open')}
+          </button>
+          <PopRefresher refresh={refresh} t={t} />
+        </span>
       </div>
     </>
   )
@@ -207,9 +217,10 @@ const POPUP_GUTTER = 6
 const VIEW_GUTTER = 8
 
 /**
- * The header utility entry: a branch pill that opens a portaled detail popup.
+ * The header utility entry: a branch pill that opens a portaled detail popup
+ * and the Git center management panel.
  */
-export function GitPill({ useGit, useSession, refresh, t }: GitPillProps): JSX.Element | null {
+export function GitPill({ useGit, useSession, refresh, run, t }: GitPillProps): JSX.Element | null {
   // The selector hook requires a selector function (with-selector calls it
   // unconditionally); identity selection reads the whole view snapshot.
   const view = useGit((view) => view)
@@ -238,6 +249,7 @@ export function GitPill({ useGit, useSession, refresh, t }: GitPillProps): JSX.E
   const wrapRef = useRef<HTMLSpanElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+  const [centerOpen, setCenterOpen] = useState(false)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
 
   useEffect(() => {
@@ -345,10 +357,22 @@ export function GitPill({ useGit, useSession, refresh, t }: GitPillProps): JSX.E
           role="dialog"
           aria-label={t('popup.title')}
         >
-          <GitPopupBody view={display} refresh={refresh} t={t} />
+          <GitPopupBody
+            view={display}
+            refresh={refresh}
+            openCenter={() => { setOpen(false); setPos(null); setCenterOpen(true) }}
+            t={t}
+          />
         </div>,
         document.body,
       )}
+      <GitCenter
+        open={centerOpen}
+        onClose={() => setCenterOpen(false)}
+        snapshot={display.snapshot}
+        run={run}
+        t={t}
+      />
     </span>
   )
 }

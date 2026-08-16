@@ -1,18 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GitController, type GitRemoteEnvelope, type GitRemoteLike } from '../../src/client/controller.ts'
-import type { GitSnapshot, GitSnapshotResult } from '../../src/host/types.ts'
+import type { GitActionResult, GitSnapshot, GitSnapshotResult } from '../../src/host/types.ts'
 
 /** Business-result helpers wrapped in the RPC envelope the gateway returns. */
 const ok = (value: GitSnapshotResult): GitRemoteEnvelope<GitSnapshotResult> => ({ ok: true, value })
 const okResult = (s: GitSnapshot): GitRemoteEnvelope<GitSnapshotResult> => ok({ ok: true, value: s })
+const okRun = (value: GitActionResult): GitRemoteEnvelope<GitActionResult> => ({ ok: true, value })
 
 /** Programmable fake Remote namespace (returns the real RPC envelope shape). */
 class FakeRemote implements GitRemoteLike {
   calls = 0
+  runCalls = 0
   private queue: Array<GitRemoteEnvelope<GitSnapshotResult> | Error> = []
+  private runQueue: Array<GitRemoteEnvelope<GitActionResult> | Error> = []
 
   enqueue(result: GitRemoteEnvelope<GitSnapshotResult> | Error): void {
     this.queue.push(result)
+  }
+
+  enqueueRun(result: GitRemoteEnvelope<GitActionResult> | Error): void {
+    this.runQueue.push(result)
   }
 
   snapshot(): Promise<GitRemoteEnvelope<GitSnapshotResult>> {
@@ -20,6 +27,14 @@ class FakeRemote implements GitRemoteLike {
     const next = this.queue.shift()
     if (next instanceof Error) return Promise.reject(next)
     if (next === undefined) return Promise.reject(new Error('FakeRemote: queue exhausted'))
+    return Promise.resolve(next)
+  }
+
+  run(): Promise<GitRemoteEnvelope<GitActionResult>> {
+    this.runCalls += 1
+    const next = this.runQueue.shift()
+    if (next instanceof Error) return Promise.reject(next)
+    if (next === undefined) return Promise.reject(new Error('FakeRemote: run queue exhausted'))
     return Promise.resolve(next)
   }
 }
@@ -197,5 +212,52 @@ describe('GitController', () => {
     expect(controller.getSnapshot()).toEqual({ state: 'loading' })
     await vi.advanceTimersByTimeAsync(120_000)
     expect(remote.calls).toBe(1)
+  })
+
+  it('run() applies the returned snapshot to the view immediately', async () => {
+    const after = snapshot({ staged: 1, dirty: true, changes: [{ path: 'a.txt', status: 'modified', staged: true }] })
+    remote.enqueue(okResult(snapshot()))
+    controller.ensure()
+    await tick()
+    expect(controller.getSnapshot()).toMatchObject({ state: 'ready' })
+    remote.enqueueRun(okRun({ ok: true, snapshot: after }))
+    const result = await controller.run({ kind: 'stage', paths: ['a.txt'] })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const view = controller.getSnapshot()
+    expect(view.state).toBe('ready')
+    if (view.state === 'ready') expect(view.snapshot.staged).toBe(1)
+    expect(remote.runCalls).toBe(1)
+  })
+
+  it('run() surfaces a git-error without losing the last ready view', async () => {
+    remote.enqueue(okResult(snapshot()))
+    controller.ensure()
+    await tick()
+    remote.enqueueRun(okRun({ ok: false, error: { code: 'git-error', message: 'nothing to commit' } }))
+    const result = await controller.run({ kind: 'commit', message: 'x' })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('git-error')
+    // The last ready snapshot stays visible (plus a background refresh kick).
+    const view = controller.getSnapshot()
+    expect(view.state).toBe('ready')
+    if (view.state === 'ready') expect(view.snapshot.dirty).toBe(false)
+  })
+
+  it('run() queues behind an in-flight refresh (single-flight)', async () => {
+    let resolveSnapshot: (r: GitRemoteEnvelope<GitSnapshotResult>) => void = () => {}
+    const pending = new Promise<GitRemoteEnvelope<GitSnapshotResult>>((resolve) => { resolveSnapshot = resolve })
+    remote.enqueue(pending as unknown as GitRemoteEnvelope<GitSnapshotResult>)
+    controller.ensure()
+    await tick()
+    remote.enqueueRun(okRun({ ok: true, snapshot: snapshot() }))
+    const runPromise = controller.run({ kind: 'stage-all' })
+    // Still queued while the refresh is in flight.
+    expect(remote.runCalls).toBe(0)
+    resolveSnapshot(okResult(snapshot()))
+    const result = await runPromise
+    expect(result.ok).toBe(true)
+    expect(remote.runCalls).toBe(1)
   })
 })

@@ -5,7 +5,7 @@
  * connection reset, `dispose()` on slot teardown (clears the timer and
  * rejects nothing — in-flight work settles into a withdrawn view).
  */
-import type { GitSnapshot, GitSnapshotFailure, GitSnapshotRequest, GitSnapshotResult } from '../host/types.ts'
+import type { GitActionResult, GitActionRequest, GitSnapshot, GitSnapshotFailure, GitSnapshotRequest, GitSnapshotResult } from '../host/types.ts'
 
 /** The observable view contract components consume (useSyncExternalStore shape). */
 export interface GitObservable<V> {
@@ -35,6 +35,7 @@ export type GitRemoteEnvelope<T> =
 /** Structural face of the mounted gitInfo Remote namespace. */
 export interface GitRemoteLike {
   snapshot(request: GitSnapshotRequest): Promise<GitRemoteEnvelope<GitSnapshotResult>>
+  run(request: GitActionRequest): Promise<GitRemoteEnvelope<GitActionResult>>
 }
 
 /** Failure codes that mean "no working directory to watch" — degrade to a
@@ -124,6 +125,52 @@ export class GitController implements GitObservable<GitView> {
     // and a reconnect alone does not create a working directory.
     if (this.disposed || this.view.state === 'cold' || this.view.state === 'no-cwd') return
     void this.refresh()
+  }
+
+  /**
+   * Run one management action. On success the host returns a fresh snapshot
+   * which becomes the view immediately (no waiting for the next poll); the
+   * returned result lets the caller show operation feedback. Shares the
+   * single-flight slot with refresh, so an action never overlaps a poll.
+   */
+  run(action: GitActionRequest['action']): Promise<GitActionResult> {
+    if (this.inflight !== undefined) return this.inflight.then(() => this.run(action))
+    if (this.disposed) return Promise.resolve({ ok: false, error: { code: 'git-error', message: 'controller disposed' } })
+    // Deliberately no loading view here: an operation must not blank the
+    // pill/panel while it runs — the UI shows its own busy state, and a
+    // failure keeps the current view for context.
+    const promise = this.remote.run({ sessionId: this.sessionId, action })
+      .then((result) => {
+        if (this.disposed) return { ok: false, error: { code: 'git-error', message: 'controller disposed' } } as GitActionResult
+        if (!result.ok) {
+          const detail = [result.error.code, result.error.message].filter(Boolean).join(': ')
+          this.setView({ state: 'error', error: { code: 'git-unavailable', detail: detail || 'rpc failure' } })
+          return { ok: false, error: { code: 'git-error', message: detail || 'rpc failure' } } as GitActionResult
+        }
+        const inner = result.value
+        if (inner.ok) {
+          this.pollMs = inner.snapshot.refreshIntervalMs
+          this.setView({ state: 'ready', snapshot: inner.snapshot })
+        } else if (TERMINAL_CODES.has(inner.error.code)) {
+          this.setView({ state: 'no-cwd' })
+        }
+        // Other failures keep the current view (context for the panel); the
+        // error rides back to the caller for display.
+        return inner
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        if (!this.disposed) {
+          this.setView({ state: 'error', error: { code: 'git-unavailable', detail: 'transport failure' } })
+        }
+        return { ok: false, error: { code: 'git-error', message } } as GitActionResult
+      })
+      .finally(() => {
+        this.inflight = undefined
+        if (!this.disposed) this.schedulePoll()
+      })
+    this.inflight = promise.then(() => undefined)
+    return promise
   }
 
   /** Tear down: stop the timer; in-flight work settles into a no-op. */

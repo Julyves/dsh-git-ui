@@ -89,7 +89,7 @@ function runFailure(result: { readonly timedOut: boolean }, detail: string): Ext
 }
 
 /** Run one command, mapping a spawn-level failure to a snapshot failure. */
-async function runCommand(
+export async function runCommand(
   runner: GitRunner,
   argv: readonly string[],
   cwd: string,
@@ -104,20 +104,18 @@ async function runCommand(
 }
 
 /**
- * Build one frozen GitSnapshot for a session working directory.
- * Command sequence (all read-only; every command after the first runs with
- * the repository root as cwd):
- *   1. `git rev-parse --show-toplevel`      — repo detection (exit 128 → not-a-git-repo)
- *   2. `git branch --show-current`          — null when detached
- *   3. `git rev-parse --short HEAD`         — null + unborn when the repo has no commits
- *   4. `git status --porcelain=v1 -z --branch`
- *   5. `git log -n 5 --format=%H%x1f%h%x1f%s%x1f%an%x1f%aI`
+ * Resolve a session's repository workspace: cwd (live or persisted), the
+ * realpath'd directory, and the git work-tree root via `rev-parse
+ * --show-toplevel`. Shared by the snapshot flow and the operation runner.
  */
-export async function snapshotForSession(
+export type WorkspaceResolution =
+  | { readonly ok: true; readonly cwd: string; readonly root: string }
+  | { readonly ok: false; readonly error: Extract<GitSnapshotResult, { ok: false }>['error'] }
+
+export async function resolveWorkspace(
   deps: SnapshotDeps,
-  config: GitStatusConfig,
   sessionId: string,
-): Promise<GitSnapshotResult> {
+): Promise<WorkspaceResolution> {
   const resolved = await resolveCwd(deps.sessions, sessionId)
   if (!resolved.ok) return { ok: false, error: resolved.error }
 
@@ -149,6 +147,27 @@ export async function snapshotForSession(
   }
   const root = toplevel.run.stdout.trim()
   if (root === '') return { ok: false, error: { code: 'not-a-git-repo' } }
+  return { ok: true, cwd: realCwd, root }
+}
+
+/**
+ * Build one frozen GitSnapshot for a session working directory.
+ * Command sequence (all read-only; every command after the first runs with
+ * the repository root as cwd):
+ *   1. `git rev-parse --show-toplevel`      — repo detection (exit 128 → not-a-git-repo)
+ *   2. `git branch --show-current`          — null when detached
+ *   3. `git rev-parse --short HEAD`         — null + unborn when the repo has no commits
+ *   4. `git status --porcelain=v1 -z --branch`
+ *   5. `git log -n 5 --format=%H%x1f%h%x1f%s%x1f%an%x1f%aI`
+ */
+export async function snapshotForSession(
+  deps: SnapshotDeps,
+  config: GitStatusConfig,
+  sessionId: string,
+): Promise<GitSnapshotResult> {
+  const workspace = await resolveWorkspace(deps, sessionId)
+  if (!workspace.ok) return { ok: false, error: workspace.error }
+  const root = workspace.root
 
   const branchRun = await runCommand(deps.run, ['git', 'branch', '--show-current'], root, 'branch', deps.signal)
   if ('failure' in branchRun) return { ok: false, error: branchRun.failure }

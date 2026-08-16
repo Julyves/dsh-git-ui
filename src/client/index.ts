@@ -116,7 +116,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
             // `refresh` reference staying stable (a fresh arrow function per
             // call would re-run mount effects and loop: refresh → view
             // change → re-render → new refresh → refresh …). Cache the face
-            // so the same controller (and its bound refresh) is always
+            // so the same controller (and its bound refresh/run) is always
             // handed out per session.
             let face = faces.get(sessionId)
             if (face === undefined) {
@@ -124,6 +124,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
               face = {
                 hooks: { git: controller as GitInjected['hooks']['git'] },
                 refresh: () => controller.refresh(),
+                run: (action) => controller.run(action),
               }
               faces.set(sessionId, face)
             }

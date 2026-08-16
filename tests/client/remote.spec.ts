@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  gitActionResultSchema, gitActionRequestSchema, gitActionSchema,
   gitInfoRemote, gitSnapshotFailureSchema, gitSnapshotResultSchema, gitSnapshotSchema,
 } from '../../src/client/remote.ts'
-import type { GitSnapshot, GitSnapshotResult } from '../../src/host/types.ts'
+import type { GitAction, GitActionResult, GitSnapshot, GitSnapshotResult } from '../../src/host/types.ts'
 
 /** A host-typed sample snapshot — the hand-written schemas must accept it. */
 function sampleSnapshot(overrides: Partial<GitSnapshot> = {}): GitSnapshot {
@@ -73,7 +74,7 @@ describe('git snapshot schemas', () => {
 describe('gitInfoRemote contribution', () => {
   it('declares the gitInfo/snapshot endpoint with strict codecs', () => {
     expect(gitInfoRemote.package).toBe('dsh-git-ui')
-    expect(gitInfoRemote.descriptors).toHaveLength(1)
+    expect(gitInfoRemote.descriptors).toHaveLength(2)
     const descriptor = gitInfoRemote.descriptors[0]
     expect(descriptor).toMatchObject({
       service: 'gitInfo', namespace: 'gitInfo', method: 'snapshot',
@@ -95,6 +96,66 @@ describe('gitInfoRemote contribution', () => {
     const request = parameter.codec.schema.parse({ sessionId: 's1' })
     expect(request).toEqual({ sessionId: 's1' })
     const ok = descriptor.result.schema.parse({ ok: true, value: sampleSnapshot() })
+    expect(ok).toMatchObject({ ok: true })
+  })
+})
+
+describe('git action schemas', () => {
+  it('accepts every host-typed action shape', () => {
+    const actions: readonly GitAction[] = [
+      { kind: 'stage', paths: ['a.txt'] },
+      { kind: 'stage-all' },
+      { kind: 'unstage', paths: ['a.txt', 'b/c.txt'] },
+      { kind: 'unstage-all' },
+      { kind: 'discard', paths: ['a.txt'] },
+      { kind: 'discard-all' },
+      { kind: 'commit', message: 'fix' },
+      { kind: 'commit', message: 'fix', paths: ['a.txt'] },
+    ]
+    for (const action of actions) {
+      expect(() => gitActionSchema.parse(action)).not.toThrow()
+    }
+    const parsed = gitActionRequestSchema.parse({ sessionId: 's1', action: { kind: 'stage', paths: ['a.txt'] } })
+    expect(parsed.action).toMatchObject({ kind: 'stage' })
+  })
+
+  it('rejects unknown action kinds and malformed shapes', () => {
+    expect(() => gitActionSchema.parse({ kind: 'reset', paths: [] })).toThrow()
+    expect(() => gitActionSchema.parse({ kind: 'stage' })).toThrow()
+    expect(() => gitActionSchema.parse({ kind: 'commit', message: 'x', paths: 'a.txt' })).toThrow()
+  })
+
+  it('accepts host-typed action results', () => {
+    const success: GitActionResult = { ok: true, snapshot: sampleSnapshot(), output: 'done' }
+    expect(gitActionResultSchema.parse(success)).toMatchObject({ ok: true })
+    const failure: GitActionResult = { ok: false, error: { code: 'git-error', message: 'nothing to commit' } }
+    expect(gitActionResultSchema.parse(failure)).toMatchObject({ ok: false })
+    expect(() => gitActionResultSchema.parse({ ok: false, error: { code: 'exploded' } })).toThrow()
+  })
+})
+
+describe('gitInfoRemote run endpoint', () => {
+  it('declares gitInfo/run with strict codecs and cancellation', () => {
+    const runDescriptor = gitInfoRemote.descriptors[1]
+    expect(runDescriptor).toMatchObject({
+      service: 'gitInfo', namespace: 'gitInfo', method: 'run',
+      invocation: { kind: 'direct' },
+      cancellation: { parameter: 'signal' },
+      parameters: [{ name: 'request', wire: 'request', source: 'json' }],
+      result: { mode: 'strict' },
+    })
+    if (runDescriptor === undefined) throw new Error('missing run descriptor')
+    expect(runDescriptor.parameters[0]?.codec.mode).toBe('strict')
+  })
+
+  it('round-trips a run request and result through the codecs', () => {
+    const runDescriptor = gitInfoRemote.descriptors[1]
+    if (runDescriptor === undefined) throw new Error('missing run descriptor')
+    const parameter = runDescriptor.parameters[0]
+    if (parameter === undefined) throw new Error('missing parameter')
+    const request = parameter.codec.schema.parse({ sessionId: 's1', action: { kind: 'commit', message: 'fix' } })
+    expect(request).toMatchObject({ sessionId: 's1' })
+    const ok = runDescriptor.result.schema.parse({ ok: true, snapshot: sampleSnapshot() })
     expect(ok).toMatchObject({ ok: true })
   })
 })

@@ -61,6 +61,39 @@ export const gitSnapshotRequestSchema = z.object({
   sessionId: z.string(),
 })
 
+/** One management action (mirrors `GitAction` in src/host/types.ts). */
+export const gitActionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('stage'), paths: z.array(z.string()) }),
+  z.object({ kind: z.literal('stage-all') }),
+  z.object({ kind: z.literal('unstage'), paths: z.array(z.string()) }),
+  z.object({ kind: z.literal('unstage-all') }),
+  z.object({ kind: z.literal('discard'), paths: z.array(z.string()) }),
+  z.object({ kind: z.literal('discard-all') }),
+  z.object({
+    kind: z.literal('commit'),
+    message: z.string(),
+    paths: z.array(z.string()).optional(),
+  }),
+])
+
+export const gitOperationErrorSchema = z.object({
+  code: z.enum([
+    'session-not-found', 'cwd-unavailable', 'path-not-found',
+    'not-a-git-repo', 'invalid-path', 'git-error', 'timeout',
+  ]),
+  message: z.string().optional(),
+})
+
+export const gitActionResultSchema = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true), snapshot: gitSnapshotSchema, output: z.string().optional() }),
+  z.object({ ok: z.literal(false), error: gitOperationErrorSchema }),
+])
+
+export const gitActionRequestSchema = z.object({
+  sessionId: z.string(),
+  action: gitActionSchema,
+})
+
 /** The contribution mounted into `ctx.remote` by the client plugin body. */
 export const gitInfoRemote: TypertRemoteContribution = {
   package: 'dsh-git-ui',
@@ -91,6 +124,31 @@ export const gitInfoRemote: TypertRemoteContribution = {
         mode: 'strict',
         typeSymbol: 'dsh-git-ui/types#GitSnapshotResult',
         schema: gitSnapshotResultSchema,
+      },
+    },
+    {
+      id: 'dsh-git-ui#gitInfo/run',
+      service: 'gitInfo',
+      namespace: 'gitInfo',
+      method: 'run',
+      invocation: { kind: 'direct' },
+      cancellation: { parameter: 'signal' },
+      parameters: [
+        {
+          name: 'request',
+          wire: 'request',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-git-ui/types#GitActionRequest',
+            schema: gitActionRequestSchema,
+          },
+        },
+      ],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-git-ui/types#GitActionResult',
+        schema: gitActionResultSchema,
       },
     },
   ],

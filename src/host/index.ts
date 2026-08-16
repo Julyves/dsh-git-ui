@@ -1,22 +1,25 @@
 /**
  * dsh-git-ui host half: the `gitInfo` Remote service.
  *
- * Cordis shell only — every behavior lives in `core.ts` behind injected
- * structural faces, so tests never need a cordis runtime. The class is a
- * plugin in its own right (class form), mounted by the bundle patch row with
- * the package name; the gateway exposes `gitInfo/snapshot` through SRC
- * discovery (`typertRemote` binding + `@Remote` marker).
+ * Cordis shell only — every behavior lives in `core.ts`/`actions.ts` behind
+ * injected structural faces, so tests never need a cordis runtime. The class
+ * is a plugin in its own right (class form), mounted by the bundle patch row
+ * with the package name; the gateway exposes `gitInfo/snapshot` and
+ * `gitInfo/run` through SRC discovery (`typertRemote` binding + `@Remote`
+ * marker).
  */
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { Context } from '@deepseek-ai/cordis'
 import { realpath, stat } from 'node:fs/promises'
 import { createGitRunner, type SubprocessLike } from './git.ts'
-import { normalizeConfig, snapshotForSession, type GitStatusConfig } from './core.ts'
-import type { GitSnapshotRequest, GitSnapshotResult } from './types.ts'
+import { normalizeConfig, snapshotForSession, type GitStatusConfig, type SnapshotDeps } from './core.ts'
+import { runAction } from './actions.ts'
+import type { GitActionResult, GitActionRequest, GitSnapshotRequest, GitSnapshotResult } from './types.ts'
 
-export type { GitSnapshot, GitSnapshotResult, GitSnapshotFailure, GitSnapshotRequest, GitCommit, GitChange } from './types.ts'
+export type { GitSnapshot, GitSnapshotResult, GitSnapshotFailure, GitSnapshotRequest, GitCommit, GitChange, GitAction, GitActionResult, GitActionRequest } from './types.ts'
 export { normalizeConfig, DEFAULT_CONFIG } from './core.ts'
 export { parseStatusOutput, parseLogOutput, parseBranchOutput } from './parser.ts'
+export { isSafePath, runAction } from './actions.ts'
 
 /** Structural face of a live session header. */
 interface SessionLike {
@@ -33,7 +36,7 @@ interface SessionPersistenceLike {
   inspect(id: string): Promise<{ readonly meta: { readonly cwd?: string } }>
 }
 
-/** The `gitInfo` service: one `snapshot` Remote endpoint. */
+/** The `gitInfo` service: `snapshot` (read) and `run` (management) endpoints. */
 export class GitStatusService extends TypertRemoteService {
   static inject = ['subprocess', 'sessions', 'sessionPersistence']
 
@@ -44,17 +47,17 @@ export class GitStatusService extends TypertRemoteService {
     this.config = normalizeConfig(config)
   }
 
-  @Remote('snapshot')
-  async snapshot(request: GitSnapshotRequest, signal?: AbortSignal): Promise<GitSnapshotResult> {
+  /** Adapter face shared by both endpoints (injected services + runner). */
+  private deps(signal?: AbortSignal): { readonly deps: SnapshotDeps } | { readonly failure: { readonly code: 'git-unavailable'; readonly detail: string } } {
     const subprocess = this.ctx.get('subprocess') as SubprocessLike | undefined
     if (subprocess === undefined) {
-      return { ok: false, error: { code: 'git-unavailable', detail: 'subprocess service unavailable' } }
+      return { failure: { code: 'git-unavailable', detail: 'subprocess service unavailable' } }
     }
     const sessions = this.ctx.get('sessions') as SessionsLike | undefined
     const persistence = this.ctx.get('sessionPersistence') as SessionPersistenceLike | undefined
     const runner = createGitRunner(subprocess, this.config.timeoutMs, this.config.maxStatusBytes)
-    return snapshotForSession(
-      {
+    return {
+      deps: {
         run: runner,
         fs: { realpath, stat },
         sessions: {
@@ -71,9 +74,23 @@ export class GitStatusService extends TypertRemoteService {
         },
         signal,
       },
-      this.config,
-      request.sessionId,
-    )
+    }
+  }
+
+  @Remote('snapshot')
+  async snapshot(request: GitSnapshotRequest, signal?: AbortSignal): Promise<GitSnapshotResult> {
+    const adapted = this.deps(signal)
+    if ('failure' in adapted) return { ok: false, error: adapted.failure }
+    return snapshotForSession(adapted.deps, this.config, request.sessionId)
+  }
+
+  @Remote('run')
+  async run(request: GitActionRequest, signal?: AbortSignal): Promise<GitActionResult> {
+    const adapted = this.deps(signal)
+    if ('failure' in adapted) {
+      return { ok: false, error: { code: 'git-error', message: adapted.failure.detail } }
+    }
+    return runAction(adapted.deps, this.config, request)
   }
 }
 

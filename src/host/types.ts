@@ -72,3 +72,42 @@ export type GitChangeStatus =
   | 'untracked'
   | 'conflicted'
   | 'typechange'
+
+/**
+ * One git management operation addressed by the `run` endpoint. Paths are
+ * always repository-relative (as listed in a snapshot's `changes`), never
+ * absolute — the host validates them against the work tree.
+ */
+export type GitAction =
+  | { readonly kind: 'stage'; readonly paths: readonly string[] }
+  | { readonly kind: 'stage-all' }
+  | { readonly kind: 'unstage'; readonly paths: readonly string[] }
+  | { readonly kind: 'unstage-all' }
+  | { readonly kind: 'discard'; readonly paths: readonly string[] }
+  | { readonly kind: 'discard-all' }
+  | {
+    readonly kind: 'commit'
+    readonly message: string
+    /** Commit only these paths (git commit -- <paths> semantics); absent or
+     * empty commits everything already staged. */
+    readonly paths?: readonly string[]
+  }
+
+export type GitOperationErrorCode =
+  | 'session-not-found'
+  | 'cwd-unavailable'
+  | 'path-not-found'
+  | 'not-a-git-repo'
+  | 'invalid-path'
+  | 'git-error'
+  | 'timeout'
+
+export type GitActionResult =
+  | { readonly ok: true; readonly snapshot: GitSnapshot; readonly output?: string }
+  | { readonly ok: false; readonly error: { readonly code: GitOperationErrorCode; readonly message?: string } }
+
+/** Wire request of the `run` endpoint. */
+export interface GitActionRequest {
+  readonly sessionId: string
+  readonly action: GitAction
+}
