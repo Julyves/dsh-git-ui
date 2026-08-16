@@ -58,11 +58,16 @@ await esbuild.build({
   logLevel: 'info',
 })
 
-// ── Client half: single-file ModuleLoader closure bundle ──────────────────
+// ── Client half: single-file bundle ───────────────────────────────────────
+// CJS format + banner/footer wrap the whole bundle into the ModuleLoader
+// handoff `load({ id, factory: (require) => { ... } })`: the factory IS the
+// bundle body, so every external require (platform modules) resolves through
+// the loader-provided `require` parameter at materialization time — matching
+// the harness client-bundle contract (side effects run inside the factory).
 await esbuild.build({
   entryPoints: [resolve(ROOT, 'src/client/index.ts')],
   bundle: true,
-  format: 'iife',
+  format: 'cjs',
   platform: 'browser',
   target: 'es2022',
   jsx: 'automatic',
@@ -71,6 +76,13 @@ await esbuild.build({
   sourcemap: true,
   outfile: resolve(ROOT, 'lib/client.js'),
   logLevel: 'info',
+  banner: {
+    js: 'var module = { exports: {} }; var exports = module.exports;\n'
+      + 'window.__ModuleLoader__.load({ id: "dsh-git-status", factory: (require) => {',
+  },
+  footer: {
+    js: 'return module.exports; } });',
+  },
 })
 
 // ── Artifact assertions ───────────────────────────────────────────────────
