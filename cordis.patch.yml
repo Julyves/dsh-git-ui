@@ -1,0 +1,11 @@
+# dsh-git-status bundle patch: the git status widget over the web profile.
+# A single row activates both faces of the package: the host half (default
+# export = GitStatusService) and the browser half (dsh.client manifest).
+- insert:
+    - id: git-status
+      name: dsh-git-status
+      config:
+        timeoutMs: 5000
+        maxStatusBytes: 4194304
+        maxChanges: 100
+        defaultRefreshIntervalMs: 30000
