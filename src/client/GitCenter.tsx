@@ -13,7 +13,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { JSX } from 'react'
-import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { GitAction, GitActionResult, GitChange, GitSnapshot } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
@@ -34,7 +34,13 @@ export interface GitCenterProps {
   readonly t: (key: GitKey) => string
 }
 
-type Feedback = { readonly kind: 'error' | 'success'; readonly text: string } | null
+type Feedback = { readonly kind: 'error'; readonly text: string } | null
+
+/** One transient success toast (keyed by seq so repeats restart the cycle). */
+interface ToastState {
+  readonly text: string
+  readonly seq: number
+}
 
 /** Change row with checkbox (commit selection) and per-file actions. */
 function ChangeRow({
@@ -62,12 +68,10 @@ function ChangeRow({
       </span>
       <span style={css.changePathText} title={change.path}>{change.path}</span>
       {change.staged
-        ? <button type="button" className="dsh-git-ui__btn" style={css.toolButton} disabled={busy} onClick={() => actions.onUnstage(change.path)}>{t('center.unstage')}</button>
-        : <button type="button" className="dsh-git-ui__btn" style={css.toolButton} disabled={busy} onClick={() => actions.onStage(change.path)}>{t('center.stage')}</button>}
+        ? <Button size="sm" disabled={busy} onClick={() => actions.onUnstage(change.path)}>{t('center.unstage')}</Button>
+        : <Button size="sm" disabled={busy} onClick={() => actions.onStage(change.path)}>{t('center.stage')}</Button>}
       {!untracked && (
-        <button type="button" className="dsh-git-ui__btn dsh-git-ui__btn--danger" style={css.toolButton} disabled={busy} onClick={() => actions.onDiscard(change.path)}>
-          {t('center.discard')}
-        </button>
+        <Button size="sm" disabled={busy} onClick={() => actions.onDiscard(change.path)}>{t('center.discard')}</Button>
       )}
     </div>
   )
@@ -90,6 +94,7 @@ export function GitCenter({
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState<Feedback>(null)
+  const [toast, setToast] = useState<ToastState | null>(null)
   const [armed, setArmed] = useState<string | 'all' | null>(null)
 
   // Auto-disarm the destructive confirm after 3s.
@@ -123,8 +128,10 @@ export function GitCenter({
     if (result.ok) {
       setSelected(new Set())
       setMessage('')
-      setFeedback({ kind: 'success', text: successText })
+      // Transient system toast (holds ~3s, fades, unmounts itself).
+      setToast({ text: successText, seq: Date.now() })
     } else {
+      // Persistent panel-level error banner with a dismiss button.
       setFeedback({ kind: 'error', text: result.error.message ?? result.error.code })
     }
   }
@@ -162,32 +169,27 @@ export function GitCenter({
       <div style={css.centerShell}>
         <div style={css.centerHeader}>
           <h2 style={css.centerTitle} title={snapshot.root}>{snapshot.branch ?? '(detached)'} — {t('center.title')}</h2>
-          <button type="button" style={css.centerClose} onClick={onClose} aria-label={t('popup.refresh')}>✕</button>
+          <Button size="sm" onClick={onClose} aria-label={t('popup.refresh')}>✕</Button>
         </div>
 
         <div style={css.centerBody}>
           {feedback !== null && (
-            <div style={feedback.kind === 'error' ? css.feedbackError : css.feedbackSuccess}>
-              {feedback.text}
+            <div style={css.feedbackError} role="alert">
+              <span style={{ flex: 1 }}>{feedback.text}</span>
+              <button type="button" style={css.feedbackClose} onClick={() => setFeedback(null)} aria-label={t('popup.refresh')}>✕</button>
             </div>
           )}
 
           <div style={css.toolRow}>
-            <button type="button" className="dsh-git-ui__btn" style={css.toolButton} disabled={busy || (unstaged.length === 0 && untracked.length === 0)} onClick={() => void doRun({ kind: 'stage-all' }, t('center.done'))}>
+            <Button size="sm" disabled={busy || (unstaged.length === 0 && untracked.length === 0)} onClick={() => void doRun({ kind: 'stage-all' }, t('center.done'))}>
               {t('center.stageAll')}
-            </button>
-            <button type="button" className="dsh-git-ui__btn" style={css.toolButton} disabled={busy || staged.length === 0} onClick={() => void doRun({ kind: 'unstage-all' }, t('center.done'))}>
+            </Button>
+            <Button size="sm" disabled={busy || staged.length === 0} onClick={() => void doRun({ kind: 'unstage-all' }, t('center.done'))}>
               {t('center.unstageAll')}
-            </button>
-            <button
-              type="button"
-              className="dsh-git-ui__btn dsh-git-ui__btn--danger"
-              style={css.toolButton}
-              disabled={busy || !hasTrackedChanges}
-              onClick={discardAll}
-            >
+            </Button>
+            <Button size="sm" disabled={busy || !hasTrackedChanges} onClick={discardAll}>
               {armed === 'all' ? t('center.confirmDiscard') : t('center.discardAll')}
-            </button>
+            </Button>
           </div>
 
           {snapshot.changes.length === 0
@@ -217,18 +219,15 @@ export function GitCenter({
             <span style={css.commitHint}>
               {selected.size > 0 ? t('center.commitSelected').replace('{count}', String(selected.size)) : t('center.commitHint')}
             </span>
-            <button
-              type="button"
-              className="dsh-git-ui__btn dsh-git-ui__btn--primary"
-              style={css.toolButton}
-              disabled={busy || message.trim() === ''}
-              onClick={commit}
-            >
+            <Button variant="primary" size="sm" disabled={busy || message.trim() === ''} onClick={commit}>
               {busy ? t('center.busy') : t('center.commit')}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
+      {toast !== null && (
+        <Toast key={toast.seq} text={toast.text} onDone={() => setToast(null)} />
+      )}
     </Modal>
   )
 }

@@ -217,11 +217,6 @@ const globalCss = [
   '.dsh-git-ui__refresh:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }',
   // Git center dialog: widen the platform Modal card (headless mode).
   '.dsh-git-ui__center { width: min(880px, 100vw); max-height: min(720px, calc(100vh - 48px)); }',
-  '.dsh-git-ui__center .dsh-git-ui__btn:hover { color: var(--dsw-alias-state-business-primary); }',
-  '.dsh-git-ui__center .dsh-git-ui__btn:disabled { opacity: 0.45; cursor: default; }',
-  '.dsh-git-ui__center .dsh-git-ui__btn--danger:hover { color: var(--dsw-alias-state-error-primary); }',
-  '.dsh-git-ui__center .dsh-git-ui__btn--primary { color: var(--dsw-alias-state-business-primary); font-weight: 600; }',
-  '.dsh-git-ui__center .dsh-git-ui__btn--primary:disabled { color: var(--dsw-alias-label-tertiary); }',
   '.dsh-git-ui__commit-input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
 ].join('\n')
 
@@ -253,36 +248,27 @@ export const centerHeader: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 10,
-  padding: '14px 18px',
+  padding: '18px 20px 12px',
   borderBottom: '1px solid var(--dsw-alias-border-l1)',
   flex: 'none',
 }
 
 export const centerTitle: CSSProperties = {
   margin: 0,
-  fontSize: 14,
-  fontWeight: 600,
+  fontSize: 16,
+  lineHeight: '24px',
+  fontWeight: 500,
   flex: 1,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-}
-
-export const centerClose: CSSProperties = {
-  border: 0,
-  background: 'transparent',
-  padding: '2px 6px',
-  fontSize: 13,
-  cursor: 'pointer',
-  color: 'var(--dsw-alias-label-secondary)',
-  font: 'inherit',
-  borderRadius: 6,
+  color: 'var(--dsw-alias-label-primary)',
 }
 
 export const centerBody: CSSProperties = {
   flex: 1,
   overflowY: 'auto',
-  padding: '10px 18px',
+  padding: '10px 20px',
   display: 'flex',
   flexDirection: 'column',
   gap: 10,
@@ -301,8 +287,8 @@ export const centerRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 8,
-  padding: '3px 6px',
-  borderRadius: 6,
+  padding: '2px 8px',
+  borderRadius: 8,
 }
 
 export const changeCheckbox: CSSProperties = {
@@ -316,30 +302,21 @@ export const changePathText: CSSProperties = {
   whiteSpace: 'nowrap',
   flex: 1,
   color: 'var(--dsw-alias-label-primary)',
+  fontSize: 13,
+  lineHeight: '20px',
 }
 
 export const toolRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 6,
+  gap: 8,
   flexWrap: 'wrap',
-  padding: '6px 0',
-}
-
-export const toolButton: CSSProperties = {
-  border: 0,
-  background: 'transparent',
-  padding: '2px 8px',
-  fontSize: 12,
-  cursor: 'pointer',
-  color: 'var(--dsw-alias-label-secondary)',
-  borderRadius: 6,
-  font: 'inherit',
+  padding: '6px 0 2px',
 }
 
 export const commitBox: CSSProperties = {
   borderTop: '1px solid var(--dsw-alias-border-l1)',
-  padding: '10px 18px 14px',
+  padding: '12px 20px 16px',
   display: 'flex',
   flexDirection: 'column',
   gap: 8,
@@ -354,9 +331,9 @@ export const commitInput: CSSProperties = {
   resize: 'vertical',
   border: '1px solid var(--dsw-alias-border-l1)',
   borderRadius: 8,
-  padding: '6px 8px',
-  fontSize: 13,
-  lineHeight: '20px',
+  padding: '6px 10px',
+  fontSize: 14,
+  lineHeight: '22px',
   fontFamily: 'inherit',
   background: 'var(--dsw-alias-bg-layer-2)',
   color: 'var(--dsw-alias-label-primary)',
@@ -370,12 +347,17 @@ export const commitFooter: CSSProperties = {
 }
 
 export const commitHint: CSSProperties = {
-  fontSize: 11,
+  fontSize: 12,
+  lineHeight: '18px',
   color: 'var(--dsw-alias-label-tertiary)',
 }
 
+/** Inline error banner (panel-level; stays until dismissed or next action). */
 export const feedbackError: CSSProperties = {
-  padding: '6px 10px',
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 8,
+  padding: '8px 10px',
   borderRadius: 8,
   fontSize: 12,
   lineHeight: '18px',
@@ -387,11 +369,14 @@ export const feedbackError: CSSProperties = {
   overflowY: 'auto',
 }
 
-export const feedbackSuccess: CSSProperties = {
-  padding: '6px 10px',
-  borderRadius: 8,
-  fontSize: 12,
+export const feedbackClose: CSSProperties = {
+  flex: 'none',
+  border: 0,
+  background: 'transparent',
+  padding: '0 2px',
+  cursor: 'pointer',
+  color: 'inherit',
+  fontSize: 13,
   lineHeight: '18px',
-  background: 'var(--dsw-alias-state-success-secondary)',
-  color: 'var(--dsw-alias-state-success-primary)',
+  opacity: 0.7,
 }

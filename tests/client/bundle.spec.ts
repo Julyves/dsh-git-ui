@@ -24,6 +24,11 @@ function loadBundle(): Captured {
   const requireStub = (spec: string): unknown => {
     if (spec === 'react' || spec === 'react/jsx-runtime') return { createElement: () => {}, jsx: () => {} }
     if (spec === 'react-dom') return { createPortal: () => null }
+    if (spec === '@deepseek-ai/dsh-client-ui-primitives') {
+      return {
+        Modal: () => null, Button: () => null, Toast: () => null,
+      }
+    }
     throw new Error(`unexpected require: ${spec}`)
   }
   vm.runInNewContext(code, {
@@ -44,6 +49,11 @@ describe('client bundle artifact', () => {
     const plugin = factory((spec) => {
       if (spec === 'react' || spec === 'react/jsx-runtime') return { createElement: () => {}, jsx: () => {} }
       if (spec === 'react-dom') return { createPortal: () => null }
+      if (spec === '@deepseek-ai/dsh-client-ui-primitives') {
+        return {
+          Modal: () => null, Button: () => null, Toast: () => null,
+        }
+      }
       throw new Error(`unexpected require: ${spec}`)
     })
     expect(plugin.name).toBe('dsh-git-ui')
