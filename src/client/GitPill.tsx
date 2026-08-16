@@ -14,6 +14,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { JSX } from 'react'
+import { completedTurnCount, type TurnSignalSnapshot } from './turn-signal.ts'
 import type { GitObservable, GitView } from './controller.ts'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
@@ -38,12 +39,16 @@ export type UseGit = <S = GitView>(
   equality?: (a: S, b: S) => boolean,
 ) => S
 
+export type { TurnSignalSnapshot } from './turn-signal.ts'
+
 /** Full props of the git pill entry (framework kit + our inject + locale). */
 export interface GitPillProps extends GitInjected {
   /** Session scope identity from the standard session kit. */
   readonly sessionId: string
   /** Selector hook bound from `hooks.git` by the slot runtime. */
   readonly useGit: UseGit
+  /** Standard session kit selector hook (narrowed to the turn signal). */
+  readonly useSession: <S>(selector: (snapshot: TurnSignalSnapshot) => S) => S
   /** Namespace-bound dictionary accessor. */
   readonly t: (key: GitKey) => string
 }
@@ -204,7 +209,7 @@ const VIEW_GUTTER = 8
 /**
  * The header utility entry: a branch pill that opens a portaled detail popup.
  */
-export function GitPill({ useGit, refresh, t }: GitPillProps): JSX.Element | null {
+export function GitPill({ useGit, useSession, refresh, t }: GitPillProps): JSX.Element | null {
   // The selector hook requires a selector function (with-selector calls it
   // unconditionally); identity selection reads the whole view snapshot.
   const view = useGit((view) => view)
@@ -215,6 +220,20 @@ export function GitPill({ useGit, refresh, t }: GitPillProps): JSX.Element | nul
   const lastReady = useRef<GitView & { state: 'ready' } | null>(null)
   if (view.state === 'ready') lastReady.current = view
   const display: GitView = view.state === 'loading' && lastReady.current !== null ? lastReady.current : view
+
+  // Best-effort activity trigger: an agent turn completing is the most
+  // likely moment the working tree changed, so refresh right away instead of
+  // waiting for the next poll. Polling stays the fallback (external edits,
+  // window-slot misses). The ref starts at the CURRENT count so the mount
+  // kick (below) is not duplicated; a session switch remounts and resets it.
+  const turnCount = useSession((s) => completedTurnCount(s))
+  const lastTurnRef = useRef(turnCount)
+  useEffect(() => {
+    if (turnCount <= lastTurnRef.current) return
+    lastTurnRef.current = turnCount
+    void refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh is per-session stable by contract.
+  }, [turnCount])
 
   const wrapRef = useRef<HTMLSpanElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
