@@ -28,17 +28,16 @@
 需要已安装 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）且使用 `web` profile。
 
 ```sh
-# 发布包 tgz（推荐）
-dsh plugin --profile web add file:dsh-git-status-0.1.0.tgz
-
-# GitHub 直装（需要构建权限——见 dsh 文档中的 allowBuilds）
-dsh plugin --profile web add github:Julyves/dsh-git-status
-
-# 本地目录（开发调试）
-dsh plugin --profile web add ./dsh-git-status
+# 从 npm 安装（推荐——插件运行时依赖通过宿主安装的模块 fallback 解析）
+dsh plugin --profile web add dsh-git-status
 ```
 
 安装后**重启 dsh web**。在 git 仓库目录打开会话，头部即出现分支 Pill。
+
+> 本地 tgz / 目录 / GitHub 直装（`file:...tgz`、`github:...`）会把包以 symlink
+> 方式装进 profile，Node 沿真实路径解析时无法触达宿主提供的 `@deepseek-ai/*`
+> peer 依赖。终端用户请走 npm 路径；本仓库开发期本地安装的 peer 链接步骤见
+> [开发](#开发)。
 
 验证安装：
 
@@ -90,10 +89,17 @@ dsh plugin --profile web remove dsh-git-status
 
 ```sh
 pnpm install
+# 把宿主提供的 peer 依赖链接进仓库，本地 `dsh plugin --profile web add ./` 才能解析：
+# pnpm 以 symlink 把包装进 profile，Node 沿真实路径回到本仓库，
+# 因此 node_modules/@deepseek-ai/* 需要指向宿主的 fallback 目录。
+mkdir -p node_modules/@deepseek-ai
+for p in "$HOME"/.dsh/profiles/node_modules/@deepseek-ai/*; do
+  ln -sfn "$p" "node_modules/@deepseek-ai/$(basename "$p")"
+done
 pnpm run typecheck
 pnpm test
-pnpm run build        # host（tsc）+ client 单文件 bundle（esbuild，ModuleLoader 闭包）
-pnpm pack             # 产出可分发的 tgz
+pnpm run build        # host（esbuild ESM，禁止压缩）+ client（ModuleLoader factory 闭包）
+dsh plugin --profile web add ./   # 本地安装；重启 dsh web 验证
 ```
 
 架构研究与工程决策见 [PLAN.md](PLAN.md)。

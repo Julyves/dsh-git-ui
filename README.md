@@ -28,17 +28,18 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plug
 Requires a running [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) with the `web` profile.
 
 ```sh
-# From a release tarball (recommended)
-dsh plugin --profile web add file:dsh-git-status-0.1.0.tgz
-
-# From GitHub (requires build permission — see allowBuilds in the dsh docs)
-dsh plugin --profile web add github:Julyves/dsh-git-status
-
-# From a local checkout (development)
-dsh plugin --profile web add ./dsh-git-status
+# From npm (recommended — the plugin's runtime dependencies resolve through
+# the host installation's module fallback)
+dsh plugin --profile web add dsh-git-status
 ```
 
 Restart dsh web. Open a session in a git repository and the branch pill appears in the session header.
+
+> Local tarball / link installs (`file:...tgz`, `github:...`) symlink the
+> package outside the profile tree, so its `@deepseek-ai/*` peer dependencies
+> (provided by the host installation) are not reachable by Node's resolution.
+> Use the npm route for end users; see [Development](#development) for the
+> local-link setup used while developing this repo.
 
 To verify the install:
 
@@ -90,10 +91,18 @@ All defaults work out of the box. Advanced users may override the plugin config 
 
 ```sh
 pnpm install
+# Link the host-provided peers into the repo so a local profile install
+# (`dsh plugin --profile web add ./`) resolves them: pnpm symlinks the
+# package into the profile, and Node follows the realpath back into this
+# repo, so `node_modules/@deepseek-ai/*` must point at the host fallback.
+mkdir -p node_modules/@deepseek-ai
+for p in "$HOME"/.dsh/profiles/node_modules/@deepseek-ai/*; do
+  ln -sfn "$p" "node_modules/@deepseek-ai/$(basename "$p")"
+done
 pnpm run typecheck
 pnpm test
-pnpm run build        # host (tsc) + client bundle (esbuild, single-file ModuleLoader closure)
-pnpm pack             # produce the distributable tgz
+pnpm run build        # host (esbuild ESM, never minified) + client (ModuleLoader factory closure)
+dsh plugin --profile web add ./   # local install; restart dsh web to verify
 ```
 
 See [PLAN.md](PLAN.md) for the architecture research and engineering decisions.
