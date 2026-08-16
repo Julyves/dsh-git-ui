@@ -5,7 +5,7 @@
  * depends on unpublished packages), so this package cannot install cordis as a
  * dev dependency. At runtime the host dsh installation provides the real cordis
  * through peer dependency resolution; this file only supplies the compile-time
- * surface used by dsh-git-status (shapes copied from the deepseek-harness vendor
+ * surface used by dsh-git-status-pill (shapes copied from the deepseek-harness vendor
  * tree, 0.1.0-rc.x). Keep this file in sync with the subset actually used.
  */
 declare module '@deepseek-ai/cordis' {

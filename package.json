@@ -1,5 +1,5 @@
 {
-  "name": "dsh-git-status",
+  "name": "dsh-git-status-pill",
   "version": "0.1.0",
   "description": "DeepSeek Harness (dsh) plugin: visualize Git status in the Web UI — current branch, HEAD, staged/modified/untracked counts, ahead/behind, recent commits and changed files.",
   "private": true,

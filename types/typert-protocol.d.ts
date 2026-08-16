@@ -3,7 +3,7 @@
  *
  * Same rationale as `cordis.d.ts`: the runtime implementation is provided by the
  * host dsh installation (peer dependency); this file supplies the compile-time
- * surface used by dsh-git-status (shapes copied from the deepseek-harness
+ * surface used by dsh-git-status-pill (shapes copied from the deepseek-harness
  * `packages/typert/protocol` source, 0.1.0-rc.x).
  */
 declare module '@deepseek-ai/dsh-typert-protocol' {

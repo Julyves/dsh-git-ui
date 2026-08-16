@@ -1,5 +1,5 @@
 /**
- * dsh-git-status build script (self-contained; also runs as `prepare` for git
+ * dsh-git-status-pill build script (self-contained; also runs as `prepare` for git
  * installs — must not assume a monorepo checkout or dev-only context).
  *
  * 1. Host half: tsc emits `lib/host/` (ESM, declarations). Never minified —
@@ -78,7 +78,7 @@ await esbuild.build({
   logLevel: 'info',
   banner: {
     js: 'var module = { exports: {} }; var exports = module.exports;\n'
-      + 'window.__ModuleLoader__.load({ id: "dsh-git-status", factory: (require) => {',
+      + 'window.__ModuleLoader__.load({ id: "dsh-git-status-pill", factory: (require) => {',
   },
   footer: {
     js: 'return module.exports; } });',
@@ -91,8 +91,8 @@ if (!client.includes('__ModuleLoader__.load')) {
   console.error('build: lib/client.js is missing the __ModuleLoader__.load entry')
   process.exit(1)
 }
-if (!client.includes("'dsh-git-status'") && !client.includes('"dsh-git-status"')) {
-  console.error('build: lib/client.js does not carry the bundle id dsh-git-status')
+if (!client.includes("'dsh-git-status-pill'") && !client.includes('"dsh-git-status-pill"')) {
+  console.error('build: lib/client.js does not carry the bundle id dsh-git-status-pill')
   process.exit(1)
 }
 for (const required of ['lib/host/index.js', 'lib/client.js']) {

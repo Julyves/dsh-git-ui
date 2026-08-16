@@ -1,5 +1,5 @@
 /**
- * dsh-git-status host half: the `gitInfo` Remote service.
+ * dsh-git-status-pill host half: the `gitInfo` Remote service.
  *
  * Cordis shell only — every behavior lives in `core.ts` behind injected
  * structural faces, so tests never need a cordis runtime. The class is a

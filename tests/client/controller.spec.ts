@@ -1,17 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { GitController, type GitRemoteLike } from '../../src/client/controller.ts'
+import { GitController, type GitRemoteEnvelope, type GitRemoteLike } from '../../src/client/controller.ts'
 import type { GitSnapshot, GitSnapshotResult } from '../../src/host/types.ts'
 
-/** Programmable fake Remote namespace. */
+/** Business-result helpers wrapped in the RPC envelope the gateway returns. */
+const ok = (value: GitSnapshotResult): GitRemoteEnvelope<GitSnapshotResult> => ({ ok: true, value })
+const okResult = (s: GitSnapshot): GitRemoteEnvelope<GitSnapshotResult> => ok({ ok: true, value: s })
+
+/** Programmable fake Remote namespace (returns the real RPC envelope shape). */
 class FakeRemote implements GitRemoteLike {
   calls = 0
-  private queue: Array<GitSnapshotResult | Error> = []
+  private queue: Array<GitRemoteEnvelope<GitSnapshotResult> | Error> = []
 
-  enqueue(result: GitSnapshotResult | Error): void {
+  enqueue(result: GitRemoteEnvelope<GitSnapshotResult> | Error): void {
     this.queue.push(result)
   }
 
-  snapshot(): Promise<GitSnapshotResult> {
+  snapshot(): Promise<GitRemoteEnvelope<GitSnapshotResult>> {
     this.calls += 1
     const next = this.queue.shift()
     if (next instanceof Error) return Promise.reject(next)
@@ -59,7 +63,7 @@ describe('GitController', () => {
   })
 
   it('ensure() loads once and reaches ready', async () => {
-    remote.enqueue({ ok: true, value: snapshot() })
+    remote.enqueue(okResult(snapshot()))
     controller.ensure()
     expect(controller.getSnapshot()).toEqual({ state: 'loading' })
     await tick()
@@ -73,14 +77,14 @@ describe('GitController', () => {
   it('notifies subscribers on view changes', async () => {
     const seen: string[] = []
     controller.subscribe(() => seen.push(controller.getSnapshot().state))
-    remote.enqueue({ ok: true, value: snapshot() })
+    remote.enqueue(okResult(snapshot()))
     controller.ensure()
     await tick()
     expect(seen).toContain('ready')
   })
 
   it('maps a terminal no-cwd failure and stops polling', async () => {
-    remote.enqueue(UNAVAILABLE)
+    remote.enqueue(ok(UNAVAILABLE))
     controller.ensure()
     await tick()
     expect(controller.getSnapshot()).toEqual({ state: 'no-cwd' })
@@ -89,25 +93,25 @@ describe('GitController', () => {
   })
 
   it('polls at the snapshot interval and skips busy ticks', async () => {
-    remote.enqueue({ ok: true, value: snapshot({ refreshIntervalMs: 10_000 }) })
+    remote.enqueue(okResult(snapshot({ refreshIntervalMs: 10_000 })))
     controller.ensure()
     await tick()
     expect(remote.calls).toBe(1)
     await vi.advanceTimersByTimeAsync(9_999)
     expect(remote.calls).toBe(1)
-    remote.enqueue({ ok: true, value: snapshot({ refreshIntervalMs: 10_000 }) })
+    remote.enqueue(okResult(snapshot({ refreshIntervalMs: 10_000 })))
     await vi.advanceTimersByTimeAsync(1)
     await tick()
     expect(remote.calls).toBe(2)
     // The next poll fires after another interval and consumes the queue.
-    remote.enqueue({ ok: true, value: snapshot({ refreshIntervalMs: 10_000 }) })
+    remote.enqueue(okResult(snapshot({ refreshIntervalMs: 10_000 })))
     await vi.advanceTimersByTimeAsync(10_000)
     await tick()
     expect(remote.calls).toBe(3)
   })
 
   it('does not poll when the interval is 0', async () => {
-    remote.enqueue({ ok: true, value: snapshot({ refreshIntervalMs: 0 }) })
+    remote.enqueue(okResult(snapshot({ refreshIntervalMs: 0 })))
     controller.ensure()
     await tick()
     await vi.advanceTimersByTimeAsync(120_000)
@@ -115,22 +119,22 @@ describe('GitController', () => {
   })
 
   it('shows an error view for non-terminal failures and keeps polling', async () => {
-    remote.enqueue(NOT_A_REPO)
+    remote.enqueue(ok(NOT_A_REPO))
     controller.ensure()
     await tick()
     expect(controller.getSnapshot()).toEqual({ state: 'error', error: { code: 'not-a-git-repo' } })
-    remote.enqueue({ ok: true, value: snapshot() })
+    remote.enqueue(okResult(snapshot()))
     await vi.advanceTimersByTimeAsync(30_000)
     await tick()
     expect(controller.getSnapshot()).toMatchObject({ state: 'ready' })
   })
 
   it('recovers after a timeout failure', async () => {
-    remote.enqueue(TIMEOUT)
+    remote.enqueue(ok(TIMEOUT))
     controller.ensure()
     await tick()
     expect(controller.getSnapshot()).toEqual({ state: 'error', error: { code: 'timeout' } })
-    remote.enqueue({ ok: true, value: snapshot() })
+    remote.enqueue(okResult(snapshot()))
     await vi.advanceTimersByTimeAsync(30_000)
     await tick()
     expect(controller.getSnapshot()).toMatchObject({ state: 'ready' })
@@ -143,24 +147,24 @@ describe('GitController', () => {
     const view = controller.getSnapshot()
     expect(view.state).toBe('error')
     if (view.state === 'error') expect(view.error.code).toBe('git-unavailable')
-    remote.enqueue({ ok: true, value: snapshot() })
+    remote.enqueue(okResult(snapshot()))
     await vi.advanceTimersByTimeAsync(30_000)
     await tick()
     expect(controller.getSnapshot()).toMatchObject({ state: 'ready' })
   })
 
   it('resync() refreshes after a connection reset', async () => {
-    remote.enqueue({ ok: true, value: snapshot() })
+    remote.enqueue(okResult(snapshot()))
     controller.ensure()
     await tick()
-    remote.enqueue({ ok: true, value: snapshot() })
+    remote.enqueue(okResult(snapshot()))
     controller.resync()
     await tick()
     expect(remote.calls).toBe(2)
   })
 
   it('resync() does not wake a terminal no-cwd controller', async () => {
-    remote.enqueue(UNAVAILABLE)
+    remote.enqueue(ok(UNAVAILABLE))
     controller.ensure()
     await tick()
     controller.resync()
@@ -169,12 +173,12 @@ describe('GitController', () => {
   })
 
   it('dispose() stops polling and silences in-flight settlement', async () => {
-    let resolveSnapshot: (r: GitSnapshotResult) => void = () => {}
-    const pending = new Promise<GitSnapshotResult>((resolve) => { resolveSnapshot = resolve })
-    remote.enqueue(pending as unknown as GitSnapshotResult)
+    let resolveSnapshot: (r: GitRemoteEnvelope<GitSnapshotResult>) => void = () => {}
+    const pending = new Promise<GitRemoteEnvelope<GitSnapshotResult>>((resolve) => { resolveSnapshot = resolve })
+    remote.enqueue(pending as unknown as GitRemoteEnvelope<GitSnapshotResult>)
     controller.ensure()
     controller.dispose()
-    resolveSnapshot({ ok: true, value: snapshot() })
+    resolveSnapshot(okResult(snapshot()))
     await tick()
     // The settled result must not flip the view after dispose.
     expect(controller.getSnapshot()).toEqual({ state: 'loading' })

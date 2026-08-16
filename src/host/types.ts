@@ -1,5 +1,5 @@
 /**
- * dsh-git-status host data model. This file is the authoritative type source;
+ * dsh-git-status-pill host data model. This file is the authoritative type source;
  * the client half mirrors it with zod schemas (see src/client/remote.ts) and
  * `tests/remote.spec.ts` keeps the two in sync.
  */

@@ -20,3 +20,6 @@ coverage/
 
 # Logs
 *.log
+
+# Debug captures
+*.har

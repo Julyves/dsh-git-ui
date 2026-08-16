@@ -63,10 +63,10 @@ export const gitSnapshotRequestSchema = z.object({
 
 /** The contribution mounted into `ctx.remote` by the client plugin body. */
 export const gitInfoRemote: TypertRemoteContribution = {
-  package: 'dsh-git-status',
+  package: 'dsh-git-status-pill',
   descriptors: [
     {
-      id: 'dsh-git-status#gitInfo/snapshot',
+      id: 'dsh-git-status-pill#gitInfo/snapshot',
       service: 'gitInfo',
       namespace: 'gitInfo',
       method: 'snapshot',
@@ -78,14 +78,14 @@ export const gitInfoRemote: TypertRemoteContribution = {
           source: 'json',
           codec: {
             mode: 'strict',
-            typeSymbol: 'dsh-git-status/types#GitSnapshotRequest',
+            typeSymbol: 'dsh-git-status-pill/types#GitSnapshotRequest',
             schema: gitSnapshotRequestSchema,
           },
         },
       ],
       result: {
         mode: 'strict',
-        typeSymbol: 'dsh-git-status/types#GitSnapshotResult',
+        typeSymbol: 'dsh-git-status-pill/types#GitSnapshotResult',
         schema: gitSnapshotResultSchema,
       },
     },

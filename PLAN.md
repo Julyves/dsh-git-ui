@@ -1,10 +1,13 @@
-# dsh-git-status — 可行性研究 & 工程结构方案
+# dsh-git-status-pill — 可行性研究 & 工程结构方案
 
 > 结论：**独立仓库实现完全可行，无需 deepseek-harness monorepo 构建机制。**
 > 本文件汇总源码级核实结论（基于 deepseek-harness checkout，0.1.0-rc.x 系）与独立仓库工程结构。
 > 2026-08-16 复审修订：修正 §2.2 数据通道选型错误，补充 browser Remote 通道、构建禁令、peerDeps 机制等核实事实（见 §6）。
+> 2026-08-17 包名修订：npm 上的 `dsh-git-status` 已被无关第三方插件（composer 分支切换器）占用，
+> 本包更名为 **`dsh-git-status-pill`**；尚未发布，采用本地安装。
 
 ---
+
 
 ## 1. 项目背景与目标（恢复自规划会话）
 
@@ -20,7 +23,8 @@
 - 展示范围：分支/HEAD/计数/领先落后/最近提交/变更文件；远程 URL 等留待扩展。
 
 原规划（monorepo 内三包：`packages/host/git-info` + `packages/client/ui-git` + `packages/bundle/git-ui`）
-的功能面全部保留，但**工程载体改为独立仓库 `dsh-git-status`**（GitHub: `Julyves/dsh-git-status`）。
+的功能面全部保留，但**工程载体改为独立仓库**（GitHub: `Julyves/dsh-git-status`，
+包名因 npm 同名冲突为 `dsh-git-status-pill`）。
 
 ---
 
@@ -89,16 +93,17 @@
   （"healed" fallback，共享安装级单一 cordis 实例）→ 独立插件 peerDeps 由宿主提供，
   **不会**从 npm 拉到过时版本。版本范围按社区模式 `">=0.0.1-rc.1 <0.2.0"`。
 - 分发三形态（publish.md）：
-  - 本地目录/链接：`dsh plugin --profile web add ./dsh-git-status`（开发期最方便）
-  - **tgz**：`pnpm pack` 后 `add file:...tgz`（**免构建权限，推荐发布形态**）
+  - 本地目录/链接：`dsh plugin --profile web add ./`（开发期最方便，当前唯一已启用形态）
+  - **tgz**：`pnpm pack` 后 `add file:...tgz`（**免构建权限，推荐发布形态**；待包名改名后
+    产出 `dsh-git-status-pill-*.tgz`）
   - git：`add github:Julyves/dsh-git-status#<sha>` → 需自包含 `prepare` 脚本（tsc/esbuild，
     不得依赖 monorepo）+ 用户 `allowBuilds` 白名单（pnpm ≥10）
 - **patch 行**：单包双 manifest（`dsh.bundle` + `dsh.client`）时**一行 insert 即可**
   （社区 `dsh-provider-quick-config` 先例）：
   ```yaml
   - insert:
-      - id: git-status
-        name: dsh-git-status        # 必须是包名（loader entry name / client.js URL 的依据）
+      - id: git-status-pill
+        name: dsh-git-status-pill  # 必须是包名（loader entry name / client.js URL 的依据）
         config: { ... }             # host Config（schemastery 校验）
   ```
   ⚠️ 不要为同一包插两行（服务类实例化两次 → 同名服务注册冲突）。
@@ -118,9 +123,9 @@
 `dsh-provider-quick-config`（单包同时承载 `dsh.bundle` + `dsh.client` 双 manifest）。
 
 ```
-dsh-git-status/
+dsh-git-status-pill/
 ├── package.json          # 单包：dsh.bundle.patch + dsh.client；exports "." (host) / "./client"
-├── cordis.patch.yml      # 单行 insert（id: git-status / name: dsh-git-status / config）
+├── cordis.patch.yml      # 单行 insert（id: git-status-pill / name: dsh-git-status-pill / config）
 ├── tsconfig.json         # 严格模式；标准 decorators 开启；不压缩参数名
 ├── build.mjs             # 自包含构建：tsc 编译 host + esbuild 单文件打包 client（prepare 可复现）
 ├── src/

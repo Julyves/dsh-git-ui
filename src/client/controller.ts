@@ -20,9 +20,21 @@ export type GitView =
   | { readonly state: 'ready'; readonly snapshot: GitSnapshot }
   | { readonly state: 'error'; readonly error: GitSnapshotFailure }
 
+/**
+ * RPC envelope returned by every mounted Remote method (see the api-gateway
+ * client's `invoke`): `ok` reflects the transport/gateway outcome, and the
+ * business return value of the host method rides inside `value`. For
+ * `gitInfo/snapshot` that business value is a `GitSnapshotResult` — so a
+ * successful call resolves to `{ ok: true, value: { ok: true, value:
+ * GitSnapshot } }`.
+ */
+export type GitRemoteEnvelope<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: { readonly code?: string; readonly message?: string; readonly details?: unknown } }
+
 /** Structural face of the mounted gitInfo Remote namespace. */
 export interface GitRemoteLike {
-  snapshot(request: GitSnapshotRequest): Promise<GitSnapshotResult>
+  snapshot(request: GitSnapshotRequest): Promise<GitRemoteEnvelope<GitSnapshotResult>>
 }
 
 /** Failure codes that mean "no working directory to watch" — stop polling. */
@@ -67,14 +79,23 @@ export class GitController implements GitObservable<GitView> {
     this.inflight = this.remote.snapshot({ sessionId: this.sessionId })
       .then((result) => {
         if (this.disposed) return
-        if (result.ok) {
-          this.pollMs = result.value.refreshIntervalMs
-          this.setView({ state: 'ready', snapshot: result.value })
-        } else if (TERMINAL_CODES.has(result.error.code)) {
+        // RPC envelope: `result.ok` is the transport/gateway outcome; the
+        // business GitSnapshotResult (ok/value or ok/error) sits in
+        // `result.value`.
+        if (!result.ok) {
+          const detail = [result.error.code, result.error.message].filter(Boolean).join(': ')
+          this.setView({ state: 'error', error: { code: 'git-unavailable', detail: detail || 'rpc failure' } })
+          return
+        }
+        const inner = result.value
+        if (inner.ok) {
+          this.pollMs = inner.value.refreshIntervalMs
+          this.setView({ state: 'ready', snapshot: inner.value })
+        } else if (TERMINAL_CODES.has(inner.error.code)) {
           this.stopPolling()
           this.setView({ state: 'no-cwd' })
         } else {
-          this.setView({ state: 'error', error: result.error })
+          this.setView({ state: 'error', error: inner.error })
         }
       })
       .catch(() => {
