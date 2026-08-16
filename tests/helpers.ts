@@ -24,7 +24,7 @@ export function gitStatus(dir: string, ...args: string[]): { status: number | nu
 }
 
 /** Create a temp directory and return its absolute path. */
-export async function makeTempDir(prefix = 'dsh-git-status-pill-test-'): Promise<string> {
+export async function makeTempDir(prefix = 'dsh-git-ui-test-'): Promise<string> {
   return mkdtemp(join(tmpdir(), prefix))
 }
 
@@ -43,7 +43,7 @@ export async function gitInit(dir: string, { commit = true, initialFile = 'readm
 
 /** Create a bare remote, add it as origin, and push main to it. Returns the remote path. */
 export async function addBareRemote(dir: string, remoteName = 'origin'): Promise<string> {
-  const remote = await mkdtemp(join(tmpdir(), 'dsh-git-status-pill-remote-'))
+  const remote = await mkdtemp(join(tmpdir(), 'dsh-git-ui-remote-'))
   await rm(remote, { recursive: true })
   await mkdir(remote)
   git(dir, 'init', '--bare', remote)

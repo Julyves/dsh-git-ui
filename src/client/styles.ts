@@ -206,15 +206,15 @@ export const emptyNote: CSSProperties = {
  * Global styles for pseudo-class interactions (inline styles can't express
  * :hover/:focus-visible). Injected once per document under a plugin-scoped id.
  */
-const GLOBAL_CSS_ID = 'dsh-git-status-pill/styles'
+const GLOBAL_CSS_ID = 'dsh-git-ui/styles'
 
 const globalCss = [
-  '.dsh-git-status-pill__pill:hover { background: var(--dsw-alias-interactive-bg-hover); }',
-  '.dsh-git-status-pill__pill:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
-  '.dsh-git-status-pill__row { border-radius: 6px; }',
-  '.dsh-git-status-pill__row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
-  '.dsh-git-status-pill__refresh:hover { color: var(--dsw-alias-state-business-primary); }',
-  '.dsh-git-status-pill__refresh:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }',
+  '.dsh-git-ui__pill:hover { background: var(--dsw-alias-interactive-bg-hover); }',
+  '.dsh-git-ui__pill:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__row { border-radius: 6px; }',
+  '.dsh-git-ui__row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
+  '.dsh-git-ui__refresh:hover { color: var(--dsw-alias-state-business-primary); }',
+  '.dsh-git-ui__refresh:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }',
 ].join('\n')
 
 /** Ensure the global interaction styles exist (idempotent; browser only). */
@@ -223,7 +223,7 @@ export function ensureGlobalCss(): void {
   if (document.getElementById(GLOBAL_CSS_ID) !== null) return
   const tag = document.createElement('style')
   tag.id = GLOBAL_CSS_ID
-  tag.dataset.plugin = 'dsh-git-status-pill'
+  tag.dataset.plugin = 'dsh-git-ui'
   tag.textContent = globalCss
   document.head.appendChild(tag)
 }

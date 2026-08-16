@@ -38,15 +38,15 @@ function loadBundle(): Captured {
 }
 
 describe('client bundle artifact', () => {
-  it('registers the dsh-git-status-pill handoff and returns the plugin shape', () => {
+  it('registers the dsh-git-ui handoff and returns the plugin shape', () => {
     const { id, factory } = loadBundle()
-    expect(id).toBe('dsh-git-status-pill')
+    expect(id).toBe('dsh-git-ui')
     const plugin = factory((spec) => {
       if (spec === 'react' || spec === 'react/jsx-runtime') return { createElement: () => {}, jsx: () => {} }
       if (spec === 'react-dom') return { createPortal: () => null }
       throw new Error(`unexpected require: ${spec}`)
     })
-    expect(plugin.name).toBe('dsh-git-status-pill')
+    expect(plugin.name).toBe('dsh-git-ui')
     expect(plugin.inject).toEqual(['slots', 'remote', 'locale'])
     expect(typeof plugin.apply).toBe('function')
   })

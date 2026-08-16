@@ -73,14 +73,14 @@ interface ClientContext {
 export const inject = ['slots', 'remote', 'locale'] as const
 
 /** Plugin identity: the factory handoff returns this plus the exports above. */
-export const name = 'dsh-git-status-pill'
+export const name = 'dsh-git-ui'
 
 /**
  * Plugin body: register copy, mount the gitInfo Remote, then host the header
  * utility in a child fiber that may legitimately access `remote.gitInfo`.
  */
 export async function apply(ctx: ClientContext): Promise<void> {
-  ctx.effect(() => ctx.locale.register('git', { zh, en }), 'dsh-git-status-pill: dictionaries')
+  ctx.effect(() => ctx.locale.register('git', { zh, en }), 'dsh-git-ui: dictionaries')
 
   // Mount first — the namespace service only exists after this resolves.
   await ctx.remote.$mount(gitInfoRemote)
@@ -92,7 +92,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // access inside the controller factory is legal; the service is already
   // provided by the mount above, so activation does not wait (no deadlock).
   const child = ctx.plugin({
-    name: 'dsh-git-status-pill:git',
+    name: 'dsh-git-ui:git',
     inject: ['slots', 'remote.gitInfo'],
     apply: (sub) => {
       const controllerFor = (sessionId: string): GitController => {

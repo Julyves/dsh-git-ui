@@ -1,4 +1,4 @@
-# dsh-git-status is installed into the dsh profile as a bundle; its
+# dsh-git-ui is installed into the dsh profile as a bundle; its
 # @deepseek-ai/* peerDependencies are provided by the host dsh installation
 # (hoisted-linker fallback in profiles). The npm registry does not carry the
 # full package chain, so peers must never be auto-installed here.

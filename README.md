@@ -1,4 +1,4 @@
-# dsh-git-status-pill
+# dsh-git-ui
 
 A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plugin that visualizes Git status in the Web UI: current branch, HEAD, dirty-state counts (staged / modified / untracked), ahead/behind, recent commits, and changed files — right in the session header, no terminal needed.
 
@@ -27,16 +27,9 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plug
 
 Requires a running [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) with the `web` profile.
 
-> ⚠️ Package-name note: the npm name `dsh-git-status` is **occupied by an
-> unrelated third-party plugin** (a composer tool-row branch switcher), so this
-> package ships as **`dsh-git-status-pill`** and is **not published to npm yet**.
-> Install it locally from this repository.
-
 ```sh
-# Local install (development): links the repo into the profile under
-# dsh-git-status-pill. The repo's node_modules/@deepseek-ai/* peer symlinks
-# (see Development) let Node resolve the host-provided peers.
-dsh plugin --profile web add ./
+# Install from the npm registry.
+dsh plugin --profile web add dsh-git-ui
 ```
 
 Restart dsh web. Open a session in a git repository and the branch pill appears in the session header.
@@ -44,19 +37,21 @@ Restart dsh web. Open a session in a git repository and the branch pill appears 
 To verify the install:
 
 ```sh
-cat ~/.dsh/profiles/web/package.json   # dsh.profile.bundles should list dsh-git-status-pill
+cat ~/.dsh/profiles/web/package.json   # dsh.profile.bundles should list dsh-git-ui
 ```
 
 To remove:
 
 ```sh
-dsh plugin --profile web remove dsh-git-status-pill
+dsh plugin --profile web remove dsh-git-ui
 ```
 
-> Local tarball / link installs (`file:...tgz`, `github:...`) symlink the
-> package outside the profile tree, so its `@deepseek-ai/*` peer dependencies
-> (provided by the host installation) are not reachable by Node's resolution.
-> Keep the dev peer symlinks in this repo's `node_modules/@deepseek-ai/*`
+> Local development install (links this repo into the profile instead):
+> `dsh plugin --profile web add ./`. Local tarball / link installs
+> (`file:...tgz`, `github:...`) symlink the package outside the profile tree,
+> so its `@deepseek-ai/*` peer dependencies (provided by the host
+> installation) are not reachable by Node's resolution. Keep the dev peer
+> symlinks in this repo's `node_modules/@deepseek-ai/*`
 > (see [Development](#development)) whenever installing locally.
 
 ## Usage
@@ -72,7 +67,7 @@ Each session shows the Git status of **its own working directory**. Non-reposito
 All defaults work out of the box. Advanced users may override the plugin config in the profile's `cordis.patch.yml` (a later layer wins; the row replaces the whole `config`):
 
 ```yaml
-- id: git-status-pill
+- id: git-ui
   config:
     defaultRefreshIntervalMs: 60000   # polling interval (ms); 0 disables polling
     maxChanges: 200                   # max changed-file entries in a snapshot

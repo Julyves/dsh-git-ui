@@ -1,4 +1,4 @@
-# dsh-git-status-pill
+# dsh-git-ui
 
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）Web UI 插件：在会话界面中可视化展示当前工程的 Git 状态——分支、HEAD、脏状态计数（已暂存/已修改/未跟踪）、领先/落后、最近提交与变更文件。无需切换终端，扫一眼即得。
 
@@ -27,15 +27,9 @@
 
 需要已安装 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）且使用 `web` profile。
 
-> ⚠️ 包名说明：npm 上的 `dsh-git-status` 已被**无关的第三方插件**（composer
-> 工具行分支切换器）占用，因此本包更名为 **`dsh-git-status-pill`**，且**尚未
-> 发布到 npm**，请从本仓库本地安装。
-
 ```sh
-# 本地安装（开发方式）：以 dsh-git-status-pill 为名把本仓库链接进 profile；
-# 仓库内 node_modules/@deepseek-ai/* 的 peer 符号链接（见下方「开发」）
-# 保证 Node 能解析宿主提供的 peer 依赖。
-dsh plugin --profile web add ./
+# 从 npm registry 安装。
+dsh plugin --profile web add dsh-git-ui
 ```
 
 安装后**重启 dsh web**。在 git 仓库目录打开会话，头部即出现分支 Pill。
@@ -43,15 +37,16 @@ dsh plugin --profile web add ./
 验证安装：
 
 ```sh
-cat ~/.dsh/profiles/web/package.json   # dsh.profile.bundles 中应包含 dsh-git-status-pill
+cat ~/.dsh/profiles/web/package.json   # dsh.profile.bundles 中应包含 dsh-git-ui
 ```
 
 卸载：
 
 ```sh
-dsh plugin --profile web remove dsh-git-status-pill
+dsh plugin --profile web remove dsh-git-ui
 ```
 
+> 本地开发安装（把本仓库链接进 profile）：`dsh plugin --profile web add ./`。
 > 本地 tgz / 目录 / GitHub 直装（`file:...tgz`、`github:...`）会把包以 symlink
 > 方式装进 profile，Node 沿真实路径解析时无法触达宿主提供的 `@deepseek-ai/*`
 > peer 依赖。本地安装时请保持本仓库 `node_modules/@deepseek-ai/*` 的 peer 链接
@@ -70,7 +65,7 @@ dsh plugin --profile web remove dsh-git-status-pill
 默认零配置开箱即用。高级用户可在 profile 的 `cordis.patch.yml` 中覆盖插件配置（后层覆盖，整行替换 `config`）：
 
 ```yaml
-- id: git-status-pill
+- id: git-ui
   config:
     defaultRefreshIntervalMs: 60000   # 轮询间隔（毫秒）；0 = 关闭轮询
     maxChanges: 200                   # 快照中变更文件条数上限

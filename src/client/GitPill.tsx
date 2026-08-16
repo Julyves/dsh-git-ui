@@ -114,7 +114,7 @@ function pillLabel(view: GitView & { state: 'ready' }, t: (key: GitKey) => strin
 function DegradedPill({ label, title, t }: { label: string; title?: string; t: (key: GitKey) => string }): JSX.Element {
   void t
   return (
-    <span className="dsh-git-status-pill__pill" style={css.pillDimmed} title={title} aria-label={label}>
+    <span className="dsh-git-ui__pill" style={css.pillDimmed} title={title} aria-label={label}>
       {label}
     </span>
   )
@@ -193,7 +193,7 @@ function PopRefresher({ refresh, t }: { refresh: () => Promise<void>; t: (key: G
     void refresh().finally(() => setRefreshing(false))
   }
   return (
-    <button type="button" className="dsh-git-status-pill__refresh" style={css.refreshButton} onClick={onRefresh} disabled={refreshing}>
+    <button type="button" className="dsh-git-ui__refresh" style={css.refreshButton} onClick={onRefresh} disabled={refreshing}>
       {refreshing ? '…' : t('popup.refresh')}
     </button>
   )
@@ -327,7 +327,7 @@ export function GitPill({ useGit, useSession, refresh, t }: GitPillProps): JSX.E
     <span ref={wrapRef} style={{ display: 'inline-flex' }}>
       <button
         type="button"
-        className="dsh-git-status-pill__pill"
+        className="dsh-git-ui__pill"
         style={css.pill}
         onClick={() => setOpen(!open)}
         aria-haspopup="dialog"
@@ -340,7 +340,7 @@ export function GitPill({ useGit, useSession, refresh, t }: GitPillProps): JSX.E
       {open && pos !== null && createPortal(
         <div
           ref={popRef}
-          className="dsh-git-status-pill__pop"
+          className="dsh-git-ui__pop"
           style={{ ...css.popup, top: pos.top, left: pos.left }}
           role="dialog"
           aria-label={t('popup.title')}

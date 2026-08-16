@@ -1,12 +1,12 @@
-# dsh-git-status-pill bundle patch: the git status widget over the web profile.
+# dsh-git-ui bundle patch: the git status widget over the web profile.
 # A single row activates both faces of the package: the host half (default
 # export = GitStatusService) and the browser half (dsh.client manifest).
 #
 # NOTE: the row name MUST equal the package name — it is the loader entry id
 # and the basis of the client bundle URL (/plugins/<name>/client.js).
 - insert:
-    - id: git-status-pill
-      name: dsh-git-status-pill
+    - id: git-ui
+      name: dsh-git-ui
       config:
         timeoutMs: 5000
         maxStatusBytes: 4194304
