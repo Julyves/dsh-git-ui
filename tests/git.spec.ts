@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createGitRunner } from '../src/host/git.ts'
 import { gitInit, makeTempDir, realSubprocess, type ChildSpawnSpec } from './helpers.ts'
-import { realpath, rm } from 'node:fs/promises'
+import { realpath, rm, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 const temps: string[] = []
 async function tempDir(): Promise<string> {
@@ -56,4 +57,100 @@ describe('createGitRunner', () => {
     }
     expect(spec.argv).toBeDefined()
   })
+
+  it('recovers the complete stdout from the spill file when the tail is lossy', async () => {
+    const spillPath = join(await tempDir(), 'spill.log')
+    const full = '## main\u0000 M a.txt\u0000?? u.txt\u0000'
+    await writeFile(spillPath, full, 'utf8')
+    // The fake host reports a lossy tail (head dropped) plus the spill file
+    // holding the complete stream — the runner must prefer the spill file.
+    const fake: SubprocessLike = {
+      spawn: () => ({
+        done: Promise.resolve({ exitCode: 0, signal: null }),
+        collected: {
+          stdout: { readFrom: () => ({ text: '?? u.txt\u0000', lossy: true, spillPath }) },
+          stderr: { readFrom: () => ({ text: '', lossy: false }) },
+        },
+      }),
+    }
+    const runner = createGitRunner(fake, 5000, 1024)
+    const result = await runner.run(['git', 'status'], { cwd: '/tmp' })
+    expect(result.stdout).toBe(full)
+    expect(result.stdoutLossy).toBe(false)
+  })
+
+  it('keeps the tail and marks lossy when no spill file is available', async () => {
+    const fake: SubprocessLike = {
+      spawn: () => ({
+        done: Promise.resolve({ exitCode: 0, signal: null }),
+        collected: {
+          stdout: { readFrom: () => ({ text: '?? u.txt\u0000', lossy: true }) },
+          stderr: { readFrom: () => ({ text: '', lossy: false }) },
+        },
+      }),
+    }
+    const runner = createGitRunner(fake, 5000, 1024)
+    const result = await runner.run(['git', 'status'], { cwd: '/tmp' })
+    expect(result.stdout).toBe('?? u.txt\u0000')
+    expect(result.stdoutLossy).toBe(true)
+  })
+
+  it('falls back to the tail when the spill file cannot be read', async () => {
+    const fake: SubprocessLike = {
+      spawn: () => ({
+        done: Promise.resolve({ exitCode: 0, signal: null }),
+        collected: {
+          stdout: { readFrom: () => ({ text: '?? u.txt\u0000', lossy: true, spillPath: '/definitely/missing/spill.log' }) },
+          stderr: { readFrom: () => ({ text: '', lossy: false }) },
+        },
+      }),
+    }
+    const runner = createGitRunner(fake, 5000, 1024)
+    const result = await runner.run(['git', 'status'], { cwd: '/tmp' })
+    expect(result.stdout).toBe('?? u.txt\u0000')
+    expect(result.stdoutLossy).toBe(true)
+  })
+
+  it('aborts the run when the caller passes an aborted signal', async () => {
+    let spawnedSignal: AbortSignal | undefined
+    const fake: SubprocessLike = {
+      spawn: (spec) => {
+        spawnedSignal = spec.signal
+        // The host throws on an already-aborted signal before spawning.
+        if (spec.signal?.aborted === true) {
+          return { done: Promise.reject(new Error('aborted before spawn')), collected: {} }
+        }
+        return {
+          done: Promise.resolve({ exitCode: 0, signal: null }),
+          collected: {
+            stdout: { readFrom: () => ({ text: '', lossy: false }) },
+            stderr: { readFrom: () => ({ text: '', lossy: false }) },
+          },
+        }
+      },
+    }
+    const runner = createGitRunner(fake, 5000, 1024)
+    const aborted = new AbortController()
+    aborted.abort()
+    const result = await runner.run(['git', 'status'], { cwd: '/tmp', signal: aborted.signal })
+    expect(spawnedSignal?.aborted).toBe(true)
+    expect(result.timedOut).toBe(true)
+  })
 })
+
+/** Minimal SubprocessLike for runner-level behavior tests. */
+interface SubprocessLike {
+  spawn(spec: {
+    argv: readonly string[]
+    cwd: string
+    stdio: { stdout: { collect: { maxBytes: number } }; stderr: { collect: { maxBytes: number } } }
+    graceMs: number
+    signal?: AbortSignal
+  }): {
+    done: Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>
+    collected: {
+      stdout?: { readFrom(fromByte: number): { text: string; lossy: boolean; spillPath?: string } }
+      stderr?: { readFrom(fromByte: number): { text: string; lossy: boolean; spillPath?: string } }
+    }
+  }
+}

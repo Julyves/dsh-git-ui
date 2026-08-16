@@ -120,6 +120,80 @@ describe('snapshotForSession — failure codes', () => {
     const result = await snapshotForSession(depsFor(dir, fixedSession(dir), fake as unknown as SnapshotDeps['run']), CONFIG, 's1')
     expect(result).toEqual({ ok: false, error: { code: 'timeout' } })
   })
+
+  it('returns timeout when branch --show-current times out (no detached misreport)', async () => {
+    const dir = await tempDir()
+    const fake = new FakeRunner()
+    fake.on(['git', 'rev-parse', '--show-toplevel'], { exitCode: 0, stdout: `${dir}\n`, stderr: '', timedOut: false, stdoutLossy: false })
+    fake.on(['git', 'branch', '--show-current'], { exitCode: null, stdout: '', stderr: '', timedOut: true, stdoutLossy: false })
+    const result = await snapshotForSession(depsFor(dir, fixedSession(dir), fake as unknown as SnapshotDeps['run']), CONFIG, 's1')
+    expect(result).toEqual({ ok: false, error: { code: 'timeout' } })
+  })
+
+  it('returns timeout when rev-parse HEAD times out (no unborn misreport)', async () => {
+    const dir = await tempDir()
+    const fake = new FakeRunner()
+    fake.on(['git', 'rev-parse', '--show-toplevel'], { exitCode: 0, stdout: `${dir}\n`, stderr: '', timedOut: false, stdoutLossy: false })
+    fake.on(['git', 'branch', '--show-current'], { exitCode: 0, stdout: 'main\n', stderr: '', timedOut: false, stdoutLossy: false })
+    fake.on(['git', 'rev-parse', '--short', 'HEAD'], { exitCode: null, stdout: '', stderr: '', timedOut: true, stdoutLossy: false })
+    const result = await snapshotForSession(depsFor(dir, fixedSession(dir), fake as unknown as SnapshotDeps['run']), CONFIG, 's1')
+    expect(result).toEqual({ ok: false, error: { code: 'timeout' } })
+  })
+
+  it('does not misreport a failed HEAD read as unborn when status reports a branch', async () => {
+    const dir = await tempDir()
+    const fake = new FakeRunner()
+    fake.on(['git', 'rev-parse', '--show-toplevel'], { exitCode: 0, stdout: `${dir}\n`, stderr: '', timedOut: false, stdoutLossy: false })
+    fake.on(['git', 'branch', '--show-current'], { exitCode: 0, stdout: 'main\n', stderr: '', timedOut: false, stdoutLossy: false })
+    // HEAD read fails (exit 128, e.g. corrupt repo) — NOT a timeout, NOT unborn.
+    fake.on(['git', 'rev-parse', '--short', 'HEAD'], { exitCode: 128, stdout: '', stderr: 'fatal: Needed a single revision', timedOut: false, stdoutLossy: false })
+    fake.on(['git', 'status', '--porcelain=v1', '-z', '--branch'], { exitCode: 0, stdout: '## main\u0000', stderr: '', timedOut: false, stdoutLossy: false })
+    fake.on(['git', 'log', '-n', '5', '--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI'], { exitCode: 0, stdout: 'a'.repeat(40) + '\u001f' + 'aaaaaaa' + '\u001fsub\u001fA\u001f2026-01-01T00:00:00Z\n', stderr: '', timedOut: false, stdoutLossy: false })
+    const result = await snapshotForSession(depsFor(dir, fixedSession(dir), fake as unknown as SnapshotDeps['run']), CONFIG, 's1')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toMatchObject({ head: null, unborn: false })
+  })
+
+  it('returns timeout when git log times out (no silent empty commit list)', async () => {
+    const dir = await tempDir()
+    const fake = new FakeRunner()
+    fake.on(['git', 'rev-parse', '--show-toplevel'], { exitCode: 0, stdout: `${dir}\n`, stderr: '', timedOut: false, stdoutLossy: false })
+    fake.on(['git', 'branch', '--show-current'], { exitCode: 0, stdout: 'main\n', stderr: '', timedOut: false, stdoutLossy: false })
+    fake.on(['git', 'rev-parse', '--short', 'HEAD'], { exitCode: 0, stdout: 'abc1234\n', stderr: '', timedOut: false, stdoutLossy: false })
+    fake.on(['git', 'status', '--porcelain=v1', '-z', '--branch'], { exitCode: 0, stdout: '## main\u0000', stderr: '', timedOut: false, stdoutLossy: false })
+    fake.on(['git', 'log', '-n', '5', '--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI'], { exitCode: null, stdout: '', stderr: '', timedOut: true, stdoutLossy: false })
+    const result = await snapshotForSession(depsFor(dir, fixedSession(dir), fake as unknown as SnapshotDeps['run']), CONFIG, 's1')
+    expect(result).toEqual({ ok: false, error: { code: 'timeout' } })
+  })
+
+  it('maps a non-repo stderr to not-a-git-repo but other exit-128 failures to git-unavailable', async () => {
+    const dir = await tempDir()
+    const notRepo = new FakeRunner()
+    notRepo.on(['git', 'rev-parse', '--show-toplevel'], {
+      exitCode: 128, stdout: '', stderr: 'fatal: not a git repository (or any of the parent directories): .git', timedOut: false, stdoutLossy: false,
+    })
+    const notRepoResult = await snapshotForSession(depsFor(dir, fixedSession(dir), notRepo as unknown as SnapshotDeps['run']), CONFIG, 's1')
+    expect(notRepoResult).toEqual({ ok: false, error: { code: 'not-a-git-repo' } })
+
+    const dubious = new FakeRunner()
+    dubious.on(['git', 'rev-parse', '--show-toplevel'], {
+      exitCode: 128, stdout: '', stderr: "fatal: detected dubious ownership in repository at '/repo'", timedOut: false, stdoutLossy: false,
+    })
+    const dubiousResult = await snapshotForSession(depsFor(dir, fixedSession(dir), dubious as unknown as SnapshotDeps['run']), CONFIG, 's1')
+    expect(dubiousResult.ok).toBe(false)
+    if (!dubiousResult.ok && dubiousResult.error.code === 'git-unavailable') {
+      expect(dubiousResult.error.detail).toContain('dubious ownership')
+    }
+
+    const silent = new FakeRunner()
+    silent.on(['git', 'rev-parse', '--show-toplevel'], {
+      exitCode: 128, stdout: '', stderr: '', timedOut: false, stdoutLossy: false,
+    })
+    const silentResult = await snapshotForSession(depsFor(dir, fixedSession(dir), silent as unknown as SnapshotDeps['run']), CONFIG, 's1')
+    expect(silentResult.ok).toBe(false)
+    if (!silentResult.ok) expect(silentResult.error.code).toBe('git-unavailable')
+  })
 })
 
 describe('snapshotForSession — real repositories', () => {

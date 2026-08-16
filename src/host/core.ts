@@ -40,6 +40,8 @@ export interface SnapshotDeps {
   readonly sessions: SessionLookup
   /** Injectable clock for deterministic tests. */
   readonly now?: () => number
+  /** Caller-side cancellation (Remote `signal` slot): aborts in-flight git runs. */
+  readonly signal?: AbortSignal
 }
 
 /** Defaults applied by normalizeConfig when a value is absent or invalid. */
@@ -92,9 +94,10 @@ async function runCommand(
   argv: readonly string[],
   cwd: string,
   label: string,
+  signal?: AbortSignal,
 ): Promise<{ readonly run: Awaited<ReturnType<GitRunner['run']>> } | { readonly failure: Extract<GitSnapshotResult, { ok: false }>['error'] }> {
   try {
-    return { run: await runner.run(argv, { cwd }) }
+    return { run: await runner.run(argv, { cwd, ...(signal === undefined ? {} : { signal }) }) }
   } catch (error) {
     return { failure: { code: 'git-unavailable', detail: `${label}: ${error instanceof Error ? error.message : String(error)}` } }
   }
@@ -129,24 +132,38 @@ export async function snapshotForSession(
     return { ok: false, error: { code: 'path-not-found', path: resolved.cwd } }
   }
 
-  const toplevel = await runCommand(deps.run, ['git', 'rev-parse', '--show-toplevel'], realCwd, 'rev-parse')
+  const toplevel = await runCommand(deps.run, ['git', 'rev-parse', '--show-toplevel'], realCwd, 'rev-parse', deps.signal)
   if ('failure' in toplevel) return { ok: false, error: toplevel.failure }
   if (toplevel.run.timedOut) return { ok: false, error: { code: 'timeout' } }
   if (toplevel.run.exitCode !== 0) {
+    // exit 128 covers both "not a git repository" (plain directory) and
+    // other git failures (dubious ownership, unreadable work tree, …).
+    // Only the former is a stable non-repo state; everything else surfaces
+    // as git-unavailable with the actual reason instead of a misleading
+    // "no git repository" pill.
+    const stderr = toplevel.run.stderr
+    if (!stderr.includes('not a git repository')) {
+      return { ok: false, error: runFailure(toplevel.run, `git rev-parse failed: ${stderr.trim() || `exit ${String(toplevel.run.exitCode)}`}`) }
+    }
     return { ok: false, error: { code: 'not-a-git-repo' } }
   }
   const root = toplevel.run.stdout.trim()
   if (root === '') return { ok: false, error: { code: 'not-a-git-repo' } }
 
-  const branchRun = await runCommand(deps.run, ['git', 'branch', '--show-current'], root, 'branch')
-  const branch = 'run' in branchRun && branchRun.run.exitCode === 0 ? parseBranchOutput(branchRun.run.stdout) : null
+  const branchRun = await runCommand(deps.run, ['git', 'branch', '--show-current'], root, 'branch', deps.signal)
+  if ('failure' in branchRun) return { ok: false, error: branchRun.failure }
+  if (branchRun.run.timedOut) return { ok: false, error: { code: 'timeout' } }
+  const branch = branchRun.run.exitCode === 0 ? parseBranchOutput(branchRun.run.stdout) : null
 
-  const headRun = await runCommand(deps.run, ['git', 'rev-parse', '--short', 'HEAD'], root, 'rev-parse HEAD')
+  const headRun = await runCommand(deps.run, ['git', 'rev-parse', '--short', 'HEAD'], root, 'rev-parse HEAD', deps.signal)
   if ('failure' in headRun) return { ok: false, error: headRun.failure }
-  const unborn = headRun.run.exitCode !== 0 || headRun.run.stdout.trim() === ''
-  const head = unborn ? null : headRun.run.stdout.trim()
+  if (headRun.run.timedOut) return { ok: false, error: { code: 'timeout' } }
+  // A failed HEAD read (non-timeout) only nulls the hash: the authoritative
+  // unborn flag comes from the status header below (`## No commits yet on
+  // main`), so a corrupt repo is never misreported as "no commits".
+  const head = headRun.run.exitCode === 0 ? (headRun.run.stdout.trim() || null) : null
 
-  const status = await runCommand(deps.run, ['git', 'status', '--porcelain=v1', '-z', '--branch'], root, 'status')
+  const status = await runCommand(deps.run, ['git', 'status', '--porcelain=v1', '-z', '--branch'], root, 'status', deps.signal)
   if ('failure' in status) return { ok: false, error: status.failure }
   if (status.run.timedOut) return { ok: false, error: { code: 'timeout' } }
   if (status.run.exitCode !== 0) {
@@ -154,15 +171,17 @@ export async function snapshotForSession(
   }
   const parsed = parseStatusOutput(status.run.stdout, config.maxChanges)
 
-  const log = await runCommand(deps.run, ['git', 'log', '-n', '5', '--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI'], root, 'log')
-  const recentCommits = 'run' in log && log.run.exitCode === 0 ? parseLogOutput(log.run.stdout) : []
+  const log = await runCommand(deps.run, ['git', 'log', '-n', '5', '--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI'], root, 'log', deps.signal)
+  if ('failure' in log) return { ok: false, error: log.failure }
+  if (log.run.timedOut) return { ok: false, error: { code: 'timeout' } }
+  const recentCommits = log.run.exitCode === 0 ? parseLogOutput(log.run.stdout) : []
 
   const checkedAt = deps.now?.() ?? Date.now()
   const snapshot: GitSnapshot = {
     root,
     branch,
     head,
-    unborn: parsed.unborn || unborn,
+    unborn: parsed.unborn,
     dirty: parsed.staged + parsed.modified + parsed.untracked > 0,
     staged: parsed.staged,
     modified: parsed.modified,

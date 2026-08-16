@@ -90,7 +90,7 @@ All defaults work out of the box. Advanced users may override the plugin config 
 
 - Shows the Git state of the session's working directory only (no remote URL / push-branch names yet).
 - Polling-based refresh (default 30s); file-watcher event push is a planned extension.
-- Changed-file list is capped (`maxChanges`); oversized status output is truncated (`truncated: true`) with approximate counts.
+- Changed-file list is capped (`maxChanges`); when status output overflows the in-memory cap (default 4 MiB) it is recovered from a private spill file so counts stay exact — only if the spill cap (64 MiB) also overflows does the snapshot fall back to approximate (`truncated: true`).
 - Browser never sends paths — only a `sessionId`; the host resolves the authoritative cwd and runs read-only git commands.
 
 ## Development

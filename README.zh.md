@@ -88,7 +88,7 @@ dsh plugin --profile web remove dsh-git-status-pill
 
 - 仅展示会话工作目录的 Git 状态（远程 URL、push 分支名暂未支持）。
 - 轮询式刷新（默认 30s）；基于文件监听的事件推送为规划中的扩展。
-- 变更文件列表有上限（`maxChanges`）；超大 status 输出会被截断（`truncated: true`，计数标注近似）。
+- 变更文件列表有上限（`maxChanges`）；status 输出超过内存上限（默认 4 MiB）时会从私有 spill 文件恢复完整输出，**计数保持精确**——仅当 spill 上限（64 MiB）也被突破时才回退为近似（`truncated: true`）。
 - 浏览器只传 `sessionId`，不传路径；主机解析权威 cwd 并仅执行只读 git 命令。
 
 ## 开发

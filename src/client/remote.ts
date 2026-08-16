@@ -71,6 +71,10 @@ export const gitInfoRemote: TypertRemoteContribution = {
       namespace: 'gitInfo',
       method: 'snapshot',
       invocation: { kind: 'direct' },
+      // Mirrors the host SRC descriptor: the trailing `signal` parameter is
+      // the cancellation slot, so an aborted call also stops the host-side
+      // git runs instead of letting them finish.
+      cancellation: { parameter: 'signal' },
       parameters: [
         {
           name: 'request',

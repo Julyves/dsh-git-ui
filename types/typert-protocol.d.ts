@@ -59,6 +59,12 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       readonly source: 'json'
       readonly codec: TypertCodec
     }[]
+    /**
+     * Optional caller-supplied cancellation slot: the descriptor carries an
+     * AbortSignal in the trailing business position, propagated over the
+     * carrier so an aborted call also aborts the host-side work.
+     */
+    readonly cancellation?: { readonly parameter: 'signal' }
     readonly result: TypertCodec
   }
 

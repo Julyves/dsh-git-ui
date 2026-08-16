@@ -37,11 +37,17 @@ export interface GitRemoteLike {
   snapshot(request: GitSnapshotRequest): Promise<GitRemoteEnvelope<GitSnapshotResult>>
 }
 
-/** Failure codes that mean "no working directory to watch" — stop polling. */
+/** Failure codes that mean "no working directory to watch" — degrade to a
+ * low-frequency probe instead of a normal poll. */
 const TERMINAL_CODES: ReadonlySet<string> = new Set(['cwd-unavailable', 'session-not-found'])
 
 /** Fallback poll interval while no snapshot has been received yet (ms). */
 const DEFAULT_POLL_MS = 30_000
+
+/** Probe interval for the no-cwd state: the session may gain a working
+ * directory later (workspace selection, host-side session update) without a
+ * slot remount, so keep a cheap retry instead of parking forever. */
+const NO_CWD_POLL_MS = 60_000
 
 export class GitController implements GitObservable<GitView> {
   private view: GitView = { state: 'cold' }
@@ -92,7 +98,8 @@ export class GitController implements GitObservable<GitView> {
           this.pollMs = inner.value.refreshIntervalMs
           this.setView({ state: 'ready', snapshot: inner.value })
         } else if (TERMINAL_CODES.has(inner.error.code)) {
-          this.stopPolling()
+          // Terminal no-cwd view: the finally-branch schedules the low-
+          // frequency probe (schedulePoll), so no explicit stop here.
           this.setView({ state: 'no-cwd' })
         } else {
           this.setView({ state: 'error', error: inner.error })
@@ -113,6 +120,8 @@ export class GitController implements GitObservable<GitView> {
 
   /** Re-sync after a connection reset (reconnect). */
   resync(): void {
+    // no-cwd is skipped: the low-frequency probe already covers recovery,
+    // and a reconnect alone does not create a working directory.
     if (this.disposed || this.view.state === 'cold' || this.view.state === 'no-cwd') return
     void this.refresh()
   }
@@ -125,11 +134,14 @@ export class GitController implements GitObservable<GitView> {
 
   private schedulePoll(): void {
     this.stopPolling()
-    if (this.disposed || this.pollMs <= 0 || this.view.state === 'no-cwd' || this.view.state === 'cold') return
+    if (this.disposed || this.pollMs <= 0 || this.view.state === 'cold') return
+    // no-cwd keeps a low-frequency probe so a later cwd arrival recovers
+    // without a remount; every other state polls at the snapshot interval.
+    const interval = this.view.state === 'no-cwd' ? NO_CWD_POLL_MS : this.pollMs
     this.timer = setTimeout(() => {
       if (this.disposed || this.inflight !== undefined) return
       void this.refresh()
-    }, this.pollMs)
+    }, interval)
   }
 
   private stopPolling(): void {

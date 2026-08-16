@@ -83,13 +83,26 @@ describe('GitController', () => {
     expect(seen).toContain('ready')
   })
 
-  it('maps a terminal no-cwd failure and stops polling', async () => {
+  it('maps a terminal no-cwd failure to a low-frequency probe that recovers', async () => {
     remote.enqueue(ok(UNAVAILABLE))
     controller.ensure()
     await tick()
     expect(controller.getSnapshot()).toEqual({ state: 'no-cwd' })
-    await vi.advanceTimersByTimeAsync(120_000)
+    // No probe before the 60s NO_CWD_POLL_MS window.
+    await vi.advanceTimersByTimeAsync(59_999)
     expect(remote.calls).toBe(1)
+    // First probe fires at 60s; still no cwd → stays no-cwd.
+    remote.enqueue(ok(UNAVAILABLE))
+    await vi.advanceTimersByTimeAsync(1)
+    await tick()
+    expect(remote.calls).toBe(2)
+    expect(controller.getSnapshot()).toEqual({ state: 'no-cwd' })
+    // A later probe finds a working directory → ready, normal polling resumes.
+    remote.enqueue(okResult(snapshot()))
+    await vi.advanceTimersByTimeAsync(60_000)
+    await tick()
+    expect(remote.calls).toBe(3)
+    expect(controller.getSnapshot()).toMatchObject({ state: 'ready' })
   })
 
   it('polls at the snapshot interval and skips busy ticks', async () => {

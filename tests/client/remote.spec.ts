@@ -78,6 +78,7 @@ describe('gitInfoRemote contribution', () => {
     expect(descriptor).toMatchObject({
       service: 'gitInfo', namespace: 'gitInfo', method: 'snapshot',
       invocation: { kind: 'direct' },
+      cancellation: { parameter: 'signal' },
       parameters: [{ name: 'request', wire: 'request', source: 'json' }],
       result: { mode: 'strict' },
     })

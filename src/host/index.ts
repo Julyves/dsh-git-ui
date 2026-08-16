@@ -45,7 +45,7 @@ export class GitStatusService extends TypertRemoteService {
   }
 
   @Remote('snapshot')
-  async snapshot(request: GitSnapshotRequest): Promise<GitSnapshotResult> {
+  async snapshot(request: GitSnapshotRequest, signal?: AbortSignal): Promise<GitSnapshotResult> {
     const subprocess = this.ctx.get('subprocess') as SubprocessLike | undefined
     if (subprocess === undefined) {
       return { ok: false, error: { code: 'git-unavailable', detail: 'subprocess service unavailable' } }
@@ -69,6 +69,7 @@ export class GitStatusService extends TypertRemoteService {
             }
           },
         },
+        signal,
       },
       this.config,
       request.sessionId,
