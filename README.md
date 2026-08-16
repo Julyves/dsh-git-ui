@@ -23,6 +23,22 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plug
 - **Deterministic degradation**: non-git directories, missing cwd, missing git, timeouts, and oversized repositories show stable fallback states — never crashes, never spams.
 - **Pure read-only UI**: no new model tools, no session events, no impact on agent behavior.
 
+## Screenshots
+
+> Screenshot placement guide for maintainers: capture each image, save it
+> under `docs/screenshots/` with the exact filename below, and commit. See
+> [docs/screenshots/README.md](docs/screenshots/README.md) for capture tips
+> (demo repo, sizes, sensitive-info rules).
+
+![Branch pill in the session header](docs/screenshots/pill.png)
+*The branch pill in the session header — branch, dirty-state counts (`+1 −1 ?2`) and ahead/behind at a glance.*
+
+![Git status detail popup](docs/screenshots/popup.png)
+*Click the pill for the detail panel: count grid, recent commits, and the changed-file list with status chips.*
+
+![Degraded states](docs/screenshots/dirty.png)
+*Clean vs dirty vs non-repository states — the dimmed placeholder instead of a pill.*
+
 ## Installation
 
 Requires a running [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) with the `web` profile.
