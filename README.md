@@ -16,6 +16,8 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plug
 
 - **Branch pill** in the session header (right-aligned, per-session): shows the current branch at a glance, with dirty-state and ahead/behind indicators:
 
+  <img src="docs/screenshots/pill.png" alt="Branch pill in the session header" width="720">
+
   | State | Pill |
   |---|---|
   | Clean | `⎇ main` |
@@ -26,9 +28,15 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plug
   | Not a git repo | Dimmed `无 Git 仓库` |
   | Git unavailable / error | Dimmed `Git 不可用` (reason in tooltip) |
 
-- **Detail popover** (click the pill): repository root, count grid (staged / modified / untracked / ahead / behind), recent commits (hash · subject · author · relative time), changed-file list with status chips, manual refresh button, and last-checked time.
+- **Detail popover** (click the pill): repository root, count grid (staged / modified / untracked / ahead / behind), recent commits (hash · subject · author · relative time), changed-file list with status chips, manual refresh button, and last-checked time:
+
+  <img src="docs/screenshots/popup.png" alt="Git status detail popup" width="720">
+
 - **Always-fresh data, zero interaction**: automatic fetch on session open, silent polling (host-configured interval, default 30s, no overlapping requests), **immediate refresh when an agent turn completes** (best-effort — the working tree most likely changed right then), resync after reconnect, and a manual refresh button.
-- **Deterministic degradation**: non-git directories, missing cwd, missing git, timeouts, and oversized repositories show stable fallback states — never crashes, never spams.
+- **Deterministic degradation**: non-git directories, missing cwd, missing git, timeouts, and oversized repositories show stable fallback states — never crashes, never spams:
+
+  <img src="docs/screenshots/dirty.png" alt="Clean vs dirty vs non-repository states" width="720">
+
 - **Pure read-only UI**: no new model tools, no session events, no impact on agent behavior.
 
 ## Installation
