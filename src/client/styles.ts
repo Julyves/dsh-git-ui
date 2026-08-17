@@ -214,6 +214,8 @@ const globalCss = [
   '.dsh-git-ui__row { border-radius: 6px; }',
   '.dsh-git-ui__row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
   '.dsh-git-ui__refresh:hover { color: var(--dsw-alias-state-business-primary); }',
+  '.dsh-git-ui__commit-row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
+  '.dsh-git-ui__commit-row:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   '.dsh-git-ui__refresh:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }',
   // Git center dialog: widen the platform Modal card (headless mode).
   '.dsh-git-ui__center { width: min(960px, 100vw); max-height: min(720px, calc(100vh - 48px)); }',
@@ -415,6 +417,12 @@ export const tabActive: CSSProperties = {
 
 // ── History tab ───────────────────────────────────────────────────────────
 
+/**
+ * 历史行高：单一事实来源。行样式与分支图 SVG 共用该常量，
+ * 保证条带占满整行、竖线在行间连续衔接（旧实现 36px 条带 vs 50px 行高导致虚线）。
+ */
+export const HISTORY_ROW_H = 32
+
 export const historyLayout: CSSProperties = {
   display: 'flex',
   gap: 14,
@@ -425,28 +433,37 @@ export const historyLayout: CSSProperties = {
 export const historyList: CSSProperties = {
   flex: '0 0 320px',
   overflowY: 'auto',
+  overflowX: 'auto',
   display: 'flex',
   flexDirection: 'column',
-  gap: 2,
+  gap: 0,
   paddingRight: 4,
   borderRight: '1px solid var(--dsw-alias-border-l1)',
 }
 
-export const commitRowButton: CSSProperties = {
+/** 单行表格行：固定行高，图 + 主题 + 元信息一行排布。
+ * 行盒 = max(内容宽, 列表宽)：超宽图时撑开列表横向滚动区。 */
+export const historyRow: CSSProperties = {
   display: 'flex',
-  flexDirection: 'column',
-  gap: 2,
-  width: '100%',
-  textAlign: 'left',
+  alignItems: 'center',
+  alignSelf: 'flex-start',
+  gap: 8,
+  minWidth: '100%',
+  width: 'auto',
+  height: HISTORY_ROW_H,
+  flexShrink: 0,
+  padding: 0,
   border: 'none',
   background: 'transparent',
-  padding: '7px 10px',
-  borderRadius: 8,
+  textAlign: 'left',
   cursor: 'pointer',
   fontFamily: 'inherit',
+  fontSize: 13,
+  lineHeight: '20px',
+  color: 'var(--dsw-alias-label-primary)',
 }
 
-export const commitRowSelected: CSSProperties = {
+export const historyRowSelected: CSSProperties = {
   background: 'var(--dsw-alias-interactive-bg-hover)',
 }
 
@@ -454,16 +471,34 @@ export const commitSubjectLine: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
+  flex: 1,
+  minWidth: 0,
   fontSize: 13,
-  lineHeight: '18px',
+  lineHeight: '20px',
   color: 'var(--dsw-alias-label-primary)',
 }
 
-export const commitMetaLine: CSSProperties = {
-  display: 'flex',
-  gap: 8,
+export const historyHash: CSSProperties = {
+  flex: 'none',
+  width: 64,
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   fontSize: 11,
-  lineHeight: '16px',
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
+export const historyAuthor: CSSProperties = {
+  flex: '0 1 120px',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontSize: 12,
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+export const historyTime: CSSProperties = {
+  flex: 'none',
+  marginLeft: 'auto',
+  fontSize: 11,
   color: 'var(--dsw-alias-label-tertiary)',
 }
 

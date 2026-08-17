@@ -23,7 +23,7 @@ import type {
 } from '../host/types.ts'
 import type { GraphCommit } from '../host/types.ts'
 import type { GitQueryOutcome } from './controller.ts'
-import { buildGraph, GRAPH_COLORS, type GraphRow } from './git-graph.ts'
+import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph.ts'
 import { parseUnifiedDiff, type DiffLineType } from './unified-diff.ts'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
@@ -413,14 +413,10 @@ function ChangeGroup({
 
 // ── Graph constants ──────────────────────────────────────────────────────
 
-/** Pixels per graph column. */
-const GRAPH_COL_W = 28
-/** Row height (matches commitRowButton padding + lines). */
-const GRAPH_ROW_H = 36
-/** Node circle radius. */
-const GRAPH_NODE_R = 5
-/** Maximum graph columns we will render before clipping. */
-const MAX_GRAPH_COLS = 12
+/** 每车道像素宽：收紧以贴近 IDE 密度（旧值 28 过宽）。 */
+const GRAPH_COL_W = 16
+/** 节点圆半径。 */
+const GRAPH_NODE_R = 4
 
 // ── History tab ───────────────────────────────────────────────────────────
 
@@ -438,12 +434,9 @@ function HistoryTab({
   const [diff, setDiff] = useState<{ path: string; text: string | null; loading: boolean } | null>(null)
   const now = Date.now()
 
-  /** Compute graph rows from commits (recomputed after every load). */
+  /** 由提交序列计算图行与车道宽（每次加载后重算）。 */
   const graphRows = useMemo(() => buildGraph(commits), [commits])
-  const maxCols = useMemo(
-    () => graphRows.length === 0 ? 0 : Math.min(Math.max(...graphRows.map((r) => r.column)) + 1, MAX_GRAPH_COLS),
-    [graphRows],
-  )
+  const graphCols = useMemo(() => graphWidth(graphRows), [graphRows])
 
   const loadPage = async (skip: number): Promise<void> => {
     setLoading(true)
@@ -495,20 +488,15 @@ function HistoryTab({
               <button
                 key={row.commit.hash}
                 type="button"
-                style={isSelected ? { ...css.commitRowButton, ...css.commitRowSelected } : css.commitRowButton}
+                className="dsh-git-ui__commit-row"
+                style={isSelected ? { ...css.historyRow, ...css.historyRowSelected } : css.historyRow}
                 onClick={() => void select(row.commit)}
               >
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <GraphStrip row={row} maxCols={maxCols} />
-                  <div style={{ minWidth: 0, flex: 1, paddingLeft: 8 }}>
-                    <div style={css.commitSubjectLine}>{row.commit.subject}</div>
-                    <div style={css.commitMetaLine}>
-                      <span>{row.commit.shortHash}</span>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.commit.author}</span>
-                      <span style={{ flex: 'none', marginLeft: 'auto' }}>{timeAgo(row.commit.dateIso, now, t)}</span>
-                    </div>
-                  </div>
-                </div>
+                <GraphStrip row={row} cols={graphCols} />
+                <span style={css.commitSubjectLine} title={row.commit.subject}>{row.commit.subject}</span>
+                <span style={css.historyHash} title={row.commit.hash}>{row.commit.shortHash}</span>
+                <span style={css.historyAuthor} title={row.commit.author}>{row.commit.author}</span>
+                <span style={css.historyTime}>{timeAgo(row.commit.dateIso, now, t)}</span>
               </button>
             )
           })}
@@ -574,49 +562,44 @@ function HistoryTab({
 // ── SVG graph strip ────────────────────────────────────────────────────────
 
 /**
- * One row of the branch graph: vertical lines for active columns, edges for
- * branches/merges, and a colored circle for the commit node. Clipped to
- * `maxCols` columns so extremely deep graphs don't overflow the panel.
+ * 一行的分支图：条带高度 = HISTORY_ROW_H（与行高同一常量），行间线条连续。
+ * 竖线贯穿活跃车道；节点车道按 nodeFromTop / nodeContinues 画上下半段；
+ * 分裂与 merge 回归为贝塞尔曲线（节点→行底）。
+ * 宽度 = 全图车道数，超宽时由列表容器横向滚动（不再截断坍塌）。
  */
-function GraphStrip({ row, maxCols }: { row: GraphRow; maxCols: number }): JSX.Element {
-  const w = maxCols * GRAPH_COL_W
-  const nodeX = Math.min(row.column, maxCols - 1) * GRAPH_COL_W + GRAPH_COL_W / 2
-  const cy = GRAPH_ROW_H / 2
-
+function GraphStrip({ row, cols }: { row: GraphRow; cols: number }): JSX.Element {
+  const w = Math.max(cols, 1) * GRAPH_COL_W
+  const h = css.HISTORY_ROW_H
+  const x = (col: number): number => col * GRAPH_COL_W + GRAPH_COL_W / 2
+  const cy = h / 2
+  const color = (col: number): string => GRAPH_COLORS[col % GRAPH_COLORS.length]!
   return (
-    <svg width={w} height={GRAPH_ROW_H} style={{ display: 'block', flexShrink: 0, overflow: 'hidden' }} aria-hidden="true">
-      {/* Vertical lines passing through this row (from previous row's columns). */}
-      {row.verticals.filter((c) => c < maxCols).map((col) => (
-        <line
-          key={`v-${col}`}
-          x1={col * GRAPH_COL_W + GRAPH_COL_W / 2}
-          y1={0}
-          x2={col * GRAPH_COL_W + GRAPH_COL_W / 2}
-          y2={GRAPH_ROW_H}
-          stroke={GRAPH_COLORS[col % GRAPH_COLORS.length]}
-          strokeWidth={2}
-        />
+    <svg width={w} height={h} style={{ display: 'block', flexShrink: 0 }} aria-hidden="true">
+      {row.verticals.map((col) => (
+        <line key={`v-${col}`} x1={x(col)} y1={0} x2={x(col)} y2={h} stroke={color(col)} strokeWidth={1.5} />
       ))}
-      {/* Non-vertical edges (branches / merges) connecting to parent columns. */}
-      {row.edges.filter((e) => e.from < maxCols && e.to < maxCols).map((edge, i) => (
-        <line
+      {row.nodeFromTop && (
+        <line x1={x(row.column)} y1={0} x2={x(row.column)} y2={cy} stroke={color(row.column)} strokeWidth={1.5} />
+      )}
+      {row.nodeContinues && (
+        <line x1={x(row.column)} y1={cy} x2={x(row.column)} y2={h} stroke={color(row.column)} strokeWidth={1.5} />
+      )}
+      {row.edges.map((edge, i) => (
+        <path
           key={`e-${i}`}
-          x1={edge.from * GRAPH_COL_W + GRAPH_COL_W / 2}
-          y1={cy}
-          x2={edge.to * GRAPH_COL_W + GRAPH_COL_W / 2}
-          y2={GRAPH_ROW_H}
-          stroke={GRAPH_COLORS[edge.from % GRAPH_COLORS.length]}
-          strokeWidth={2}
+          d={`M ${x(edge.from)} ${cy} C ${x(edge.from)} ${(cy + h) / 2}, ${x(edge.to)} ${(cy + h) / 2}, ${x(edge.to)} ${h}`}
+          fill="none"
+          stroke={color(edge.from)}
+          strokeWidth={1.5}
         />
       ))}
-      {/* Commit node. */}
       <circle
-        cx={nodeX}
+        cx={x(row.column)}
         cy={cy}
         r={GRAPH_NODE_R}
-        fill={GRAPH_COLORS[row.column % GRAPH_COLORS.length]}
+        fill={color(row.column)}
         stroke="var(--dsw-alias-bg-layer-3)"
-        strokeWidth={2}
+        strokeWidth={1.5}
       />
     </svg>
   )
