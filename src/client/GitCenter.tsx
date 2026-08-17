@@ -25,6 +25,7 @@ import type { GraphCommit, GitRef } from '../host/types.ts'
 import type { GitQueryOutcome } from './controller.ts'
 import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph.ts'
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
+import { BranchIcon, ChevronIcon, CloudIcon, FileIcon, FolderIcon, TagIcon, fileColor } from './icons.tsx'
 import { parseUnifiedDiff, type DiffLineType } from './unified-diff.ts'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
@@ -599,7 +600,6 @@ function HistoryTab({
                     : (
                       <FileTreeNodes
                         nodes={fileTree}
-                        depth={0}
                         collapsed={collapsed}
                         onToggle={toggleDir}
                         activePath={diff?.path ?? null}
@@ -649,7 +649,7 @@ function HistoryFilterTree({
   onFilter: (filter: { kind: 'all' } | { kind: 'ref'; name: string }) => void
   t: (key: GitKey) => string
 }): JSX.Element {
-  const row = (name: string, active: boolean, icon: string, mark: boolean): JSX.Element => (
+  const row = (name: string, active: boolean, icon: JSX.Element, mark: boolean): JSX.Element => (
     <button
       type="button"
       className="dsh-git-ui__row"
@@ -657,7 +657,7 @@ function HistoryFilterTree({
       onClick={() => onFilter({ kind: 'ref', name })}
       title={name}
     >
-      <span style={css.treeIcon} aria-hidden="true">{icon}</span>
+      <span style={mark ? { ...css.treeIcon, color: 'var(--dsw-alias-state-business-primary)' } : css.treeIcon} aria-hidden="true">{icon}</span>
       <span style={mark ? { ...css.treeName, ...css.treeNameCurrent } : css.treeName}>{name}</span>
       {mark && <span style={css.branchMark}>✓</span>}
     </button>
@@ -670,35 +670,33 @@ function HistoryFilterTree({
         style={filter.kind === 'all' ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow}
         onClick={() => onFilter({ kind: 'all' })}
       >
-        <span style={css.treeIcon} aria-hidden="true">⎇</span>
+        <span style={css.treeIcon} aria-hidden="true"><BranchIcon /></span>
         <span style={css.treeName}>{t('history.allBranches')}</span>
       </button>
       {tree !== null && (
         <>
           <div style={css.treeGroupTitle}>{t('center.localBranches')}</div>
-          {tree.local.map((b) => row(b.name, filter.kind === 'ref' && filter.name === b.name, '⎇', b.name === tree.current))}
+          {tree.local.map((b) => row(b.name, filter.kind === 'ref' && filter.name === b.name, <BranchIcon />, b.name === tree.current))}
           {tree.remote.length > 0 && <div style={css.treeGroupTitle}>{t('center.remoteBranches')}</div>}
-          {tree.remote.map((b) => row(b.name, filter.kind === 'ref' && filter.name === b.name, '☁', false))}
+          {tree.remote.map((b) => row(b.name, filter.kind === 'ref' && filter.name === b.name, <CloudIcon />, false))}
           {tree.tags.length > 0 && <div style={css.treeGroupTitle}>{t('history.tags')}</div>}
-          {tree.tags.map((b) => row(b.name, filter.kind === 'ref' && filter.name === b.name, '🏷', false))}
+          {tree.tags.map((b) => row(b.name, filter.kind === 'ref' && filter.name === b.name, <TagIcon />, false))}
         </>
       )}
     </div>
   )
 }
 
-/** 右栏文件目录树：目录可折叠，文件点击查看 diff。 */
+/** 右栏文件目录树：引导线缩进、文件夹/文件图标、目录聚合计数、可折叠。 */
 function FileTreeNodes({
-  nodes, depth, collapsed, onToggle, activePath, onFile,
+  nodes, collapsed, onToggle, activePath, onFile,
 }: {
   nodes: readonly FileTreeNode[]
-  depth: number
   collapsed: ReadonlySet<string>
   onToggle: (path: string) => void
   activePath: string | null
   onFile: (path: string) => void
 }): JSX.Element {
-  const indent = 8 + depth * 12
   return (
     <>
       {nodes.map((node) => node.dir ? (
@@ -706,35 +704,41 @@ function FileTreeNodes({
           <button
             type="button"
             className="dsh-git-ui__row"
-            style={{ ...css.treeRow, paddingLeft: indent }}
+            style={css.treeRow}
             onClick={() => onToggle(node.path)}
             aria-expanded={!collapsed.has(node.path)}
           >
-            <span style={css.treeIcon} aria-hidden="true">{collapsed.has(node.path) ? '▸' : '▾'}</span>
+            <span style={css.treeCaret}><ChevronIcon open={!collapsed.has(node.path)} /></span>
+            <span style={css.treeFolderIcon}><FolderIcon /></span>
             <span style={css.treeName}>{node.name}</span>
+            <span style={css.treeCounts}>
+              {node.added > 0 && <span style={{ color: 'var(--dsw-alias-state-success-primary)' }}>+{node.added}</span>}
+              {node.deleted > 0 && <span style={{ color: 'var(--dsw-alias-state-error-primary)' }}>−{node.deleted}</span>}
+            </span>
           </button>
           {!collapsed.has(node.path) && (
-            <FileTreeNodes
-              nodes={node.children}
-              depth={depth + 1}
-              collapsed={collapsed}
-              onToggle={onToggle}
-              activePath={activePath}
-              onFile={onFile}
-            />
+            <div style={css.treeChildren}>
+              <FileTreeNodes
+                nodes={node.children}
+                collapsed={collapsed}
+                onToggle={onToggle}
+                activePath={activePath}
+                onFile={onFile}
+              />
+            </div>
           )}
         </div>
       ) : (
         <div
           key={node.path}
           className="dsh-git-ui__row"
-          style={activePath === node.path
-            ? { ...css.statRow, ...css.statRowActive, paddingLeft: indent }
-            : { ...css.statRow, paddingLeft: indent }}
+          style={activePath === node.path ? { ...css.treeRow, ...css.statRowActive } : css.treeRow}
           onClick={() => onFile(node.path)}
         >
-          <span style={css.statPath} title={node.path}>{node.name}</span>
-          <span style={css.statCounts}>
+          <span style={{ ...css.treeCaret, visibility: 'hidden' }} aria-hidden="true"><ChevronIcon open={false} /></span>
+          <span style={{ ...css.treeFolderIcon, color: fileColor(node.name) }}><FileIcon /></span>
+          <span style={css.treeName} title={node.path}>{node.name}</span>
+          <span style={css.treeCounts}>
             {node.stat !== undefined && node.stat.added > 0 && <span style={{ color: 'var(--dsw-alias-state-success-primary)' }}>+{node.stat.added}</span>}
             {node.stat !== undefined && node.stat.deleted > 0 && <span style={{ color: 'var(--dsw-alias-state-error-primary)' }}>−{node.stat.deleted}</span>}
           </span>
@@ -813,7 +817,7 @@ function GraphStrip({ row, cols }: { row: GraphRow; cols: number }): JSX.Element
         cy={cy}
         r={GRAPH_NODE_R}
         fill={color(row.column)}
-        stroke="var(--dsw-alias-bg-layer-3)"
+        stroke="var(--dsw-alias-bg-layer-2)"
         strokeWidth={1.5}
       />
     </svg>

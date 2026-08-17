@@ -223,6 +223,10 @@ const globalCss = [
   '.dsh-git-ui__pill:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   '.dsh-git-ui__row { border-radius: 6px; }',
   '.dsh-git-ui__row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
+  // 交互状态：平台动令过渡 + 按压态 + 键盘焦点可见性。
+  '.dsh-git-ui__commit-row, .dsh-git-ui__row { transition: background var(--ds-transition-duration-fast) linear; }',
+  '.dsh-git-ui__commit-row:active, .dsh-git-ui__row:active { background: var(--dsw-alias-interactive-bg-active); }',
+  '.dsh-git-ui__row:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   '.dsh-git-ui__refresh:hover { color: var(--dsw-alias-state-business-primary); }',
   '.dsh-git-ui__commit-row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
   '.dsh-git-ui__commit-row:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
@@ -449,10 +453,10 @@ export const historyTree: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 1,
-  padding: '6px 6px 6px 0',
+  padding: 6,
   borderRight: '1px solid var(--dsw-alias-border-l1)',
   fontSize: 12,
-  lineHeight: '18px',
+  lineHeight: '20px',
 }
 
 export const treeGroupTitle: CSSProperties = {
@@ -475,22 +479,54 @@ export const treeRow: CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'inherit',
   fontSize: 12,
-  lineHeight: '18px',
+  lineHeight: '20px',
   textAlign: 'left',
   color: 'var(--dsw-alias-label-primary)',
 }
 
 export const treeRowActive: CSSProperties = {
-  background: 'var(--dsw-alias-interactive-bg-hover)',
+  background: 'var(--dsw-alias-interactive-bg-active)',
   color: 'var(--dsw-alias-state-business-primary)',
 }
 
 export const treeIcon: CSSProperties = {
   flex: 'none',
   width: 14,
-  textAlign: 'center',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   color: 'var(--dsw-alias-label-tertiary)',
-  fontSize: 11,
+}
+
+/** 文件树折叠箭头槽（与叶子行隐藏占位对齐）。 */
+export const treeCaret: CSSProperties = {
+  flex: 'none',
+  width: 10,
+  display: 'inline-flex',
+  alignItems: 'center',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+/** 文件树图标槽。 */
+export const treeFolderIcon: CSSProperties = {
+  flex: 'none',
+  display: 'inline-flex',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+/** 目录/文件聚合增删计数。 */
+export const treeCounts: CSSProperties = {
+  flex: 'none',
+  display: 'inline-flex',
+  gap: 6,
+  fontSize: 10,
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+}
+
+/** 嵌套层引导线（IDEA 式目录树竖线）。 */
+export const treeChildren: CSSProperties = {
+  marginLeft: 12,
+  borderLeft: '1px solid var(--dsw-alias-border-l1)',
 }
 
 export const treeName: CSSProperties = {
@@ -546,7 +582,7 @@ export const historyList: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 0,
-  paddingRight: 4,
+  paddingRight: 8,
 }
 
 /** 单行表格行：固定行高，图 + refs + 主题 + 哈希 + 作者 + 时间一行排布。
@@ -573,7 +609,7 @@ export const historyRow: CSSProperties = {
 }
 
 export const historyRowSelected: CSSProperties = {
-  background: 'var(--dsw-alias-interactive-bg-hover)',
+  background: 'var(--dsw-alias-interactive-bg-active)',
 }
 
 /** 表头：粘性置顶，与行共用列模板（跨行对齐的表格契约）。 */
@@ -692,7 +728,7 @@ export const historyRight: CSSProperties = {
   flexDirection: 'column',
   gap: 8,
   borderLeft: '1px solid var(--dsw-alias-border-l1)',
-  paddingLeft: 10,
+  paddingLeft: 12,
   overflowY: 'hidden',
 }
 
@@ -738,9 +774,9 @@ export const rightDiff: CSSProperties = {
   paddingTop: 6,
 }
 
-/** 当前查看 diff 的文件行高亮。 */
+/** 当前查看 diff 的文件行高亮（选中态用 active 令牌，与 hover 区分）。 */
 export const statRowActive: CSSProperties = {
-  background: 'var(--dsw-alias-interactive-bg-hover)',
+  background: 'var(--dsw-alias-interactive-bg-active)',
 }
 
 export const commitDetailHeader: CSSProperties = {
@@ -762,33 +798,6 @@ export const commitDetailMeta: CSSProperties = {
   fontSize: 12,
   lineHeight: '18px',
   color: 'var(--dsw-alias-label-secondary)',
-}
-
-export const statRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '3px 8px',
-  borderRadius: 8,
-  cursor: 'pointer',
-  fontSize: 13,
-  lineHeight: '20px',
-}
-
-export const statPath: CSSProperties = {
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  flex: 1,
-  color: 'var(--dsw-alias-label-primary)',
-}
-
-export const statCounts: CSSProperties = {
-  display: 'inline-flex',
-  gap: 6,
-  fontSize: 11,
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  flex: 'none',
 }
 
 // ── Diff view ─────────────────────────────────────────────────────────────

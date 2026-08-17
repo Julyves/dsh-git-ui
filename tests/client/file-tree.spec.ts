@@ -12,7 +12,7 @@ describe('buildFileTree', () => {
   it('keeps root files as leaf nodes with stats', () => {
     const tree = buildFileTree([{ path: 'readme.md', added: 1, deleted: 0 }])
     expect(tree).toEqual([
-      { name: 'readme.md', path: 'readme.md', dir: false, children: [], stat: { path: 'readme.md', added: 1, deleted: 0 } },
+      { name: 'readme.md', path: 'readme.md', dir: false, children: [], stat: { path: 'readme.md', added: 1, deleted: 0 }, added: 1, deleted: 0 },
     ])
   })
 
@@ -31,6 +31,9 @@ describe('buildFileTree', () => {
     const a = src.children[0]!
     expect(a.children).toHaveLength(1)
     expect(a.children[0]).toMatchObject({ name: 'x.ts', dir: false, stat: { added: 2, deleted: 1 } })
+    // 目录聚合后代计数（IDEA 式目录计数）。
+    expect(src).toMatchObject({ added: 5, deleted: 1 })
+    expect(a).toMatchObject({ added: 2, deleted: 1 })
   })
 
   it('sorts siblings alphabetically within dirs-first order', () => {
