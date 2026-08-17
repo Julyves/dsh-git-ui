@@ -24,6 +24,7 @@ import type {
 import type { GraphCommit, GitRef } from '../host/types.ts'
 import type { GitQueryOutcome } from './controller.ts'
 import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph.ts'
+import { buildFileTree, type FileTreeNode } from './file-tree.ts'
 import { parseUnifiedDiff, type DiffLineType } from './unified-diff.ts'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
@@ -435,8 +436,18 @@ function HistoryTab({
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<GraphCommit | null>(null)
-  const [detail, setDetail] = useState<{ commit: GraphCommit; stats: readonly GitFileStat[] } | null>(null)
+  const [detail, setDetail] = useState<{ commit: GraphCommit; body: string; stats: readonly GitFileStat[] } | null>(null)
   const [diff, setDiff] = useState<{ path: string; text: string | null; loading: boolean } | null>(null)
+  /** 左栏过滤：全部分支或指定 ref。 */
+  const [filter, setFilter] = useState<{ kind: 'all' } | { kind: 'ref'; name: string }>({ kind: 'all' })
+  const [tree, setTree] = useState<{
+    current: string | null
+    local: readonly GitBranch[]
+    remote: readonly GitBranch[]
+    tags: readonly GitBranch[]
+  } | null>(null)
+  /** 文件树折叠的目录路径集合。 */
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
   /** 请求序号令牌：连点文件/切换提交时仅最新响应落地。 */
   const diffSeq = useRef(0)
   const now = Date.now()
@@ -446,10 +457,17 @@ function HistoryTab({
   const graphCols = useMemo(() => graphWidth(graphRows), [graphRows])
   /** 表格列模板：图 | 提交(refs+主题) | 哈希 | 作者 | 时间；行与表头共用。 */
   const gridTpl = `${graphCols * GRAPH_COL_W}px minmax(0,1fr) 64px 110px 76px`
+  /** 右栏文件目录树（随选中提交的 stats 重算）。 */
+  const fileTree = useMemo(() => (detail === null ? [] : buildFileTree(detail.stats)), [detail])
 
-  const loadPage = async (skip: number): Promise<void> => {
+  const loadPage = async (skip: number, scope: { kind: 'all' } | { kind: 'ref'; name: string }): Promise<void> => {
     setLoading(true)
-    const outcome = await query({ kind: 'history', limit: HISTORY_PAGE, skip })
+    const outcome = await query({
+      kind: 'history',
+      limit: HISTORY_PAGE,
+      skip,
+      ...(scope.kind === 'ref' ? { ref: scope.name } : {}),
+    })
     setLoading(false)
     if (!outcome.ok) return
     if (outcome.value.kind !== 'history') return
@@ -458,10 +476,31 @@ function HistoryTab({
     setTotal(outcome.value.total)
   }
 
+  // 首次激活：并行加载过滤树（分支 + 标签）。
   useEffect(() => {
-    void loadPage(0)
+    void (async () => {
+      const [branches, tags] = await Promise.all([query({ kind: 'branches' }), query({ kind: 'tags' })])
+      setTree({
+        current: branches.ok && branches.value.kind === 'branches' ? branches.value.current : null,
+        local: branches.ok && branches.value.kind === 'branches' ? branches.value.local : [],
+        remote: branches.ok && branches.value.kind === 'branches' ? branches.value.remote : [],
+        tags: tags.ok && tags.value.kind === 'tags' ? tags.value.tags : [],
+      })
+    })()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- first activation only
   }, [])
+
+  // 过滤变化：重置选中与列表并重载首页（含首次激活）。
+  useEffect(() => {
+    diffSeq.current += 1
+    setSelected(null)
+    setDetail(null)
+    setDiff(null)
+    setCommits([])
+    setTotal(0)
+    void loadPage(0, filter)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- filter-driven reload
+  }, [filter])
 
   const select = async (commit: GraphCommit): Promise<void> => {
     diffSeq.current += 1
@@ -470,7 +509,7 @@ function HistoryTab({
     setDiff(null)
     const outcome = await query({ kind: 'show', ref: commit.hash })
     if (outcome.ok && outcome.value.kind === 'show' && outcome.value.commit !== null) {
-      setDetail({ commit: outcome.value.commit as GraphCommit, stats: outcome.value.stats })
+      setDetail({ commit: outcome.value.commit as GraphCommit, body: outcome.value.body, stats: outcome.value.stats })
     }
   }
 
@@ -486,13 +525,25 @@ function HistoryTab({
     })
   }
 
-  if (total === 0 && !loading && commits.length === 0) {
-    return <div style={css.emptyNote}>{t('center.noCommits')}</div>
+  const toggleDir = (path: string): void => {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
   }
 
   return (
     <div style={css.historyLayout}>
+        <HistoryFilterTree tree={tree} filter={filter} onFilter={setFilter} t={t} />
         <div style={css.historyList}>
+          {filter.kind === 'ref' && (
+            <div style={css.filterChipRow}>
+              <span style={css.filterChip} title={filter.name}>{t('history.filterBy').replace('{ref}', filter.name)}</span>
+              <button type="button" style={css.filterChipClose} aria-label={t('center.close')} onClick={() => setFilter({ kind: 'all' })}>✕</button>
+            </div>
+          )}
           {loading && commits.length === 0 && (
             <div style={css.emptyNote}>{t('center.loading')}</div>
           )}
@@ -530,60 +581,166 @@ function HistoryTab({
             )
           })}
           {commits.length < total && (
-            <Button size="sm" disabled={loading} onClick={() => void loadPage(commits.length)}>
+            <Button size="sm" disabled={loading} onClick={() => void loadPage(commits.length, filter)}>
               {t('center.loadMore').replace('{loaded}', String(commits.length)).replace('{total}', String(total))}
             </Button>
           )}
         </div>
 
         {selected === null
-          ? <div style={css.historyHint}>{t('center.selectCommit')}</div>
+          ? <div style={css.historyRight}><div style={css.emptyNote}>{t('center.selectCommit')}</div></div>
           : (
-            <div style={css.historyDetailShell}>
-              <div style={css.historyDetailFiles}>
+            <div style={css.historyRight}>
+              <div style={css.rightFiles}>
+                {detail === null
+                  ? <div style={css.emptyNote}>{t('center.loading')}</div>
+                  : detail.stats.length === 0
+                    ? <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
+                    : (
+                      <FileTreeNodes
+                        nodes={fileTree}
+                        depth={0}
+                        collapsed={collapsed}
+                        onToggle={toggleDir}
+                        activePath={diff?.path ?? null}
+                        onFile={(path) => void showFileDiff(selected.hash, path)}
+                      />
+                    )}
+              </div>
+              <div style={css.rightMsg}>
                 <div style={css.commitDetailHeader}>
                   <span style={css.commitDetailSubject}>{selected.subject}</span>
                   <span style={css.commitDetailMeta}>
                     {selected.shortHash} · {selected.author} · {timeAgo(selected.dateIso, now, t)}
                   </span>
                 </div>
-                {detail === null
-                  ? <div style={css.emptyNote}>{t('center.loading')}</div>
-                  : detail.stats.length === 0
-                    ? <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
-                    : detail.stats.map((stat) => (
-                      <div
-                        key={stat.path}
-                        className="dsh-git-ui__row"
-                        style={diff?.path === stat.path ? { ...css.statRow, ...css.statRowActive } : css.statRow}
-                        onClick={() => void showFileDiff(selected.hash, stat.path)}
-                      >
-                        <span style={css.statPath} title={stat.path}>{stat.path}</span>
-                        <span style={css.statCounts}>
-                          {stat.added > 0 && <span style={{ color: 'var(--dsw-alias-state-success-primary)' }}>+{stat.added}</span>}
-                          {stat.deleted > 0 && <span style={{ color: 'var(--dsw-alias-state-error-primary)' }}>−{stat.deleted}</span>}
-                        </span>
-                      </div>
-                    ))}
+                {detail !== null && detail.body !== '' && <pre style={css.msgBody}>{detail.body}</pre>}
               </div>
-              <div style={css.historyDetailDiff}>
-                {diff === null
-                  ? <div style={css.emptyNote}>{t('center.selectFile')}</div>
-                  : (
-                    <>
-                      <div style={css.toolRow}>
-                        <span style={css.commitHint}>{diff.path}</span>
-                        <Button size="sm" aria-label={t('center.close')} onClick={() => { diffSeq.current += 1; setDiff(null) }}>✕</Button>
-                      </div>
-                      {diff.loading
-                        ? <div style={css.emptyNote}>{t('center.diffLoading')}</div>
-                        : <DiffView text={diff.text ?? ''} t={t} />}
-                    </>
-                  )}
-              </div>
+              {diff !== null && (
+                <div style={css.rightDiff}>
+                  <div style={css.toolRow}>
+                    <span style={css.commitHint}>{diff.path}</span>
+                    <Button size="sm" aria-label={t('center.close')} onClick={() => { diffSeq.current += 1; setDiff(null) }}>✕</Button>
+                  </div>
+                  {diff.loading
+                    ? <div style={css.emptyNote}>{t('center.diffLoading')}</div>
+                    : <DiffView text={diff.text ?? ''} t={t} />}
+                </div>
+              )}
             </div>
           )}
     </div>
+  )
+}
+
+// ── 左栏过滤树与右栏文件树 ─────────────────────────────────────────────
+
+/** 左栏：全部分支入口 + 本地/远程/标签分组，点击过滤历史。 */
+function HistoryFilterTree({
+  tree, filter, onFilter, t,
+}: {
+  tree: {
+    current: string | null
+    local: readonly GitBranch[]
+    remote: readonly GitBranch[]
+    tags: readonly GitBranch[]
+  } | null
+  filter: { kind: 'all' } | { kind: 'ref'; name: string }
+  onFilter: (filter: { kind: 'all' } | { kind: 'ref'; name: string }) => void
+  t: (key: GitKey) => string
+}): JSX.Element {
+  const row = (name: string, active: boolean, icon: string, mark: boolean): JSX.Element => (
+    <button
+      type="button"
+      className="dsh-git-ui__row"
+      style={active ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow}
+      onClick={() => onFilter({ kind: 'ref', name })}
+      title={name}
+    >
+      <span style={css.treeIcon} aria-hidden="true">{icon}</span>
+      <span style={mark ? { ...css.treeName, ...css.treeNameCurrent } : css.treeName}>{name}</span>
+      {mark && <span style={css.branchMark}>✓</span>}
+    </button>
+  )
+  return (
+    <div style={css.historyTree}>
+      <button
+        type="button"
+        className="dsh-git-ui__row"
+        style={filter.kind === 'all' ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow}
+        onClick={() => onFilter({ kind: 'all' })}
+      >
+        <span style={css.treeIcon} aria-hidden="true">⎇</span>
+        <span style={css.treeName}>{t('history.allBranches')}</span>
+      </button>
+      {tree !== null && (
+        <>
+          <div style={css.treeGroupTitle}>{t('center.localBranches')}</div>
+          {tree.local.map((b) => row(b.name, filter.kind === 'ref' && filter.name === b.name, '⎇', b.name === tree.current))}
+          {tree.remote.length > 0 && <div style={css.treeGroupTitle}>{t('center.remoteBranches')}</div>}
+          {tree.remote.map((b) => row(b.name, filter.kind === 'ref' && filter.name === b.name, '☁', false))}
+          {tree.tags.length > 0 && <div style={css.treeGroupTitle}>{t('history.tags')}</div>}
+          {tree.tags.map((b) => row(b.name, filter.kind === 'ref' && filter.name === b.name, '🏷', false))}
+        </>
+      )}
+    </div>
+  )
+}
+
+/** 右栏文件目录树：目录可折叠，文件点击查看 diff。 */
+function FileTreeNodes({
+  nodes, depth, collapsed, onToggle, activePath, onFile,
+}: {
+  nodes: readonly FileTreeNode[]
+  depth: number
+  collapsed: ReadonlySet<string>
+  onToggle: (path: string) => void
+  activePath: string | null
+  onFile: (path: string) => void
+}): JSX.Element {
+  const indent = 8 + depth * 12
+  return (
+    <>
+      {nodes.map((node) => node.dir ? (
+        <div key={node.path}>
+          <button
+            type="button"
+            className="dsh-git-ui__row"
+            style={{ ...css.treeRow, paddingLeft: indent }}
+            onClick={() => onToggle(node.path)}
+            aria-expanded={!collapsed.has(node.path)}
+          >
+            <span style={css.treeIcon} aria-hidden="true">{collapsed.has(node.path) ? '▸' : '▾'}</span>
+            <span style={css.treeName}>{node.name}</span>
+          </button>
+          {!collapsed.has(node.path) && (
+            <FileTreeNodes
+              nodes={node.children}
+              depth={depth + 1}
+              collapsed={collapsed}
+              onToggle={onToggle}
+              activePath={activePath}
+              onFile={onFile}
+            />
+          )}
+        </div>
+      ) : (
+        <div
+          key={node.path}
+          className="dsh-git-ui__row"
+          style={activePath === node.path
+            ? { ...css.statRow, ...css.statRowActive, paddingLeft: indent }
+            : { ...css.statRow, paddingLeft: indent }}
+          onClick={() => onFile(node.path)}
+        >
+          <span style={css.statPath} title={node.path}>{node.name}</span>
+          <span style={css.statCounts}>
+            {node.stat !== undefined && node.stat.added > 0 && <span style={{ color: 'var(--dsw-alias-state-success-primary)' }}>+{node.stat.added}</span>}
+            {node.stat !== undefined && node.stat.deleted > 0 && <span style={{ color: 'var(--dsw-alias-state-error-primary)' }}>−{node.stat.deleted}</span>}
+          </span>
+        </div>
+      ))}
+    </>
   )
 }
 

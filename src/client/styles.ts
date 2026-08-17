@@ -228,7 +228,7 @@ const globalCss = [
   '.dsh-git-ui__commit-row:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   '.dsh-git-ui__refresh:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }',
   // Git center dialog: widen the platform Modal card (headless mode).
-  '.dsh-git-ui__center { width: min(960px, 100vw); max-height: min(720px, calc(100vh - 48px)); }',
+  '.dsh-git-ui__center { width: min(1200px, 100vw); max-height: min(720px, calc(100vh - 48px)); }',
   '.dsh-git-ui__commit-input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   // System tab underline: 2px bar below the active tab.
   '.dsh-git-ui__tab::after { content: ""; position: absolute; right: 0; bottom: 1px; left: 0; height: 2px; border-radius: 2px; background: transparent; }',
@@ -435,10 +435,111 @@ export const HISTORY_ROW_H = 32
 
 export const historyLayout: CSSProperties = {
   display: 'flex',
-  flexDirection: 'column',
   gap: 0,
   flex: 1,
   minHeight: 0,
+}
+
+/** 左栏：分支/标签过滤树（IDEA 式）。 */
+export const historyTree: CSSProperties = {
+  flex: 'none',
+  width: 170,
+  minWidth: 0,
+  overflowY: 'auto',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 1,
+  padding: '6px 6px 6px 0',
+  borderRight: '1px solid var(--dsw-alias-border-l1)',
+  fontSize: 12,
+  lineHeight: '18px',
+}
+
+export const treeGroupTitle: CSSProperties = {
+  margin: '8px 0 2px',
+  padding: '0 8px',
+  fontSize: 11,
+  fontWeight: 600,
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+export const treeRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  width: '100%',
+  padding: '3px 8px',
+  border: 'none',
+  background: 'transparent',
+  borderRadius: 6,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  fontSize: 12,
+  lineHeight: '18px',
+  textAlign: 'left',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+export const treeRowActive: CSSProperties = {
+  background: 'var(--dsw-alias-interactive-bg-hover)',
+  color: 'var(--dsw-alias-state-business-primary)',
+}
+
+export const treeIcon: CSSProperties = {
+  flex: 'none',
+  width: 14,
+  textAlign: 'center',
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontSize: 11,
+}
+
+export const treeName: CSSProperties = {
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  flex: 1,
+  minWidth: 0,
+}
+
+export const treeNameCurrent: CSSProperties = {
+  color: 'var(--dsw-alias-state-business-primary)',
+  fontWeight: 600,
+}
+
+/** 中栏列表顶部的过滤指示条。 */
+export const filterChipRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '4px 0',
+  position: 'sticky',
+  top: 0,
+  zIndex: 2,
+  background: 'var(--dsw-alias-bg-layer-2)',
+}
+
+export const filterChip: CSSProperties = {
+  padding: '1px 8px',
+  borderRadius: 8,
+  border: '1px solid var(--dsw-alias-state-business-primary)',
+  color: 'var(--dsw-alias-state-business-primary)',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  fontSize: 11,
+  lineHeight: '16px',
+  maxWidth: 220,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+}
+
+export const filterChipClose: CSSProperties = {
+  border: 0,
+  background: 'transparent',
+  padding: '0 2px',
+  cursor: 'pointer',
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontSize: 11,
+  lineHeight: '16px',
 }
 
 export const historyList: CSSProperties = {
@@ -586,45 +687,59 @@ export const refPillTag: CSSProperties = {
   background: 'var(--dsw-alias-bg-layer-2)',
 }
 
-/** 未选中提交时的底部提示条。 */
-export const historyHint: CSSProperties = {
+/** 右栏：提交详情（文件树 + 完整报文 + diff 预览）。 */
+export const historyRight: CSSProperties = {
   flex: 'none',
-  padding: '8px 4px',
-  borderTop: '1px solid var(--dsw-alias-border-l1)',
-  color: 'var(--dsw-alias-label-tertiary)',
-  fontSize: 12,
-  lineHeight: '18px',
-}
-
-/** 详情下分栏外壳：左文件统计 / 右 diff，各自滚动（IDEA 风格）。 */
-export const historyDetailShell: CSSProperties = {
-  flex: 'none',
-  height: '42%',
-  minHeight: 180,
-  display: 'flex',
-  gap: 12,
-  borderTop: '1px solid var(--dsw-alias-border-l1)',
-  paddingTop: 8,
-}
-
-export const historyDetailFiles: CSSProperties = {
-  flex: '0 0 40%',
+  width: 360,
   minWidth: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+  borderLeft: '1px solid var(--dsw-alias-border-l1)',
+  paddingLeft: 10,
+  overflowY: 'hidden',
+}
+
+export const rightFiles: CSSProperties = {
+  flex: 1,
+  minHeight: 0,
   overflowY: 'auto',
   display: 'flex',
   flexDirection: 'column',
-  gap: 2,
-  paddingRight: 4,
-  borderRight: '1px solid var(--dsw-alias-border-l1)',
+  gap: 1,
 }
 
-export const historyDetailDiff: CSSProperties = {
+export const rightMsg: CSSProperties = {
+  flex: 'none',
+  maxHeight: '38%',
+  overflowY: 'auto',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+  borderTop: '1px solid var(--dsw-alias-border-l1)',
+  paddingTop: 6,
+}
+
+/** 提交正文（等宽保留换行）。 */
+export const msgBody: CSSProperties = {
+  margin: 0,
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSize: 11,
+  lineHeight: '16px',
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
+export const rightDiff: CSSProperties = {
   flex: 1,
-  minWidth: 0,
+  minHeight: 0,
   overflowY: 'auto',
   display: 'flex',
   flexDirection: 'column',
   gap: 6,
+  borderTop: '1px solid var(--dsw-alias-border-l1)',
+  paddingTop: 6,
 }
 
 /** 当前查看 diff 的文件行高亮。 */
