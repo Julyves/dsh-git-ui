@@ -15,9 +15,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { JSX } from 'react'
 import { completedTurnCount, type TurnSignalSnapshot } from './turn-signal.ts'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { GitObservable, GitQueryOutcome, GitView } from './controller.ts'
 import { GitCenter } from './GitCenter.tsx'
-import type { GitAction, GitActionResult, GitQueryRequest } from '../host/types.ts'
+import type { GitAction, GitActionResult, GitBranch, GitQueryRequest } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
 
@@ -117,13 +118,141 @@ function DegradedPill({ label, title, t }: { label: string; title?: string; t: (
   )
 }
 
+/** 分支快捷管理（自原 Branches 标签迁入）：切换/创建并切换/两步删除。 */
+function BranchQuickManage({
+  run, query, t,
+}: {
+  run: (action: GitAction) => Promise<GitActionResult>
+  query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
+  t: (key: GitKey) => string
+}): JSX.Element {
+  const [data, setData] = useState<{ current: string | null; local: readonly GitBranch[] } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState('')
+  const [deleteArmed, setDeleteArmed] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+
+  const reload = async (): Promise<void> => {
+    const outcome = await query({ kind: 'branches' })
+    if (outcome.ok && outcome.value.kind === 'branches') {
+      setData({ current: outcome.value.current, local: outcome.value.local })
+    }
+  }
+
+  useEffect(() => {
+    void reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only
+  }, [])
+
+  useEffect(() => {
+    if (!deleteArmed) return
+    const timer = setTimeout(() => setDeleteArmed(false), 3000)
+    return () => clearTimeout(timer)
+  }, [deleteArmed])
+
+  const switchTo = async (name: string): Promise<void> => {
+    if (busy || name === '') return
+    setBusy(true)
+    setNote(null)
+    const result = await run({ kind: 'branch-checkout', name })
+    setBusy(false)
+    if (!result.ok) setNote(result.error.message ?? result.error.code)
+    await reload()
+  }
+
+  const createAndSwitch = async (): Promise<void> => {
+    const name = newName.trim()
+    if (name === '' || busy) return
+    setBusy(true)
+    setNote(null)
+    const created = await run({ kind: 'branch-create', name })
+    if (created.ok) {
+      const switched = await run({ kind: 'branch-checkout', name })
+      if (!switched.ok) setNote(switched.error.message ?? switched.error.code)
+      setNewName('')
+    } else {
+      setNote(created.error.message ?? created.error.code)
+    }
+    setBusy(false)
+    await reload()
+  }
+
+  const remove = async (): Promise<void> => {
+    if (deleteTarget === '' || busy) return
+    if (!deleteArmed) {
+      setDeleteArmed(true)
+      return
+    }
+    setBusy(true)
+    setNote(null)
+    const result = await run({ kind: 'branch-delete', name: deleteTarget })
+    setBusy(false)
+    setDeleteArmed(false)
+    if (!result.ok) setNote(result.error.message ?? result.error.code)
+    setDeleteTarget('')
+    await reload()
+  }
+
+  if (data === null) return <div style={css.emptyNote}>{t('center.loading')}</div>
+  const deletable = data.local.filter((b) => b.name !== data.current)
+  return (
+    <>
+      <div style={css.branchManageRow}>
+        <select
+          style={css.branchSelect}
+          value={data.current ?? ''}
+          aria-label={t('center.currentBranch')}
+          disabled={busy}
+          onChange={(e) => void switchTo(e.target.value)}
+        >
+          {data.local.map((b) => <option key={b.name} value={b.name}>{b.name}</option>)}
+        </select>
+        <span style={css.commitHint}>{t('center.currentBranch')}</span>
+      </div>
+      <div style={css.branchManageRow}>
+        <input
+          className="dsh-git-ui__branch-input"
+          style={css.branchNameInput}
+          placeholder={t('center.branchName')}
+          value={newName}
+          disabled={busy}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void createAndSwitch() }}
+        />
+        <Button size="sm" disabled={busy || newName.trim() === ''} onClick={() => void createAndSwitch()}>
+          {t('center.createAndSwitch')}
+        </Button>
+      </div>
+      <div style={css.branchManageRow}>
+        <select
+          style={css.branchSelect}
+          value={deleteTarget}
+          aria-label={t('center.deleteBranch')}
+          disabled={busy}
+          onChange={(e) => { setDeleteTarget(e.target.value); setDeleteArmed(false) }}
+        >
+          <option value="">{t('center.deleteBranch')}</option>
+          {deletable.map((b) => <option key={b.name} value={b.name}>{b.name}</option>)}
+        </select>
+        <Button size="sm" disabled={busy || deleteTarget === ''} onClick={() => void remove()}>
+          {deleteArmed ? t('center.confirmDeleteBranch') : t('center.deleteBranch')}
+        </Button>
+      </div>
+      {note !== null && <div style={css.emptyNote} role="alert">{note}</div>}
+    </>
+  )
+}
+
 /** Popup body (rendered inside the portaled card): root, counts, commits, changes, refresh. */
 function GitPopupBody({
-  view, refresh, openCenter, t,
+  view, refresh, openCenter, run, query, t,
 }: {
   view: GitView & { state: 'ready' }
   refresh: () => Promise<void>
   openCenter: () => void
+  run: (action: GitAction) => Promise<GitActionResult>
+  query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
   t: (key: GitKey) => string
 }): JSX.Element {
   const now = Date.now()
@@ -174,6 +303,8 @@ function GitPopupBody({
             )}
           </>
         )}
+      <div style={css.sectionTitle}>{t('center.branches')}</div>
+      <BranchQuickManage run={run} query={query} t={t} />
       <div style={css.footerRow}>
         <span style={css.checkedAt}>{t('popup.checkedAt').replace('{time}', new Date(s.checkedAt).toLocaleTimeString())}</span>
         <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
@@ -354,6 +485,8 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
             view={display}
             refresh={refresh}
             openCenter={() => { setOpen(false); setPos(null); setCenterOpen(true) }}
+            run={run}
+            query={query}
             t={t}
           />
         </div>,

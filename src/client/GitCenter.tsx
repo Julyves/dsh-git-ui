@@ -39,7 +39,7 @@ export interface GitCenterProps {
   readonly t: (key: GitKey) => string
 }
 
-type TabKey = 'changes' | 'history' | 'branches'
+type TabKey = 'changes' | 'history'
 
 type Feedback = { readonly text: string } | null
 
@@ -97,7 +97,6 @@ export function GitCenter({
   const tabs: Array<{ key: TabKey; label: string }> = [
     { key: 'changes', label: t('center.changes') },
     { key: 'history', label: t('center.history') },
-    { key: 'branches', label: t('center.branches') },
   ]
 
   return (
@@ -138,9 +137,6 @@ export function GitCenter({
           </div>
           <div style={tab === 'history' ? { display: 'contents' } : { display: 'none' }}>
             <HistoryTab query={query} t={t} />
-          </div>
-          <div style={tab === 'branches' ? { display: 'contents' } : { display: 'none' }}>
-            <BranchesTab snapshot={snapshot} execute={execute} query={query} t={t} />
           </div>
         </div>
       </div>
@@ -926,152 +922,6 @@ function GraphStrip({ row, cols }: { row: GraphRow; cols: number }): JSX.Element
         strokeWidth={1.5}
       />
     </svg>
-  )
-}
-
-// ── Branches tab ──────────────────────────────────────────────────────────
-
-function BranchesTab({
-  snapshot, execute, query, t,
-}: {
-  snapshot: GitSnapshot
-  execute: (action: GitAction, successText: string) => Promise<boolean>
-  query: GitCenterProps['query']
-  t: (key: GitKey) => string
-}): JSX.Element {
-  const [data, setData] = useState<{ current: string | null; local: readonly GitBranch[]; remote: readonly GitBranch[] } | null>(null)
-  const [newName, setNewName] = useState('')
-  const [newFrom, setNewFrom] = useState('')
-  const [deleteArmed, setDeleteArmed] = useState<string | null>(null)
-  const [busyLocal, setBusyLocal] = useState(false)
-
-  const reload = async (): Promise<void> => {
-    const outcome = await query({ kind: 'branches' })
-    if (outcome.ok && outcome.value.kind === 'branches') {
-      setData({ current: outcome.value.current, local: outcome.value.local, remote: outcome.value.remote })
-    }
-  }
-
-  useEffect(() => {
-    void reload()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- first activation only
-  }, [])
-
-  useEffect(() => {
-    if (deleteArmed === null) return
-    const timer = setTimeout(() => setDeleteArmed(null), 3000)
-    return () => clearTimeout(timer)
-  }, [deleteArmed])
-
-  const createAndSwitch = async (): Promise<void> => {
-    const name = newName.trim()
-    if (name === '' || busyLocal) return
-    setBusyLocal(true)
-    const created = await execute({ kind: 'branch-create', name, ...(newFrom === '' ? {} : { from: newFrom }) }, t('center.done'))
-    if (created) {
-      await execute({ kind: 'branch-checkout', name }, t('center.done'))
-      setNewName('')
-      await reload()
-    }
-    setBusyLocal(false)
-  }
-
-  const switchTo = async (name: string): Promise<void> => {
-    if (busyLocal) return
-    setBusyLocal(true)
-    await execute({ kind: 'branch-checkout', name }, t('center.done'))
-    await reload()
-    setBusyLocal(false)
-  }
-
-  const deleteBranch = async (name: string): Promise<void> => {
-    if (deleteArmed !== name) {
-      setDeleteArmed(name)
-      return
-    }
-    setBusyLocal(true)
-    await execute({ kind: 'branch-delete', name }, t('center.done'))
-    setDeleteArmed(null)
-    await reload()
-    setBusyLocal(false)
-  }
-
-  const current = data?.current ?? snapshot.branch
-  const fromOptions = data === null ? [] : data.local.map((b) => b.name)
-
-  return (
-    <>
-      <div style={css.branchCreateRow}>
-        <input
-          className="dsh-git-ui__branch-input"
-          style={css.branchNameInput}
-          placeholder={t('center.branchName')}
-          value={newName}
-          disabled={busyLocal}
-          onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') void createAndSwitch() }}
-        />
-        {fromOptions.length > 0 && (
-          <>
-            <span style={css.commitHint}>{t('center.branchFrom')}</span>
-            <select
-              style={css.branchSelect}
-              value={newFrom}
-              disabled={busyLocal}
-              onChange={(e) => setNewFrom(e.target.value)}
-            >
-              <option value="">{current ?? 'HEAD'}</option>
-              {fromOptions.filter((name) => name !== current).map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
-          </>
-        )}
-        <Button variant="primary" size="sm" disabled={busyLocal || newName.trim() === ''} onClick={() => void createAndSwitch()}>
-          {t('center.createAndSwitch')}
-        </Button>
-      </div>
-
-      {data === null
-        ? <div style={css.emptyNote}>{t('center.diffLoading')}</div>
-        : (
-          <>
-            <div style={css.groupTitle}>{t('center.localBranches')}</div>
-            {data.local.map((branch) => {
-              const isCurrent = branch.name === current
-              return (
-                <div key={branch.name} className="dsh-git-ui__row" style={css.branchRow}>
-                  {isCurrent && <span style={css.branchMark}>✓</span>}
-                  <span style={isCurrent ? { ...css.branchName, ...css.branchCurrent } : css.branchName} title={branch.name}>
-                    {branch.name}
-                  </span>
-                  {branch.shortHash !== null && <span style={css.branchHash}>{branch.shortHash}</span>}
-                  {!isCurrent && (
-                    <>
-                      <Button size="sm" disabled={busyLocal} onClick={() => void switchTo(branch.name)}>{t('center.switchTo')}</Button>
-                      <Button size="sm" disabled={busyLocal} onClick={() => void deleteBranch(branch.name)}>
-                        {deleteArmed === branch.name ? t('center.confirmDeleteBranch') : t('center.deleteBranch')}
-                      </Button>
-                    </>
-                  )}
-                </div>
-              )
-            })}
-
-            {data.remote.length > 0 && (
-              <>
-                <div style={css.groupTitle}>{t('center.remoteBranches')}</div>
-                {data.remote.map((branch) => (
-                  <div key={branch.name} className="dsh-git-ui__row" style={css.branchRow}>
-                    <span style={css.branchName} title={branch.name}>{branch.name}</span>
-                    <Button size="sm" disabled={busyLocal} onClick={() => void switchTo(branch.name)}>{t('center.switchTo')}</Button>
-                  </div>
-                ))}
-              </>
-            )}
-          </>
-        )}
-    </>
   )
 }
 

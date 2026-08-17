@@ -862,12 +862,12 @@ export const diffLineMeta: CSSProperties = {
 
 // ── Branches tab ──────────────────────────────────────────────────────────
 
-export const branchCreateRow: CSSProperties = {
+/** popup 分支管理行。 */
+export const branchManageRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 8,
-  padding: '8px 0',
-  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+  gap: 6,
+  padding: '2px 0',
 }
 
 export const branchNameInput: CSSProperties = {
@@ -893,36 +893,6 @@ export const branchSelect: CSSProperties = {
   background: 'var(--dsw-alias-bg-layer-2)',
   color: 'var(--dsw-alias-label-primary)',
   maxWidth: 180,
-}
-
-export const branchRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '4px 8px',
-  borderRadius: 8,
-  fontSize: 13,
-  lineHeight: '20px',
-}
-
-export const branchName: CSSProperties = {
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  flex: 1,
-  color: 'var(--dsw-alias-label-primary)',
-}
-
-export const branchCurrent: CSSProperties = {
-  color: 'var(--dsw-alias-state-business-primary)',
-  fontWeight: 600,
-}
-
-export const branchHash: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--dsw-alias-label-tertiary)',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  flex: 'none',
 }
 
 export const branchMark: CSSProperties = {
