@@ -799,22 +799,6 @@ export const msgBody: CSSProperties = {
   color: 'var(--dsw-alias-label-secondary)',
 }
 
-export const rightDiff: CSSProperties = {
-  flex: 1,
-  minHeight: 0,
-  overflowY: 'auto',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  borderTop: '1px solid var(--dsw-alias-border-l1)',
-  paddingTop: 6,
-}
-
-/** 当前查看 diff 的文件行高亮（选中态用 active 令牌，与 hover 区分）。 */
-export const statRowActive: CSSProperties = {
-  background: 'var(--dsw-alias-interactive-bg-active)',
-}
-
 export const commitDetailHeader: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
