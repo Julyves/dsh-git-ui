@@ -218,6 +218,32 @@ export function parseDecorations(decorations: string, remotes: readonly string[]
 }
 
 /**
+ * 解析 `git show -s --format=%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%B` 输出：
+ * 前五个字段为机器可读元数据，第六字段起为 %B 原始报文
+ * （首行即 subject，其后空行 + 正文）。
+ */
+export function parseShowMeta(output: string): { readonly commit: GitCommit; readonly body: string } | null {
+  const trimmed = output.trimEnd()
+  if (trimmed === '') return null
+  const [hash, shortHash, subject, author, dateIso, ...bodyParts] = trimmed.split(LOG_SEP)
+  if (hash === undefined || hash === '') return null
+  const bodyLines = bodyParts.join(LOG_SEP).split('\n')
+  // %B 首行即 subject 行：去掉它与随后空行，余下为正文。
+  let start = 1
+  while (start < bodyLines.length && (bodyLines[start] ?? '').trim() === '') start += 1
+  return {
+    commit: {
+      hash,
+      shortHash: shortHash ?? '',
+      subject: subject ?? '',
+      author: author ?? '',
+      dateIso: dateIso ?? '',
+    },
+    body: bodyLines.slice(start).join('\n').trimEnd(),
+  }
+}
+
+/**
  * Parse `git branch --show-current` output: the branch name, or null when
  * empty (detached HEAD).
  */

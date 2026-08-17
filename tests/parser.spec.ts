@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseBranchOutput, parseDecorations, parseGraphLogOutput, parseLogOutput, parseStatusHeader, parseStatusOutput } from '../src/host/parser.ts'
+import { parseBranchOutput, parseDecorations, parseGraphLogOutput, parseLogOutput, parseShowMeta, parseStatusHeader, parseStatusOutput } from '../src/host/parser.ts'
 
 describe('parseStatusHeader', () => {
   it('parses a bare branch line', () => {
@@ -140,6 +140,25 @@ describe('parseDecorations', () => {
       { kind: 'remote', name: 'origin/dev', head: false },
       { kind: 'branch', name: 'release/1.2', head: false },
     ])
+  })
+})
+
+describe('parseShowMeta', () => {
+  it('parses metadata and strips the subject line from the body', () => {
+    const out = 'h1\x1fs1\x1fsubject line\x1fAlice\x1f2026-01-01T00:00:00Z\x1fsubject line\n\nbody one\nbody two\n'
+    const parsed = parseShowMeta(out)
+    expect(parsed).not.toBeNull()
+    expect(parsed!.commit).toMatchObject({ hash: 'h1', subject: 'subject line', author: 'Alice' })
+    expect(parsed!.body).toBe('body one\nbody two')
+  })
+
+  it('yields an empty body for single-line messages', () => {
+    const parsed = parseShowMeta('h2\x1fs2\x1fonly subject\x1fBob\x1f2026-01-01T00:00:00Z\x1fonly subject\n')
+    expect(parsed!.body).toBe('')
+  })
+
+  it('returns null for empty output', () => {
+    expect(parseShowMeta('')).toBeNull()
   })
 })
 

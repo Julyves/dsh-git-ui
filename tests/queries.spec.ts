@@ -143,6 +143,23 @@ describe('runQuery — history', () => {
     const advance = commits.find((c) => c.subject === 'main advance')!
     expect(advance.refs).toEqual([])
   })
+
+  it('filters history to the given ref scope with its own total', async () => {
+    const dir = await repoWithMerge()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, ref: 'feature' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'history') return
+    // feature 分支仅含 feature commit 与 initial。
+    expect(result.value.commits.map((c) => c.subject)).toEqual(['feature commit', 'initial commit'])
+    expect(result.value.total).toBe(2)
+  })
+
+  it('rejects an invalid history ref', async () => {
+    const dir = await repoWithCommits()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, ref: 'bad ref' }))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.code).toBe('invalid-name')
+  })
 })
 
 describe('runQuery — diff', () => {
@@ -207,6 +224,21 @@ describe('runQuery — diff-commit and show', () => {
     expect(result.value.stats).toEqual([{ path: 'b.txt', added: 1, deleted: 0 }])
   })
 
+  it('returns the full commit body for multi-line messages', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    git(dir, 'commit', '--allow-empty', '-m', 'subject line', '-m', 'body one', '-m', 'body two')
+    const head = git(dir, 'rev-parse', 'HEAD').trim()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'show', ref: head }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'show') return
+    expect(result.value.commit?.subject).toBe('subject line')
+    expect(result.value.body).toContain('body one')
+    expect(result.value.body).toContain('body two')
+    // subject 行不混入正文。
+    expect(result.value.body.startsWith('subject line')).toBe(false)
+  })
+
   it('rejects an invalid ref', async () => {
     const dir = await repoWithCommits()
     const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'show', ref: 'has space' }))
@@ -228,6 +260,27 @@ describe('runQuery — branches', () => {
     expect(result.value.remote.some((b) => b.name === 'origin/main')).toBe(true)
     // The symbolic origin/HEAD row is filtered out.
     expect(result.value.remote.some((b) => b.name === 'origin/HEAD')).toBe(false)
+  })
+})
+
+describe('runQuery — tags', () => {
+  it('lists tags with their short hashes', async () => {
+    const dir = await repoWithMerge()
+    git(dir, 'tag', 'v1.0')
+    git(dir, 'tag', 'rc-1')
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'tags' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'tags') return
+    expect(result.value.tags.map((t) => t.name).sort()).toEqual(['rc-1', 'v1.0'])
+    expect(result.value.tags.every((t) => t.shortHash !== null)).toBe(true)
+  })
+
+  it('returns an empty list when no tags exist', async () => {
+    const dir = await repoWithCommits()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'tags' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'tags') return
+    expect(result.value.tags).toEqual([])
   })
 })
 

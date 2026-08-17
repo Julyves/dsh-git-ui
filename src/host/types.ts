@@ -136,13 +136,20 @@ export interface GitActionRequest {
 
 // ── Query endpoint (read-only inspections: history / diff / show / branches) ──
 
-/** One read-only query addressed by the `gitInfo/query` endpoint. */
+/** 一条只读查询，对应 `gitInfo/query` 端点。 */
 export type GitQuery =
-  | { readonly kind: 'history'; readonly limit: number; readonly skip: number }
+  | {
+    readonly kind: 'history'
+    readonly limit: number
+    readonly skip: number
+    /** 可选 ref 过滤（分支/远程/标签）；缺省为 --all 全分支。 */
+    readonly ref?: string
+  }
   | { readonly kind: 'diff'; readonly path: string; readonly base: 'worktree' | 'staged' | 'head' }
   | { readonly kind: 'diff-commit'; readonly path: string; readonly ref: string }
   | { readonly kind: 'show'; readonly ref: string }
   | { readonly kind: 'branches' }
+  | { readonly kind: 'tags' }
 
 /** One changed-file stat row from `git show --stat`. */
 export interface GitFileStat {
@@ -161,8 +168,16 @@ export type GitQueryResult =
   | { readonly kind: 'history'; readonly commits: readonly GraphCommit[]; readonly total: number }
   | { readonly kind: 'diff'; readonly path: string; readonly text: string }
   | { readonly kind: 'diff-commit'; readonly path: string; readonly ref: string; readonly text: string }
-  | { readonly kind: 'show'; readonly ref: string; readonly commit: GitCommit | null; readonly stats: readonly GitFileStat[] }
+  | {
+    readonly kind: 'show'
+    readonly ref: string
+    readonly commit: GitCommit | null
+    /** 提交完整正文（不含 subject 行）；IDEA 式右栏展示用。 */
+    readonly body: string
+    readonly stats: readonly GitFileStat[]
+  }
   | { readonly kind: 'branches'; readonly current: string | null; readonly local: readonly GitBranch[]; readonly remote: readonly GitBranch[] }
+  | { readonly kind: 'tags'; readonly tags: readonly GitBranch[] }
 
 export type GitQueryResponse =
   | { readonly ok: true; readonly value: GitQueryResult }

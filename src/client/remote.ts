@@ -112,9 +112,9 @@ export const gitActionRequestSchema = z.object({
   action: gitActionSchema,
 })
 
-/** One read-only query (mirrors `GitQuery` in src/host/types.ts). */
+/** 一条只读查询（镜像 src/host/types.ts 的 GitQuery）。 */
 export const gitQuerySchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('history'), limit: z.number(), skip: z.number() }),
+  z.object({ kind: z.literal('history'), limit: z.number(), skip: z.number(), ref: z.string().optional() }),
   z.object({
     kind: z.literal('diff'),
     path: z.string(),
@@ -123,6 +123,7 @@ export const gitQuerySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('diff-commit'), path: z.string(), ref: z.string() }),
   z.object({ kind: z.literal('show'), ref: z.string() }),
   z.object({ kind: z.literal('branches') }),
+  z.object({ kind: z.literal('tags') }),
 ])
 
 const gitFileStatSchema = z.object({ path: z.string(), added: z.number(), deleted: z.number() })
@@ -132,8 +133,9 @@ export const gitQueryResultSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('history'), commits: z.array(gitGraphCommitSchema), total: z.number() }),
   z.object({ kind: z.literal('diff'), path: z.string(), text: z.string() }),
   z.object({ kind: z.literal('diff-commit'), path: z.string(), ref: z.string(), text: z.string() }),
-  z.object({ kind: z.literal('show'), ref: z.string(), commit: gitCommitSchema.nullable(), stats: z.array(gitFileStatSchema) }),
+  z.object({ kind: z.literal('show'), ref: z.string(), commit: gitCommitSchema.nullable(), body: z.string(), stats: z.array(gitFileStatSchema) }),
   z.object({ kind: z.literal('branches'), current: z.string().nullable(), local: z.array(gitBranchSchema), remote: z.array(gitBranchSchema) }),
+  z.object({ kind: z.literal('tags'), tags: z.array(gitBranchSchema) }),
 ])
 
 export const gitQueryResponseSchema = z.discriminatedUnion('ok', [
