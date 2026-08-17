@@ -43,7 +43,7 @@ export async function runQuery(
 
   switch (query.kind) {
     case 'history':
-      return historyQuery(deps, root, query.limit, query.skip, query.ref)
+      return historyQuery(deps, root, query)
     case 'diff':
       return diffQuery(deps, root, query.path, query.base)
     case 'diff-commit':
@@ -54,27 +54,35 @@ export async function runQuery(
       return branchesQuery(deps, root)
     case 'tags':
       return tagsQuery(deps, root)
+    case 'authors':
+      return authorsQuery(deps, root)
   }
 }
 
 async function historyQuery(
   deps: SnapshotDeps,
   root: string,
-  limit: number,
-  skip: number,
-  ref?: string,
+  query: Extract<GitQueryRequest['query'], { kind: 'history' }>,
 ): Promise<GitQueryResponse> {
-  const safeLimit = Math.min(Math.max(Math.floor(limit), 0), MAX_HISTORY_LIMIT)
-  const safeSkip = Math.max(Math.floor(skip), 0)
-  if (ref !== undefined && !isValidRef(ref)) {
-    return { ok: false, error: { code: 'invalid-name', message: `invalid ref: ${ref}` } }
+  const safeLimit = Math.min(Math.max(Math.floor(query.limit), 0), MAX_HISTORY_LIMIT)
+  const safeSkip = Math.max(Math.floor(query.skip), 0)
+  if (query.ref !== undefined && !isValidRef(query.ref)) {
+    return { ok: false, error: { code: 'invalid-name', message: `invalid ref: ${query.ref}` } }
   }
-  // ref 过滤（分支/远程/标签）；缺省 --all 全分支。
-  const scope = ref === undefined ? ['--all'] : [ref]
+  const search = query.search?.trim() ?? ''
+  const hexLike = /^[0-9a-f]{7,40}$/i.test(search)
+  // 哈希前缀跳转：前缀直接作 rev 范围；文本搜索走 --grep（-i -E）。
+  const scope = hexLike ? [search] : query.ref === undefined ? ['--all'] : [query.ref]
+  const filters: string[] = []
+  if (search !== '' && !hexLike) filters.push('--regexp-ignore-case', '--extended-regexp', `--grep=${search}`)
+  const author = query.author?.trim() ?? ''
+  if (author !== '') filters.push(`--author=${author}`)
+  const since = query.since?.trim() ?? ''
+  if (since !== '') filters.push(`--since=${since}`)
 
   const log = await runCommand(
     deps.run,
-    ['git', 'log', ...scope, `--skip=${String(safeSkip)}`, '-n', String(safeLimit), `--format=${GRAPH_FORMAT}`],
+    ['git', 'log', ...scope, ...filters, `--skip=${String(safeSkip)}`, '-n', String(safeLimit), `--format=${GRAPH_FORMAT}`],
     root,
     'log',
     deps.signal,
@@ -82,17 +90,20 @@ async function historyQuery(
   if ('failure' in log) return { ok: false, error: operationError(log.failure).error }
   if (log.run.timedOut) return { ok: false, error: { code: 'timeout' } }
   if (log.run.exitCode !== 0) {
-    // An unborn repository has no commits: git log exits 128 with this
-    // message — a stable empty history, not an error.
+    // 未出生仓库无提交：git log 以 128 此信息退出——稳定空历史，非错误。
     if (log.run.stderr.includes('does not have any commits')) {
+      return { ok: true, value: { kind: 'history', commits: [], total: 0 } }
+    }
+    // 哈希前缀无解析：稳定空结果（跳转未命中）。
+    if (hexLike && /unknown revision|bad revision/.test(log.run.stderr)) {
       return { ok: true, value: { kind: 'history', commits: [], total: 0 } }
     }
     return gitError('log', log.run.stderr, log.run.stdout)
   }
 
-  // Total commit count within the filter scope is best-effort.
+  // 过滤范围内的提交总数（best-effort）。
   let total = 0
-  const count = await runCommand(deps.run, ['git', 'rev-list', '--count', ...scope], root, 'rev-list', deps.signal)
+  const count = await runCommand(deps.run, ['git', 'rev-list', '--count', ...scope, ...filters], root, 'rev-list', deps.signal)
   if ('run' in count && count.run.exitCode === 0) {
     const parsed = Number(count.run.stdout.trim())
     if (Number.isFinite(parsed) && parsed >= 0) total = parsed
@@ -175,6 +186,16 @@ async function showQuery(deps: SnapshotDeps, root: string, ref: string): Promise
       stats: parseStatOutput(stat.run.stdout),
     },
   }
+}
+
+/** 作者列表（工具栏用户选择用），去重排序截断 100。 */
+async function authorsQuery(deps: SnapshotDeps, root: string): Promise<GitQueryResponse> {
+  const run = await runCommand(deps.run, ['git', 'log', '--all', '-n', '1000', '--format=%an'], root, 'log authors', deps.signal)
+  if ('failure' in run) return { ok: false, error: operationError(run.failure).error }
+  if (run.run.timedOut) return { ok: false, error: { code: 'timeout' } }
+  if (run.run.exitCode !== 0) return { ok: true, value: { kind: 'authors', authors: [] } }
+  const authors = [...new Set(run.run.stdout.split('\n').map((s) => s.trim()).filter((s) => s !== ''))].sort().slice(0, 100)
+  return { ok: true, value: { kind: 'authors', authors } }
 }
 
 /** 标签列表（左栏过滤树用），复用 tab 分隔解析。 */

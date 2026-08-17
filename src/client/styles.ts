@@ -561,36 +561,39 @@ export const treeNameCurrent: CSSProperties = {
   fontWeight: 600,
 }
 
-/** 中栏列表顶部的过滤指示条（随滚动离开，表头保持粘性）。 */
-export const filterChipRow: CSSProperties = {
+/** 中栏顶部工具栏：搜索 + 分支/用户/日期筛选（IDEA 式）。 */
+export const historyToolbar: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 6,
-  padding: '4px 0',
+  padding: '6px 0',
+  flexShrink: 0,
 }
 
-export const filterChip: CSSProperties = {
-  padding: '1px 8px',
+export const toolbarSearch: CSSProperties = {
+  flex: 1,
+  minWidth: 80,
+  border: '1px solid var(--dsw-alias-border-l1)',
   borderRadius: 8,
-  border: '1px solid var(--dsw-alias-state-business-primary)',
-  color: 'var(--dsw-alias-state-business-primary)',
+  padding: '4px 10px',
+  fontSize: 12,
+  lineHeight: '18px',
+  fontFamily: 'inherit',
   background: 'var(--dsw-alias-bg-layer-2)',
-  fontSize: 11,
-  lineHeight: '16px',
-  maxWidth: 220,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
+  color: 'var(--dsw-alias-label-primary)',
 }
 
-export const filterChipClose: CSSProperties = {
-  border: 0,
-  background: 'transparent',
-  padding: '0 2px',
-  cursor: 'pointer',
-  color: 'var(--dsw-alias-label-tertiary)',
-  fontSize: 11,
-  lineHeight: '16px',
+export const toolbarSelect: CSSProperties = {
+  flex: 'none',
+  maxWidth: 130,
+  border: '1px solid var(--dsw-alias-border-l1)',
+  borderRadius: 8,
+  padding: '4px 6px',
+  fontSize: 12,
+  lineHeight: '18px',
+  fontFamily: 'inherit',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  color: 'var(--dsw-alias-label-primary)',
 }
 
 export const historyList: CSSProperties = {

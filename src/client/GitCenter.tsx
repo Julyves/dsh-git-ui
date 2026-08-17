@@ -439,8 +439,11 @@ function HistoryTab({
   const [selected, setSelected] = useState<GraphCommit | null>(null)
   const [detail, setDetail] = useState<{ commit: GraphCommit; body: string; stats: readonly GitFileStat[] } | null>(null)
   const [diff, setDiff] = useState<{ path: string; text: string | null; loading: boolean } | null>(null)
-  /** 左栏过滤：全部分支或指定 ref。 */
-  const [filter, setFilter] = useState<{ kind: 'all' } | { kind: 'ref'; name: string }>({ kind: 'all' })
+  /** 组合过滤条件（左树 ref + 工具栏搜索/用户/日期）；任一变化重载。 */
+  const [filter, setFilter] = useState<{ ref: string | null; search: string; author: string; since: string }>({ ref: null, search: '', author: '', since: '' })
+  /** 工具栏搜索输入（防抖 300ms 落地到 filter）。 */
+  const [searchInput, setSearchInput] = useState('')
+  const [authors, setAuthors] = useState<readonly string[]>([])
   const [tree, setTree] = useState<{
     current: string | null
     defaultBranch: string | null
@@ -464,13 +467,16 @@ function HistoryTab({
   /** 右栏文件目录树（随选中提交的 stats 重算）。 */
   const fileTree = useMemo(() => (detail === null ? [] : buildFileTree(detail.stats)), [detail])
 
-  const loadPage = async (skip: number, scope: { kind: 'all' } | { kind: 'ref'; name: string }): Promise<void> => {
+  const loadPage = async (skip: number, f: { ref: string | null; search: string; author: string; since: string }): Promise<void> => {
     setLoading(true)
     const outcome = await query({
       kind: 'history',
       limit: HISTORY_PAGE,
       skip,
-      ...(scope.kind === 'ref' ? { ref: scope.name } : {}),
+      ...(f.ref !== null ? { ref: f.ref } : {}),
+      ...(f.search !== '' ? { search: f.search } : {}),
+      ...(f.author !== '' ? { author: f.author } : {}),
+      ...(f.since !== '' ? { since: f.since } : {}),
     })
     setLoading(false)
     if (!outcome.ok) return
@@ -483,7 +489,8 @@ function HistoryTab({
   // 首次激活：并行加载过滤树（分支 + 标签）。
   useEffect(() => {
     void (async () => {
-      const [branches, tags] = await Promise.all([query({ kind: 'branches' }), query({ kind: 'tags' })])
+      const [branches, tags, authorsOutcome] = await Promise.all([query({ kind: 'branches' }), query({ kind: 'tags' }), query({ kind: 'authors' })])
+      setAuthors(authorsOutcome.ok && authorsOutcome.value.kind === 'authors' ? authorsOutcome.value.authors : [])
       setTree({
         current: branches.ok && branches.value.kind === 'branches' ? branches.value.current : null,
         defaultBranch: branches.ok && branches.value.kind === 'branches' ? branches.value.defaultBranch : null,
@@ -506,6 +513,14 @@ function HistoryTab({
     void loadPage(0, filter)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filter-driven reload
   }, [filter])
+
+  // 搜索防抖：停止输入 300ms 后才落地为过滤条件。
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilter((prev) => (prev.search === searchInput ? prev : { ...prev, search: searchInput }))
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchInput])
 
   const select = async (commit: GraphCommit): Promise<void> => {
     diffSeq.current += 1
@@ -552,19 +567,54 @@ function HistoryTab({
     <div style={css.historyLayout}>
         <HistoryFilterTree
           tree={tree}
-          filter={filter}
-          onFilter={setFilter}
+          filter={filter.ref === null ? { kind: 'all' } : { kind: 'ref', name: filter.ref }}
+          onFilter={(f) => setFilter((prev) => ({ ...prev, ref: f.kind === 'all' ? null : f.name }))}
           closed={closedSections}
           onToggleSection={toggleSection}
           t={t}
         />
         <div style={css.historyList}>
-          {filter.kind === 'ref' && (
-            <div style={css.filterChipRow}>
-              <span style={css.filterChip} title={filter.name}>{t('history.filterBy').replace('{ref}', filter.name)}</span>
-              <button type="button" style={css.filterChipClose} aria-label={t('center.close')} onClick={() => setFilter({ kind: 'all' })}>✕</button>
-            </div>
-          )}
+          <div style={css.historyToolbar}>
+            <input
+              className="dsh-git-ui__branch-input"
+              style={css.toolbarSearch}
+              placeholder={t('history.search')}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              aria-label={t('history.search')}
+            />
+            <select
+              style={css.toolbarSelect}
+              value={filter.ref ?? ''}
+              aria-label={t('history.branch')}
+              onChange={(e) => setFilter((prev) => ({ ...prev, ref: e.target.value === '' ? null : e.target.value }))}
+            >
+              <option value="">{t('history.allBranches')}</option>
+              {tree?.local.map((b) => <option key={`l-${b.name}`} value={b.name}>{b.name}</option>)}
+              {tree?.remote.map((b) => <option key={`r-${b.name}`} value={b.name}>{b.name}</option>)}
+            </select>
+            <select
+              style={css.toolbarSelect}
+              value={filter.author}
+              aria-label={t('history.allUsers')}
+              onChange={(e) => setFilter((prev) => ({ ...prev, author: e.target.value }))}
+            >
+              <option value="">{t('history.allUsers')}</option>
+              {authors.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+            <select
+              style={css.toolbarSelect}
+              value={filter.since}
+              aria-label={t('history.allTime')}
+              onChange={(e) => setFilter((prev) => ({ ...prev, since: e.target.value }))}
+            >
+              <option value="">{t('history.allTime')}</option>
+              <option value="1 day ago">{t('history.today')}</option>
+              <option value="7 days ago">{t('history.last7d')}</option>
+              <option value="30 days ago">{t('history.last30d')}</option>
+              <option value="90 days ago">{t('history.last90d')}</option>
+            </select>
+          </div>
           {loading && commits.length === 0 && (
             <div style={css.emptyNote}>{t('center.loading')}</div>
           )}

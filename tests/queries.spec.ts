@@ -160,6 +160,45 @@ describe('runQuery — history', () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error.code).toBe('invalid-name')
   })
+
+  it('searches commit messages case-insensitively', async () => {
+    const dir = await repoWithCommits()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, search: 'THIRD' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'history') return
+    expect(result.value.commits.map((c) => c.subject)).toEqual(['third commit'])
+    expect(result.value.total).toBe(1)
+  })
+
+  it('jumps to a hash prefix and yields empty for unknown prefixes', async () => {
+    const dir = await repoWithCommits()
+    const head = git(dir, 'rev-parse', 'HEAD').trim()
+    const hit = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, search: head.slice(0, 7) }))
+    expect(hit.ok).toBe(true)
+    if (!hit.ok || hit.value.kind !== 'history') return
+    expect(hit.value.commits[0]?.hash).toBe(head)
+    const miss = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, search: 'deadbeefdeadbeef' }))
+    expect(miss.ok).toBe(true)
+    if (!miss.ok || miss.value.kind !== 'history') return
+    expect(miss.value.commits).toEqual([])
+  })
+
+  it('filters by author and since', async () => {
+    const dir = await repoWithCommits()
+    const byAuthor = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, author: 'Test User' }))
+    expect(byAuthor.ok).toBe(true)
+    if (!byAuthor.ok || byAuthor.value.kind !== 'history') return
+    expect(byAuthor.value.total).toBe(4)
+    const none = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, author: 'Nobody' }))
+    expect(none.ok).toBe(true)
+    if (!none.ok || none.value.kind !== 'history') return
+    expect(none.value.total).toBe(0)
+    // 未来日期下限：全部排除。
+    const future = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, since: '2099-01-01' }))
+    expect(future.ok).toBe(true)
+    if (!future.ok || future.value.kind !== 'history') return
+    expect(future.value.total).toBe(0)
+  })
 })
 
 describe('runQuery — diff', () => {
@@ -275,6 +314,16 @@ describe('runQuery — branches', () => {
     expect(after.ok).toBe(true)
     if (!after.ok || after.value.kind !== 'branches') return
     expect(after.value.defaultBranch).toBe('main')
+  })
+})
+
+describe('runQuery — authors', () => {
+  it('lists unique sorted author names', async () => {
+    const dir = await repoWithCommits()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'authors' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'authors') return
+    expect(result.value.authors).toEqual(['Test User'])
   })
 })
 

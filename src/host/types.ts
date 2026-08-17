@@ -144,12 +144,19 @@ export type GitQuery =
     readonly skip: number
     /** 可选 ref 过滤（分支/远程/标签）；缺省为 --all 全分支。 */
     readonly ref?: string
+    /** 文本搜索：7+ 位十六进制视为哈希前缀跳转；否则提交信息正则搜索（-i -E）。 */
+    readonly search?: string
+    /** 作者过滤（--author）。 */
+    readonly author?: string
+    /** 日期下限（--since，如 '7 days ago'）。 */
+    readonly since?: string
   }
   | { readonly kind: 'diff'; readonly path: string; readonly base: 'worktree' | 'staged' | 'head' }
   | { readonly kind: 'diff-commit'; readonly path: string; readonly ref: string }
   | { readonly kind: 'show'; readonly ref: string }
   | { readonly kind: 'branches' }
   | { readonly kind: 'tags' }
+  | { readonly kind: 'authors' }
 
 /** One changed-file stat row from `git show --stat`. */
 export interface GitFileStat {
@@ -178,6 +185,7 @@ export type GitQueryResult =
   }
   | { readonly kind: 'branches'; readonly current: string | null; readonly defaultBranch: string | null; readonly local: readonly GitBranch[]; readonly remote: readonly GitBranch[] }
   | { readonly kind: 'tags'; readonly tags: readonly GitBranch[] }
+  | { readonly kind: 'authors'; readonly authors: readonly string[] }
 
 export type GitQueryResponse =
   | { readonly ok: true; readonly value: GitQueryResult }

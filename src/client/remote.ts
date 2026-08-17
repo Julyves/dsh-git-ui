@@ -114,7 +114,7 @@ export const gitActionRequestSchema = z.object({
 
 /** 一条只读查询（镜像 src/host/types.ts 的 GitQuery）。 */
 export const gitQuerySchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('history'), limit: z.number(), skip: z.number(), ref: z.string().optional() }),
+  z.object({ kind: z.literal('history'), limit: z.number(), skip: z.number(), ref: z.string().optional(), search: z.string().optional(), author: z.string().optional(), since: z.string().optional() }),
   z.object({
     kind: z.literal('diff'),
     path: z.string(),
@@ -124,6 +124,7 @@ export const gitQuerySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('show'), ref: z.string() }),
   z.object({ kind: z.literal('branches') }),
   z.object({ kind: z.literal('tags') }),
+  z.object({ kind: z.literal('authors') }),
 ])
 
 const gitFileStatSchema = z.object({ path: z.string(), added: z.number(), deleted: z.number() })
@@ -136,6 +137,7 @@ export const gitQueryResultSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('show'), ref: z.string(), commit: gitCommitSchema.nullable(), body: z.string(), stats: z.array(gitFileStatSchema) }),
   z.object({ kind: z.literal('branches'), current: z.string().nullable(), defaultBranch: z.string().nullable(), local: z.array(gitBranchSchema), remote: z.array(gitBranchSchema) }),
   z.object({ kind: z.literal('tags'), tags: z.array(gitBranchSchema) }),
+  z.object({ kind: z.literal('authors'), authors: z.array(z.string()) }),
 ])
 
 export const gitQueryResponseSchema = z.discriminatedUnion('ok', [
