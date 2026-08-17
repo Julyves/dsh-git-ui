@@ -506,16 +506,12 @@ export const treeNameCurrent: CSSProperties = {
   fontWeight: 600,
 }
 
-/** 中栏列表顶部的过滤指示条。 */
+/** 中栏列表顶部的过滤指示条（随滚动离开，表头保持粘性）。 */
 export const filterChipRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 6,
   padding: '4px 0',
-  position: 'sticky',
-  top: 0,
-  zIndex: 2,
-  background: 'var(--dsw-alias-bg-layer-2)',
 }
 
 export const filterChip: CSSProperties = {
