@@ -14,7 +14,7 @@
  * in-panel banner. Discard/delete are destructive and require a second click
  * within 3s.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, JSX } from 'react'
 import { Button, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
@@ -99,11 +99,11 @@ export function GitCenter({
   ]
 
   return (
-    <Modal open={open} onClose={onClose} title={t('center.title')} closeLabel={t('popup.refresh')} headless className="dsh-git-ui__center">
+    <Modal open={open} onClose={onClose} title={t('center.title')} closeLabel={t('center.close')} headless className="dsh-git-ui__center">
       <div style={css.centerShell}>
         <div style={css.centerHeader}>
           <h2 style={css.centerTitle} title={snapshot.root}>{snapshot.branch ?? '(detached)'} — {t('center.title')}</h2>
-          <Button size="sm" onClick={onClose} aria-label={t('popup.refresh')}>✕</Button>
+          <Button size="sm" onClick={onClose} aria-label={t('center.close')}>✕</Button>
         </div>
 
         <div style={css.tabs} role="tablist">
@@ -126,7 +126,7 @@ export function GitCenter({
           {feedback !== null && (
             <div style={css.feedbackError} role="alert">
               <span style={{ flex: 1 }}>{feedback.text}</span>
-              <button type="button" style={css.feedbackClose} onClick={() => setFeedback(null)} aria-label={t('popup.refresh')}>✕</button>
+              <button type="button" style={css.feedbackClose} onClick={() => setFeedback(null)} aria-label={t('center.close')}>✕</button>
             </div>
           )}
 
@@ -166,6 +166,8 @@ function ChangesTab({
   const [diffPath, setDiffPath] = useState<string | null>(null)
   const [diffText, setDiffText] = useState<string | null>(null)
   const [diffLoading, setDiffLoading] = useState(false)
+  /** 请求序号令牌：连点文件时仅最新响应落地，陈旧响应不得覆盖新状态。 */
+  const diffSeq = useRef(0)
 
   useEffect(() => {
     if (armed === null) return
@@ -188,11 +190,13 @@ function ChangesTab({
   }
 
   const showDiff = async (path: string, change: GitChange): Promise<void> => {
+    const seq = ++diffSeq.current
     setDiffPath(path)
     setDiffText(null)
     setDiffLoading(true)
     const base = change.staged ? 'staged' : 'worktree'
     const outcome = await query({ kind: 'diff', path, base })
+    if (seq !== diffSeq.current) return
     setDiffLoading(false)
     setDiffText(outcome.ok && outcome.value.kind === 'diff' ? outcome.value.text : null)
   }
@@ -293,7 +297,7 @@ function ChangesTab({
         <div style={{ borderTop: '1px solid var(--dsw-alias-border-l1)', paddingTop: 10 }}>
           <div style={css.toolRow}>
             <span style={css.commitHint}>{diffPath}</span>
-            <Button size="sm" onClick={() => { setDiffPath(null); setDiffText(null) }}>✕</Button>
+            <Button size="sm" aria-label={t('center.close')} onClick={() => { diffSeq.current += 1; setDiffPath(null); setDiffText(null) }}>✕</Button>
           </div>
           {diffLoading
             ? <div style={css.emptyNote}>{t('center.diffLoading')}</div>
@@ -432,6 +436,8 @@ function HistoryTab({
   const [selected, setSelected] = useState<GraphCommit | null>(null)
   const [detail, setDetail] = useState<{ commit: GraphCommit; stats: readonly GitFileStat[] } | null>(null)
   const [diff, setDiff] = useState<{ path: string; text: string | null; loading: boolean } | null>(null)
+  /** 请求序号令牌：连点文件/切换提交时仅最新响应落地。 */
+  const diffSeq = useRef(0)
   const now = Date.now()
 
   /** 由提交序列计算图行与车道宽（每次加载后重算）。 */
@@ -457,6 +463,7 @@ function HistoryTab({
   }, [])
 
   const select = async (commit: GraphCommit): Promise<void> => {
+    diffSeq.current += 1
     setSelected(commit)
     setDetail(null)
     setDiff(null)
@@ -467,9 +474,11 @@ function HistoryTab({
   }
 
   const showFileDiff = async (ref: string, path: string): Promise<void> => {
+    const seq = ++diffSeq.current
     setDiff({ path, text: null, loading: true })
     const outcome = await query({ kind: 'diff-commit', path, ref })
-    setDiff((prev) => prev === null ? prev : {
+    if (seq !== diffSeq.current) return
+    setDiff({
       path,
       text: outcome.ok && outcome.value.kind === 'diff-commit' ? outcome.value.text : null,
       loading: false,
@@ -481,8 +490,7 @@ function HistoryTab({
   }
 
   return (
-    <>
-      <div style={css.historyLayout}>
+    <div style={css.historyLayout}>
         <div style={css.historyList}>
           {graphRows.length > 0 && (
             <div style={{ ...css.historyHead, gridTemplateColumns: gridTpl }} aria-hidden="true">
@@ -524,11 +532,11 @@ function HistoryTab({
           )}
         </div>
 
-        <div style={css.historyDetail}>
-          {selected === null
-            ? <div style={css.emptyNote}>{t('center.noCommits')}</div>
-            : (
-              <>
+        {selected === null
+          ? <div style={css.historyHint}>{t('center.selectCommit')}</div>
+          : (
+            <div style={css.historyDetailShell}>
+              <div style={css.historyDetailFiles}>
                 <div style={css.commitDetailHeader}>
                   <span style={css.commitDetailSubject}>{selected.subject}</span>
                   <span style={css.commitDetailMeta}>
@@ -536,43 +544,42 @@ function HistoryTab({
                   </span>
                 </div>
                 {detail === null
-                  ? <div style={css.emptyNote}>{t('center.diffLoading')}</div>
+                  ? <div style={css.emptyNote}>{t('center.loading')}</div>
+                  : detail.stats.length === 0
+                    ? <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
+                    : detail.stats.map((stat) => (
+                      <div
+                        key={stat.path}
+                        className="dsh-git-ui__row"
+                        style={diff?.path === stat.path ? { ...css.statRow, ...css.statRowActive } : css.statRow}
+                        onClick={() => void showFileDiff(selected.hash, stat.path)}
+                      >
+                        <span style={css.statPath} title={stat.path}>{stat.path}</span>
+                        <span style={css.statCounts}>
+                          {stat.added > 0 && <span style={{ color: 'var(--dsw-alias-state-success-primary)' }}>+{stat.added}</span>}
+                          {stat.deleted > 0 && <span style={{ color: 'var(--dsw-alias-state-error-primary)' }}>−{stat.deleted}</span>}
+                        </span>
+                      </div>
+                    ))}
+              </div>
+              <div style={css.historyDetailDiff}>
+                {diff === null
+                  ? <div style={css.emptyNote}>{t('center.selectFile')}</div>
                   : (
                     <>
-                      {detail.stats.length === 0
-                        ? <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
-                        : detail.stats.map((stat) => (
-                          <div
-                            key={stat.path}
-                            className="dsh-git-ui__row"
-                            style={css.statRow}
-                            onClick={() => void showFileDiff(selected.hash, stat.path)}
-                          >
-                            <span style={css.statPath} title={stat.path}>{stat.path}</span>
-                            <span style={css.statCounts}>
-                              {stat.added > 0 && <span style={{ color: 'var(--dsw-alias-state-success-primary)' }}>+{stat.added}</span>}
-                              {stat.deleted > 0 && <span style={{ color: 'var(--dsw-alias-state-error-primary)' }}>−{stat.deleted}</span>}
-                            </span>
-                          </div>
-                        ))}
-                      {diff !== null && (
-                        <div>
-                          <div style={css.toolRow}>
-                            <span style={css.commitHint}>{diff.path}</span>
-                            <Button size="sm" onClick={() => setDiff(null)}>✕</Button>
-                          </div>
-                          {diff.loading
-                            ? <div style={css.emptyNote}>{t('center.diffLoading')}</div>
-                            : <DiffView text={diff.text ?? ''} t={t} />}
-                        </div>
-                      )}
+                      <div style={css.toolRow}>
+                        <span style={css.commitHint}>{diff.path}</span>
+                        <Button size="sm" aria-label={t('center.close')} onClick={() => { diffSeq.current += 1; setDiff(null) }}>✕</Button>
+                      </div>
+                      {diff.loading
+                        ? <div style={css.emptyNote}>{t('center.diffLoading')}</div>
+                        : <DiffView text={diff.text ?? ''} t={t} />}
                     </>
                   )}
-              </>
-            )}
-        </div>
-      </div>
-    </>
+              </div>
+            </div>
+          )}
+    </div>
   )
 }
 

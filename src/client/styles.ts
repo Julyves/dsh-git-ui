@@ -425,20 +425,21 @@ export const HISTORY_ROW_H = 32
 
 export const historyLayout: CSSProperties = {
   display: 'flex',
-  gap: 14,
+  flexDirection: 'column',
+  gap: 0,
   flex: 1,
   minHeight: 0,
 }
 
 export const historyList: CSSProperties = {
-  flex: '0 0 320px',
+  flex: 1,
+  minHeight: 0,
   overflowY: 'auto',
   overflowX: 'auto',
   display: 'flex',
   flexDirection: 'column',
   gap: 0,
   paddingRight: 4,
-  borderRight: '1px solid var(--dsw-alias-border-l1)',
 }
 
 /** 单行表格行：固定行高，图 + refs + 主题 + 哈希 + 作者 + 时间一行排布。
@@ -575,13 +576,50 @@ export const refPillTag: CSSProperties = {
   background: 'var(--dsw-alias-bg-layer-2)',
 }
 
-export const historyDetail: CSSProperties = {
+/** 未选中提交时的底部提示条。 */
+export const historyHint: CSSProperties = {
+  flex: 'none',
+  padding: '8px 4px',
+  borderTop: '1px solid var(--dsw-alias-border-l1)',
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontSize: 12,
+  lineHeight: '18px',
+}
+
+/** 详情下分栏外壳：左文件统计 / 右 diff，各自滚动（IDEA 风格）。 */
+export const historyDetailShell: CSSProperties = {
+  flex: 'none',
+  height: '42%',
+  minHeight: 180,
+  display: 'flex',
+  gap: 12,
+  borderTop: '1px solid var(--dsw-alias-border-l1)',
+  paddingTop: 8,
+}
+
+export const historyDetailFiles: CSSProperties = {
+  flex: '0 0 40%',
+  minWidth: 0,
+  overflowY: 'auto',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 2,
+  paddingRight: 4,
+  borderRight: '1px solid var(--dsw-alias-border-l1)',
+}
+
+export const historyDetailDiff: CSSProperties = {
   flex: 1,
   minWidth: 0,
   overflowY: 'auto',
   display: 'flex',
   flexDirection: 'column',
-  gap: 10,
+  gap: 6,
+}
+
+/** 当前查看 diff 的文件行高亮。 */
+export const statRowActive: CSSProperties = {
+  background: 'var(--dsw-alias-interactive-bg-hover)',
 }
 
 export const commitDetailHeader: CSSProperties = {
