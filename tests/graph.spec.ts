@@ -17,6 +17,7 @@ function chain(hashes: string[]): GraphCommit[] {
       author: 'test',
       dateIso: '2026-01-01T00:00:00Z',
       parents: i === hashes.length - 1 ? [] : [hashes[i + 1]!],
+      refs: [],
     })
   }
   return commits
@@ -31,6 +32,7 @@ function commit(hash: string, parents: string[]): GraphCommit {
     author: 'test',
     dateIso: '2026-01-01T00:00:00Z',
     parents,
+    refs: [],
   }
 }
 

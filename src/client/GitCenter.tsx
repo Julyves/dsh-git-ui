@@ -21,7 +21,7 @@ import type {
   GitAction, GitActionResult, GitBranch, GitChange, GitFileStat,
   GitQueryRequest, GitSnapshot,
 } from '../host/types.ts'
-import type { GraphCommit } from '../host/types.ts'
+import type { GraphCommit, GitRef } from '../host/types.ts'
 import type { GitQueryOutcome } from './controller.ts'
 import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph.ts'
 import { parseUnifiedDiff, type DiffLineType } from './unified-diff.ts'
@@ -437,6 +437,8 @@ function HistoryTab({
   /** 由提交序列计算图行与车道宽（每次加载后重算）。 */
   const graphRows = useMemo(() => buildGraph(commits), [commits])
   const graphCols = useMemo(() => graphWidth(graphRows), [graphRows])
+  /** 表格列模板：图 | 提交(refs+主题) | 哈希 | 作者 | 时间；行与表头共用。 */
+  const gridTpl = `${graphCols * GRAPH_COL_W}px minmax(0,1fr) 64px 110px 76px`
 
   const loadPage = async (skip: number): Promise<void> => {
     setLoading(true)
@@ -482,6 +484,15 @@ function HistoryTab({
     <>
       <div style={css.historyLayout}>
         <div style={css.historyList}>
+          {graphRows.length > 0 && (
+            <div style={{ ...css.historyHead, gridTemplateColumns: gridTpl }} aria-hidden="true">
+              <span />
+              <span>{t('history.commit')}</span>
+              <span>{t('history.hash')}</span>
+              <span>{t('history.author')}</span>
+              <span>{t('history.time')}</span>
+            </div>
+          )}
           {graphRows.map((row) => {
             const isSelected = selected?.hash === row.commit.hash
             return (
@@ -489,11 +500,17 @@ function HistoryTab({
                 key={row.commit.hash}
                 type="button"
                 className="dsh-git-ui__commit-row"
-                style={isSelected ? { ...css.historyRow, ...css.historyRowSelected } : css.historyRow}
+                style={{
+                  ...(isSelected ? { ...css.historyRow, ...css.historyRowSelected } : css.historyRow),
+                  gridTemplateColumns: gridTpl,
+                }}
                 onClick={() => void select(row.commit)}
               >
                 <GraphStrip row={row} cols={graphCols} />
-                <span style={css.commitSubjectLine} title={row.commit.subject}>{row.commit.subject}</span>
+                <span style={css.historySubjectCell}>
+                  <RefPills refs={row.commit.refs} />
+                  <span style={css.commitSubjectLine} title={row.commit.subject}>{row.commit.subject}</span>
+                </span>
                 <span style={css.historyHash} title={row.commit.hash}>{row.commit.shortHash}</span>
                 <span style={css.historyAuthor} title={row.commit.author}>{row.commit.author}</span>
                 <span style={css.historyTime}>{timeAgo(row.commit.dateIso, now, t)}</span>
@@ -556,6 +573,36 @@ function HistoryTab({
         </div>
       </div>
     </>
+  )
+}
+
+// ── refs 胶囊 ───────────────────────────────────────────────────────────
+
+/**
+ * 提交行内的分支/标签胶囊（IDEA 风格）：当前分支成功色、
+ * 本地分支中性、远程弱化、标签警示色。最多展示 3 个，其余折叠为 +n。
+ */
+function RefPills({ refs }: { refs: readonly GitRef[] }): JSX.Element | null {
+  if (refs.length === 0) return null
+  const shown = refs.slice(0, 3)
+  const rest = refs.length - shown.length
+  const variant = (ref: GitRef): CSSProperties => {
+    if (ref.head) return css.refPillHead
+    switch (ref.kind) {
+      case 'tag': return css.refPillTag
+      case 'remote': return css.refPillRemote
+      default: return css.refPillBranch
+    }
+  }
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, flex: 'none', minWidth: 0 }} title={refs.map((r) => r.name).join(', ')}>
+      {shown.map((ref) => (
+        <span key={`${ref.kind}-${ref.name}`} style={{ ...css.refPill, ...variant(ref) }}>
+          {ref.name}
+        </span>
+      ))}
+      {rest > 0 && <span style={{ ...css.refPill, ...css.refPillRemote }}>+{rest}</span>}
+    </span>
   )
 }
 

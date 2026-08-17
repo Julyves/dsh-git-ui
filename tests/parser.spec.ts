@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseBranchOutput, parseLogOutput, parseStatusHeader, parseStatusOutput } from '../src/host/parser.ts'
+import { parseBranchOutput, parseDecorations, parseGraphLogOutput, parseLogOutput, parseStatusHeader, parseStatusOutput } from '../src/host/parser.ts'
 
 describe('parseStatusHeader', () => {
   it('parses a bare branch line', () => {
@@ -115,5 +115,51 @@ describe('parseBranchOutput', () => {
   it('returns null for empty output (detached)', () => {
     expect(parseBranchOutput('')).toBeNull()
     expect(parseBranchOutput('\n')).toBeNull()
+  })
+})
+
+describe('parseDecorations', () => {
+  it('returns an empty list for empty decorations', () => {
+    expect(parseDecorations('', ['origin'])).toEqual([])
+    expect(parseDecorations(' ', ['origin'])).toEqual([])
+  })
+
+  it('classifies HEAD branch, local branch, remote and tag', () => {
+    const refs = parseDecorations('HEAD -> main, feature/x, origin/main, tag: v1.0', ['origin'])
+    expect(refs).toEqual([
+      { kind: 'branch', name: 'main', head: true },
+      { kind: 'branch', name: 'feature/x', head: false },
+      { kind: 'remote', name: 'origin/main', head: false },
+      { kind: 'tag', name: 'v1.0', head: false },
+    ])
+  })
+
+  it('treats slash names without a known remote prefix as local branches', () => {
+    const refs = parseDecorations('origin/dev, release/1.2', ['origin'])
+    expect(refs).toEqual([
+      { kind: 'remote', name: 'origin/dev', head: false },
+      { kind: 'branch', name: 'release/1.2', head: false },
+    ])
+  })
+})
+
+describe('parseGraphLogOutput', () => {
+  it('parses parents and refs from the extended format', () => {
+    const line = 'h1\x1fs1\x1fsubject\x1fAlice\x1f2026-01-01T00:00:00Z\x1fp1 p2\x1fHEAD -> main, tag: v1\n'
+    const commits = parseGraphLogOutput(line, [])
+    expect(commits).toHaveLength(1)
+    expect(commits[0]).toMatchObject({
+      hash: 'h1',
+      parents: ['p1', 'p2'],
+      refs: [
+        { kind: 'branch', name: 'main', head: true },
+        { kind: 'tag', name: 'v1', head: false },
+      ],
+    })
+  })
+
+  it('yields empty parents and refs for a root commit without decorations', () => {
+    const commits = parseGraphLogOutput('h2\x1fs2\x1froot\x1fBob\x1f2026-01-01T00:00:00Z\x1f\x1f\n', [])
+    expect(commits[0]).toMatchObject({ parents: [], refs: [] })
   })
 })

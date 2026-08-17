@@ -59,12 +59,21 @@ export interface GitCommit {
 }
 
 /**
- * A commit enriched with parent references for graph rendering.
- * `parents` are full SHA hashes (space-separated in the wire format);
- * root commits have an empty parents array.
+ * 带父引用的提交（图渲染用）。
+ * `parents` 为完整 SHA（线上格式以空格分隔）；根提交为空数组。
+ * `refs` 为 `%D` 装饰（分支 / 远程 / 标签）。
  */
 export interface GraphCommit extends GitCommit {
   readonly parents: readonly string[]
+  readonly refs: readonly GitRef[]
+}
+
+/** 提交上挂载的一个 ref 装饰（分支 / 远程 / 标签）。 */
+export interface GitRef {
+  readonly kind: 'branch' | 'remote' | 'tag'
+  readonly name: string
+  /** `HEAD -> name` 的当前分支为 true。 */
+  readonly head: boolean
 }
 
 export interface GitChange {

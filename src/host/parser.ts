@@ -3,7 +3,7 @@
  * No side effects and no I/O — fully unit-testable against literal fixtures
  * (verified against real `git status --porcelain=v1 -z --branch` output).
  */
-import type { GitChange, GitChangeStatus, GitCommit, GraphCommit } from './types.ts'
+import type { GitChange, GitChangeStatus, GitCommit, GitRef, GraphCommit } from './types.ts'
 
 /** Parsed status counts plus the (possibly capped) change list. */
 export interface ParsedStatus {
@@ -167,16 +167,16 @@ export function parseLogOutput(output: string): readonly GitCommit[] {
 }
 
 /**
- * Parse graph-aware log output:
- * `%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%P`
- * where `%P` is a space-separated list of parent hashes (empty for roots).
- * Returns `GraphCommit[]` suitable for the branch-graph renderer.
+ * 解析带图的 log 输出：
+ * `%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%P%x1f%D`
+ * 其中 `%P` 为空格分隔的父提交哈希（根提交为空），`%D` 为 ref 装饰。
+ * 返回适合分支图渲染器的 `GraphCommit[]`。
  */
-export function parseGraphLogOutput(output: string): readonly GraphCommit[] {
+export function parseGraphLogOutput(output: string, remotes: readonly string[] = []): readonly GraphCommit[] {
   const commits: GraphCommit[] = []
   for (const line of output.split('\n')) {
     if (line === '') continue
-    const [hash, shortHash, subject, author, dateIso, parentField] = line.split(LOG_SEP)
+    const [hash, shortHash, subject, author, dateIso, parentField, decoField] = line.split(LOG_SEP)
     if (hash === undefined || hash === '') continue
     const parents = (parentField ?? '')
       .split(' ')
@@ -188,9 +188,33 @@ export function parseGraphLogOutput(output: string): readonly GraphCommit[] {
       author: author ?? '',
       dateIso: dateIso ?? '',
       parents,
+      refs: parseDecorations(decoField ?? '', remotes),
     })
   }
   return commits
+}
+
+/**
+ * 解析 `%D` 装饰串，形如 `HEAD -> main, origin/main, tag: v1.0`；空串无 refs。
+ * 分类规则：`HEAD -> x` 为当前分支；`tag: t` 为标签；
+ * 带远程前缀（`<remote>/…`）为远程分支；其余为本地分支。
+ */
+export function parseDecorations(decorations: string, remotes: readonly string[]): readonly GitRef[] {
+  const trimmed = decorations.trim()
+  if (trimmed === '') return []
+  const refs: GitRef[] = []
+  for (const token of trimmed.split(', ')) {
+    if (token.startsWith('HEAD -> ')) {
+      refs.push({ kind: 'branch', name: token.slice(8), head: true })
+    } else if (token.startsWith('tag: ')) {
+      refs.push({ kind: 'tag', name: token.slice(5), head: false })
+    } else if (remotes.some((remote) => token === remote || token.startsWith(`${remote}/`))) {
+      refs.push({ kind: 'remote', name: token, head: false })
+    } else {
+      refs.push({ kind: 'branch', name: token, head: false })
+    }
+  }
+  return refs
 }
 
 /**

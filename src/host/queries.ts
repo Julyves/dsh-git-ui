@@ -13,8 +13,8 @@ import type { GitBranch, GitCommit, GitFileStat, GitQuery, GitQueryRequest, GitQ
 
 /** Machine-readable log format for show queries (no parents). */
 const LOG_FORMAT = '%H%x1f%h%x1f%s%x1f%an%x1f%aI'
-/** Graph-aware log format for history queries (%P = parents). */
-const GRAPH_FORMAT = '%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%P'
+/** 带图的 log 格式（%P = 父提交，%D = ref 装饰）。 */
+const GRAPH_FORMAT = '%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%P%x1f%D'
 
 /** History page size cap (and default). */
 const MAX_HISTORY_LIMIT = 100
@@ -87,7 +87,14 @@ async function historyQuery(
     if (Number.isFinite(parsed) && parsed >= 0) total = parsed
   }
 
-  return { ok: true, value: { kind: 'history', commits: parseGraphLogOutput(log.run.stdout), total } }
+  // 远程名用于 %D 装饰的远程分支分类；失败时降级为空列表（其余按本地分支处理）。
+  let remotes: readonly string[] = []
+  const remoteRun = await runCommand(deps.run, ['git', 'remote'], root, 'remote', deps.signal)
+  if ('run' in remoteRun && remoteRun.run.exitCode === 0) {
+    remotes = remoteRun.run.stdout.split('\n').map((s) => s.trim()).filter((s) => s !== '')
+  }
+
+  return { ok: true, value: { kind: 'history', commits: parseGraphLogOutput(log.run.stdout, remotes), total } }
 }
 
 async function diffQuery(

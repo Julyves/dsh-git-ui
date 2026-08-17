@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   gitActionResultSchema, gitActionRequestSchema, gitActionSchema,
-  gitInfoRemote, gitSnapshotFailureSchema, gitSnapshotResultSchema, gitSnapshotSchema,
+  gitInfoRemote, gitQueryResultSchema, gitQueryRequestSchema,
+  gitSnapshotFailureSchema, gitSnapshotResultSchema, gitSnapshotSchema,
 } from '../../src/client/remote.ts'
-import type { GitAction, GitActionResult, GitSnapshot, GitSnapshotResult } from '../../src/host/types.ts'
+import type { GitAction, GitActionResult, GitSnapshot, GitSnapshotResult, GraphCommit } from '../../src/host/types.ts'
 
 /** A host-typed sample snapshot — the hand-written schemas must accept it. */
 function sampleSnapshot(overrides: Partial<GitSnapshot> = {}): GitSnapshot {
@@ -157,5 +158,34 @@ describe('gitInfoRemote run endpoint', () => {
     expect(request).toMatchObject({ sessionId: 's1' })
     const ok = runDescriptor.result.schema.parse({ ok: true, snapshot: sampleSnapshot() })
     expect(ok).toMatchObject({ ok: true })
+  })
+})
+
+describe('gitInfoRemote query endpoint', () => {
+  it('round-trips a history result carrying parents and refs (wire contract sync)', () => {
+    // 宿主类型的 GraphCommit（含 parents/refs）必须被客户端 schema 接受，
+    // 防止 host types 与 remote.ts 手工镜像漂移。
+    const commit: GraphCommit = {
+      hash: 'a'.repeat(40),
+      shortHash: 'aaaaaaa',
+      subject: 'merge feature',
+      author: 'Alice',
+      dateIso: '2026-01-01T00:00:00Z',
+      parents: ['b'.repeat(40), 'c'.repeat(40)],
+      refs: [
+        { kind: 'branch', name: 'main', head: true },
+        { kind: 'remote', name: 'origin/main', head: false },
+        { kind: 'tag', name: 'v1.0', head: false },
+      ],
+    }
+    const parsed = gitQueryResultSchema.parse({ kind: 'history', commits: [commit], total: 1 })
+    expect(parsed).toMatchObject({ kind: 'history', total: 1 })
+    const request = gitQueryRequestSchema.parse({ sessionId: 's1', query: { kind: 'history', limit: 50, skip: 0 } })
+    expect(request).toMatchObject({ sessionId: 's1' })
+  })
+
+  it('rejects a graph commit missing refs (strict mirror)', () => {
+    const incomplete = { hash: 'h', shortHash: 'h', subject: 's', author: 'a', dateIso: 'd', parents: [] }
+    expect(() => gitQueryResultSchema.parse({ kind: 'history', commits: [incomplete], total: 1 })).toThrow()
   })
 })

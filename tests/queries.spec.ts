@@ -123,6 +123,26 @@ describe('runQuery — history', () => {
     expect(merge).toBeDefined()
     expect(merge!.parents.length).toBe(2)
   })
+
+  it('attaches refs decorations: head branch, feature branch, remote and tag', async () => {
+    const dir = await repoWithMerge()
+    git(dir, 'tag', 'v1.0') // 打在 HEAD（merge 提交）上
+    await addBareRemote(dir) // push main 到 origin
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0 }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'history') return
+    const commits = result.value.commits
+    const merged = commits.find((c) => c.subject === 'merge feature')!
+    // HEAD 当前分支 + 远程跟踪 + 标签均挂在 merge 提交上。
+    expect(merged.refs).toContainEqual({ kind: 'branch', name: 'main', head: true })
+    expect(merged.refs).toContainEqual({ kind: 'remote', name: 'origin/main', head: false })
+    expect(merged.refs).toContainEqual({ kind: 'tag', name: 'v1.0', head: false })
+    const feature = commits.find((c) => c.subject === 'feature commit')!
+    expect(feature.refs).toContainEqual({ kind: 'branch', name: 'feature', head: false })
+    // 无装饰的提交 refs 为空。
+    const advance = commits.find((c) => c.subject === 'main advance')!
+    expect(advance.refs).toEqual([])
+  })
 })
 
 describe('runQuery — diff', () => {

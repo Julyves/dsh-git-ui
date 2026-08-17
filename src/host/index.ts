@@ -17,7 +17,7 @@ import { runAction } from './actions.ts'
 import { runQuery } from './queries.ts'
 import type { GitActionResult, GitActionRequest, GitQueryRequest, GitQueryResponse, GitSnapshotRequest, GitSnapshotResult } from './types.ts'
 
-export type { GitSnapshot, GitSnapshotResult, GitSnapshotFailure, GitSnapshotRequest, GitCommit, GitChange, GitAction, GitActionResult, GitActionRequest, GitQuery, GitQueryResult, GitQueryRequest, GitQueryResponse, GitBranch, GitFileStat } from './types.ts'
+export type { GitSnapshot, GitSnapshotResult, GitSnapshotFailure, GitSnapshotRequest, GitCommit, GitChange, GitAction, GitActionResult, GitActionRequest, GitQuery, GitQueryResult, GitQueryRequest, GitQueryResponse, GitBranch, GitFileStat, GitRef } from './types.ts'
 export { normalizeConfig, DEFAULT_CONFIG } from './core.ts'
 export { parseStatusOutput, parseLogOutput, parseBranchOutput, parseStatOutput } from './parser.ts'
 export { isSafePath, isValidBranchName, runAction } from './actions.ts'

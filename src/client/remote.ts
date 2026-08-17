@@ -18,7 +18,7 @@ export const gitCommitSchema = z.object({
   dateIso: z.string(),
 })
 
-/** GraphCommit: GitCommit enriched with parent hashes for graph rendering. */
+/** GraphCommit：带父提交哈希与 ref 装饰的提交（图渲染 + 分支胶囊）。 */
 export const gitGraphCommitSchema = z.object({
   hash: z.string(),
   shortHash: z.string(),
@@ -26,6 +26,11 @@ export const gitGraphCommitSchema = z.object({
   author: z.string(),
   dateIso: z.string(),
   parents: z.array(z.string()),
+  refs: z.array(z.object({
+    kind: z.enum(['branch', 'remote', 'tag']),
+    name: z.string(),
+    head: z.boolean(),
+  })),
 })
 
 export const gitChangeSchema = z.object({

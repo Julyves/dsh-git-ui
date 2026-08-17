@@ -441,13 +441,14 @@ export const historyList: CSSProperties = {
   borderRight: '1px solid var(--dsw-alias-border-l1)',
 }
 
-/** 单行表格行：固定行高，图 + 主题 + 元信息一行排布。
+/** 单行表格行：固定行高，图 + refs + 主题 + 哈希 + 作者 + 时间一行排布。
+ * 列宽由组件内 gridTemplateColumns 注入（与表头共用同一模板）。
  * 行盒 = max(内容宽, 列表宽)：超宽图时撑开列表横向滚动区。 */
 export const historyRow: CSSProperties = {
-  display: 'flex',
+  display: 'grid',
   alignItems: 'center',
   alignSelf: 'flex-start',
-  gap: 8,
+  columnGap: 8,
   minWidth: '100%',
   width: 'auto',
   height: HISTORY_ROW_H,
@@ -467,6 +468,35 @@ export const historyRowSelected: CSSProperties = {
   background: 'var(--dsw-alias-interactive-bg-hover)',
 }
 
+/** 表头：粘性置顶，与行共用列模板（跨行对齐的表格契约）。 */
+export const historyHead: CSSProperties = {
+  position: 'sticky',
+  top: 0,
+  zIndex: 1,
+  display: 'grid',
+  alignItems: 'center',
+  alignSelf: 'flex-start',
+  columnGap: 8,
+  minWidth: '100%',
+  width: 'auto',
+  height: 28,
+  flexShrink: 0,
+  padding: 0,
+  background: 'var(--dsw-alias-bg-layer-2)',
+  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+  fontSize: 11,
+  lineHeight: '16px',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+/** 主题格：refs 胶囊 + 可省略主题文本。 */
+export const historySubjectCell: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  minWidth: 0,
+}
+
 export const commitSubjectLine: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -479,15 +509,15 @@ export const commitSubjectLine: CSSProperties = {
 }
 
 export const historyHash: CSSProperties = {
-  flex: 'none',
-  width: 64,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   fontSize: 11,
   color: 'var(--dsw-alias-label-secondary)',
 }
 
 export const historyAuthor: CSSProperties = {
-  flex: '0 1 120px',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
@@ -496,10 +526,53 @@ export const historyAuthor: CSSProperties = {
 }
 
 export const historyTime: CSSProperties = {
-  flex: 'none',
-  marginLeft: 'auto',
+  textAlign: 'right',
   fontSize: 11,
   color: 'var(--dsw-alias-label-tertiary)',
+}
+
+// ── refs 胶囊（IDEA 分支标签风格）──────────────────────────────────────
+
+/** 胶囊基样式；变体见 refPillHead / refPillBranch / refPillRemote / refPillTag。 */
+export const refPill: CSSProperties = {
+  flex: 'none',
+  maxWidth: 140,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  padding: '0 6px',
+  borderRadius: 8,
+  border: '1px solid',
+  fontSize: 10,
+  lineHeight: '14px',
+}
+
+/** 当前分支（HEAD ->）：成功色。 */
+export const refPillHead: CSSProperties = {
+  color: 'var(--dsw-alias-state-success-primary)',
+  borderColor: 'var(--dsw-alias-state-success-primary)',
+  background: 'var(--dsw-alias-state-success-secondary)',
+}
+
+/** 其他本地分支：中性描边。 */
+export const refPillBranch: CSSProperties = {
+  color: 'var(--dsw-alias-label-secondary)',
+  borderColor: 'var(--dsw-alias-border-l1)',
+  background: 'var(--dsw-alias-bg-layer-2)',
+}
+
+/** 远程分支：弱化灰色。 */
+export const refPillRemote: CSSProperties = {
+  color: 'var(--dsw-alias-label-tertiary)',
+  borderColor: 'var(--dsw-alias-border-l1)',
+  background: 'transparent',
+}
+
+/** 标签：警示色描边。 */
+export const refPillTag: CSSProperties = {
+  color: 'var(--dsw-alias-state-warn-primary)',
+  borderColor: 'var(--dsw-alias-state-warn-primary)',
+  background: 'var(--dsw-alias-bg-layer-2)',
 }
 
 export const historyDetail: CSSProperties = {
