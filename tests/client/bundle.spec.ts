@@ -5,12 +5,9 @@
  * bundle to exist — run `pnpm build` first).
  */
 import { readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import vm from 'node:vm'
 import { describe, expect, it } from 'vitest'
-
-const require = createRequire(import.meta.url)
 
 interface Captured {
   id: string

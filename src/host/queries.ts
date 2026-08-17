@@ -9,7 +9,7 @@
 import { resolveWorkspace, runCommand, type GitStatusConfig, type SnapshotDeps } from './core.ts'
 import { parseBranchOutput, parseGraphLogOutput, parseLogOutput, parseStatOutput } from './parser.ts'
 import { isSafePath, operationError } from './actions.ts'
-import type { GitBranch, GitCommit, GitFileStat, GitQuery, GitQueryRequest, GitQueryResponse, GraphCommit } from './types.ts'
+import type { GitBranch, GitFileStat, GitQueryRequest, GitQueryResponse } from './types.ts'
 
 /** Machine-readable log format for show queries (no parents). */
 const LOG_FORMAT = '%H%x1f%h%x1f%s%x1f%an%x1f%aI'
@@ -25,14 +25,17 @@ function isValidRef(ref: string): boolean {
 }
 
 /**
- * Execute one read-only query. All results are JSON-plain and bounded
- * (history paginated; diff text bounded by the runner's spill/truncation).
+ * 执行一条只读查询。结果均为 JSON 纯数据且有界
+ * （history 分页；diff 文本受 runner 的 spill/截断约束）。
+ * `config` 当前未用：保留以与 runAction 共享 runner 签名契约
+ * （deps, config, request），后续查询限流等调优可直接启用。
  */
 export async function runQuery(
   deps: SnapshotDeps,
   config: GitStatusConfig,
   request: GitQueryRequest,
 ): Promise<GitQueryResponse> {
+  void config
   const workspace = await resolveWorkspace(deps, request.sessionId)
   if (!workspace.ok) return { ok: false, error: operationError(workspace.error).error }
   const root = workspace.root

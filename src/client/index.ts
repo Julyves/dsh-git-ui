@@ -19,7 +19,7 @@
  * standalone plugin mounts its own.)
  */
 import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
-import { GitController, type GitView, type GitObservable, type GitRemoteLike } from './controller.ts'
+import { GitController, type GitRemoteLike } from './controller.ts'
 import { gitInfoRemote } from './remote.ts'
 import { GitPill, type GitInjected } from './GitPill.tsx'
 import { en, zh } from './locales.ts'

@@ -138,7 +138,7 @@ export function GitCenter({
             <HistoryTab query={query} t={t} />
           </div>
           <div style={tab === 'branches' ? { display: 'contents' } : { display: 'none' }}>
-            <BranchesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} />
+            <BranchesTab snapshot={snapshot} execute={execute} query={query} t={t} />
           </div>
         </div>
       </div>
@@ -666,10 +666,9 @@ function GraphStrip({ row, cols }: { row: GraphRow; cols: number }): JSX.Element
 // ── Branches tab ──────────────────────────────────────────────────────────
 
 function BranchesTab({
-  snapshot, busy, execute, query, t,
+  snapshot, execute, query, t,
 }: {
   snapshot: GitSnapshot
-  busy: boolean
   execute: (action: GitAction, successText: string) => Promise<boolean>
   query: GitCenterProps['query']
   t: (key: GitKey) => string

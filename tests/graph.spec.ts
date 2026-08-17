@@ -1,9 +1,9 @@
 /**
  * 分支图车道生命周期算法测试。
- * 用例覆盖:线性延续、分裂、merge 回归、车道回收复用、多车道收敛、图宽度。
+ * 用例覆盖:线性延续、分裂、merge 回归、车道回收复用、收敛、图宽度。
  */
 import { describe, expect, it } from 'vitest'
-import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from '../src/client/git-graph.ts'
+import { buildGraph, graphWidth, GRAPH_COLORS } from '../src/client/git-graph.ts'
 import type { GraphCommit } from '../src/host/types.ts'
 
 /** 构造简单提交链(新→旧,与 git log 输出序一致)。 */
