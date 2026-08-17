@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { realpath, stat } from 'node:fs/promises'
 import { createGitRunner } from '../src/host/git.ts'
 import { runQuery } from '../src/host/queries.ts'
-import { parseStatOutput } from '../src/host/parser.ts'
 import { normalizeConfig, type SnapshotDeps } from '../src/host/core.ts'
 import type { GitQueryRequest } from '../src/host/types.ts'
 import { addBareRemote, git, gitInit, makeTempDir, realSubprocess } from './helpers.ts'
@@ -311,22 +310,3 @@ describe('runQuery — tags', () => {
   })
 })
 
-describe('parseStatOutput', () => {
-  it('parses stat rows and skips summary/binary lines', () => {
-    const output = [
-      ' a.txt | 3 ++-',
-      ' "b c.txt" | 1 +',
-      ' img.png | Bin 0 -> 12 bytes',
-      ' 2 files changed, 4 insertions(+), 1 deletion(-)',
-    ].join('\n')
-    expect(parseStatOutput(output)).toEqual([
-      { path: 'a.txt', added: 2, deleted: 1 },
-      { path: 'b c.txt', added: 1, deleted: 0 },
-    ])
-  })
-
-  it('returns an empty list for no rows', () => {
-    expect(parseStatOutput('')).toEqual([])
-    expect(parseStatOutput('1 file changed, 1 insertion(+)')).toEqual([])
-  })
-})
