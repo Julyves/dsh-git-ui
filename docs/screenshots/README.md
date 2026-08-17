@@ -12,6 +12,7 @@ that already points at these paths.
 |---|---|---|
 | `pill.png` | The branch pill in a session header | Prefer a **dirty** state so the badges are visible (e.g. `⎇ main · +1 −1 ?2`). Keep the session title/context in frame; the pill is right-aligned in the header. |
 | `popup.png` | The detail panel opened by clicking the pill | Count grid (staged / modified / untracked / ahead / behind), recent commits, changed-file list. **The panel shows the repository root path — make sure it is not sensitive, or crop it.** |
+| `center.png` | The Git center management panel | The Changes view with grouped lists (staged / unstaged / untracked), bulk action buttons and the commit box — prefer a repo with a few staged + unstaged + untracked files so all three groups are visible. |
 | `dirty.png` | State comparison: clean vs dirty vs non-repository | Two or three pills side by side, or the dimmed `无 Git 仓库` placeholder. Optional — remove the README paragraph if omitted. |
 
 ## File rules
