@@ -125,6 +125,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
                 hooks: { git: controller as GitInjected['hooks']['git'] },
                 refresh: () => controller.refresh(),
                 run: (action) => controller.run(action),
+                query: (query) => controller.query(query),
               }
               faces.set(sessionId, face)
             }

@@ -1,18 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GitController, type GitRemoteEnvelope, type GitRemoteLike } from '../../src/client/controller.ts'
-import type { GitActionResult, GitSnapshot, GitSnapshotResult } from '../../src/host/types.ts'
+import type { GitActionResult, GitQueryResponse, GitSnapshot, GitSnapshotResult } from '../../src/host/types.ts'
 
 /** Business-result helpers wrapped in the RPC envelope the gateway returns. */
 const ok = (value: GitSnapshotResult): GitRemoteEnvelope<GitSnapshotResult> => ({ ok: true, value })
 const okResult = (s: GitSnapshot): GitRemoteEnvelope<GitSnapshotResult> => ok({ ok: true, value: s })
 const okRun = (value: GitActionResult): GitRemoteEnvelope<GitActionResult> => ({ ok: true, value })
+const okQuery = (value: Extract<GitQueryResponse, { ok: true }>['value']): GitRemoteEnvelope<GitQueryResponse> => ({ ok: true, value: { ok: true, value } })
 
 /** Programmable fake Remote namespace (returns the real RPC envelope shape). */
 class FakeRemote implements GitRemoteLike {
   calls = 0
   runCalls = 0
+  queryCalls = 0
   private queue: Array<GitRemoteEnvelope<GitSnapshotResult> | Error> = []
   private runQueue: Array<GitRemoteEnvelope<GitActionResult> | Error> = []
+  private queryQueue: Array<GitRemoteEnvelope<GitQueryResponse> | Error> = []
 
   enqueue(result: GitRemoteEnvelope<GitSnapshotResult> | Error): void {
     this.queue.push(result)
@@ -20,6 +23,10 @@ class FakeRemote implements GitRemoteLike {
 
   enqueueRun(result: GitRemoteEnvelope<GitActionResult> | Error): void {
     this.runQueue.push(result)
+  }
+
+  enqueueQuery(result: GitRemoteEnvelope<GitQueryResponse> | Error): void {
+    this.queryQueue.push(result)
   }
 
   snapshot(): Promise<GitRemoteEnvelope<GitSnapshotResult>> {
@@ -35,6 +42,14 @@ class FakeRemote implements GitRemoteLike {
     const next = this.runQueue.shift()
     if (next instanceof Error) return Promise.reject(next)
     if (next === undefined) return Promise.reject(new Error('FakeRemote: run queue exhausted'))
+    return Promise.resolve(next)
+  }
+
+  query(): Promise<GitRemoteEnvelope<GitQueryResponse>> {
+    this.queryCalls += 1
+    const next = this.queryQueue.shift()
+    if (next instanceof Error) return Promise.reject(next)
+    if (next === undefined) return Promise.reject(new Error('FakeRemote: query queue exhausted'))
     return Promise.resolve(next)
   }
 }
@@ -259,5 +274,43 @@ describe('GitController', () => {
     const result = await runPromise
     expect(result.ok).toBe(true)
     expect(remote.runCalls).toBe(1)
+  })
+
+  it('query() unwraps a successful result without touching the view', async () => {
+    remote.enqueue(okResult(snapshot()))
+    controller.ensure()
+    await tick()
+    remote.enqueueQuery(okQuery({ kind: 'branches', current: 'main', local: [{ name: 'main', shortHash: 'abc1234' }], remote: [] }))
+    const outcome = await controller.query({ kind: 'branches' })
+    expect(outcome.ok).toBe(true)
+    if (!outcome.ok) return
+    expect(outcome.value.kind).toBe('branches')
+    if (outcome.value.kind !== 'branches') return
+    expect(outcome.value.current).toBe('main')
+    // The snapshot view is unchanged by a query.
+    expect(controller.getSnapshot()).toMatchObject({ state: 'ready' })
+    expect(remote.queryCalls).toBe(1)
+  })
+
+  it('query() surfaces a business error message', async () => {
+    remote.enqueue(okResult(snapshot()))
+    controller.ensure()
+    await tick()
+    remote.enqueueQuery({ ok: true, value: { ok: false, error: { code: 'git-error', message: 'bad ref' } } })
+    const outcome = await controller.query({ kind: 'show', ref: 'nope' })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) return
+    expect(outcome.message).toContain('bad ref')
+  })
+
+  it('query() maps a transport rejection to a message', async () => {
+    remote.enqueue(okResult(snapshot()))
+    controller.ensure()
+    await tick()
+    remote.enqueueQuery(new Error('network down'))
+    const outcome = await controller.query({ kind: 'branches' })
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) return
+    expect(outcome.message).toContain('network down')
   })
 })

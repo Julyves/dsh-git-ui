@@ -74,7 +74,7 @@ describe('git snapshot schemas', () => {
 describe('gitInfoRemote contribution', () => {
   it('declares the gitInfo/snapshot endpoint with strict codecs', () => {
     expect(gitInfoRemote.package).toBe('dsh-git-ui')
-    expect(gitInfoRemote.descriptors).toHaveLength(2)
+    expect(gitInfoRemote.descriptors).toHaveLength(3)
     const descriptor = gitInfoRemote.descriptors[0]
     expect(descriptor).toMatchObject({
       service: 'gitInfo', namespace: 'gitInfo', method: 'snapshot',

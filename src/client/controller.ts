@@ -5,7 +5,7 @@
  * connection reset, `dispose()` on slot teardown (clears the timer and
  * rejects nothing — in-flight work settles into a withdrawn view).
  */
-import type { GitActionResult, GitActionRequest, GitSnapshot, GitSnapshotFailure, GitSnapshotRequest, GitSnapshotResult } from '../host/types.ts'
+import type { GitActionResult, GitActionRequest, GitQueryRequest, GitQueryResponse, GitSnapshot, GitSnapshotFailure, GitSnapshotRequest, GitSnapshotResult } from '../host/types.ts'
 
 /** The observable view contract components consume (useSyncExternalStore shape). */
 export interface GitObservable<V> {
@@ -36,7 +36,13 @@ export type GitRemoteEnvelope<T> =
 export interface GitRemoteLike {
   snapshot(request: GitSnapshotRequest): Promise<GitRemoteEnvelope<GitSnapshotResult>>
   run(request: GitActionRequest): Promise<GitRemoteEnvelope<GitActionResult>>
+  query(request: GitQueryRequest): Promise<GitRemoteEnvelope<GitQueryResponse>>
 }
+
+/** Simplified query outcome for the UI (envelope + business errors unwrapped). */
+export type GitQueryOutcome =
+  | { readonly ok: true; readonly value: Extract<GitQueryResponse, { ok: true }>['value'] }
+  | { readonly ok: false; readonly message: string }
 
 /** Failure codes that mean "no working directory to watch" — degrade to a
  * low-frequency probe instead of a normal poll. */
@@ -164,6 +170,35 @@ export class GitController implements GitObservable<GitView> {
           this.setView({ state: 'error', error: { code: 'git-unavailable', detail: 'transport failure' } })
         }
         return { ok: false, error: { code: 'git-error', message } } as GitActionResult
+      })
+      .finally(() => {
+        this.inflight = undefined
+        if (!this.disposed) this.schedulePoll()
+      })
+    this.inflight = promise.then(() => undefined)
+    return promise
+  }
+
+  /**
+   * Run one read-only query (history / diff / show / branches). The view is
+   * untouched — the result goes straight back to the caller. Queues behind
+   * any in-flight refresh/run like everything else (single-flight).
+   */
+  query(query: GitQueryRequest['query']): Promise<GitQueryOutcome> {
+    if (this.inflight !== undefined) return this.inflight.then(() => this.query(query))
+    if (this.disposed) return Promise.resolve({ ok: false, message: 'controller disposed' })
+    const promise = this.remote.query({ sessionId: this.sessionId, query })
+      .then((result): GitQueryOutcome => {
+        if (!result.ok) {
+          const detail = [result.error.code, result.error.message].filter(Boolean).join(': ')
+          return { ok: false, message: detail || 'rpc failure' }
+        }
+        const inner = result.value
+        if (inner.ok) return { ok: true, value: inner.value }
+        return { ok: false, message: inner.error.message ?? inner.error.code }
+      })
+      .catch((error: unknown): GitQueryOutcome => {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) }
       })
       .finally(() => {
         this.inflight = undefined

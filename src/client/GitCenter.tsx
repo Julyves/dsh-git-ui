@@ -1,103 +1,170 @@
 /**
  * Git center — the IDE-style management panel for one session's repository.
  *
- * Phase 1 ships the Changes view: grouped file lists (staged / unstaged /
- * untracked) with per-file and bulk stage / unstage / discard actions, and a
- * commit box (message + optional selected paths). The panel is a platform
- * `Modal` (headless, width overridden) so it never participates in header
- * layout; operation results ride back through the controller and the view
- * updates from the returned snapshot.
+ * Three tabs on a system-styled tab bar:
+ *   Changes  — grouped lists (staged / unstaged / untracked) with per-file
+ *              and bulk stage / unstage / discard, a commit box, and an
+ *              inline diff preview for the selected file.
+ *   History  — paginated commit list (50/page + load more) with a detail
+ *              pane (metadata + file stats) and per-file commit diffs.
+ *   Branches — local/remote branch lists, create-and-switch, switch, safe
+ *              delete (two-step confirm).
  *
- * Discard is destructive (tracked changes only in Phase 1) and therefore
- * two-step: the button arms itself and requires a second click within 3s.
+ * Feedback: successes are transient system Toasts; errors are a dismissible
+ * in-panel banner. Discard/delete are destructive and require a second click
+ * within 3s.
  */
 import { useEffect, useMemo, useState } from 'react'
-import type { JSX } from 'react'
+import type { CSSProperties, JSX } from 'react'
 import { Button, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { GitAction, GitActionResult, GitChange, GitSnapshot } from '../host/types.ts'
+import type {
+  GitAction, GitActionResult, GitBranch, GitChange, GitCommit, GitFileStat,
+  GitQueryRequest, GitSnapshot,
+} from '../host/types.ts'
+import type { GitQueryOutcome } from './controller.ts'
+import { parseUnifiedDiff, type DiffLineType } from './unified-diff.ts'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
-
-/** One change-row action callback; all are disabled while busy. */
-interface RowActions {
-  readonly onToggle: (path: string) => void
-  readonly onStage: (path: string) => void
-  readonly onUnstage: (path: string) => void
-  readonly onDiscard: (path: string) => void
-}
 
 export interface GitCenterProps {
   readonly open: boolean
   readonly onClose: () => void
   readonly snapshot: GitSnapshot
   readonly run: (action: GitAction) => Promise<GitActionResult>
+  readonly query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
   readonly t: (key: GitKey) => string
 }
 
-type Feedback = { readonly kind: 'error'; readonly text: string } | null
+type TabKey = 'changes' | 'history' | 'branches'
 
-/** One transient success toast (keyed by seq so repeats restart the cycle). */
+type Feedback = { readonly text: string } | null
+
 interface ToastState {
   readonly text: string
   readonly seq: number
 }
 
-/** Change row with checkbox (commit selection) and per-file actions. */
-function ChangeRow({
-  change, checked, busy, actions, t,
-}: {
-  change: GitChange
-  checked: boolean
-  busy: boolean
-  actions: RowActions
-  t: (key: GitKey) => string
-}): JSX.Element {
-  const untracked = change.status === 'untracked'
-  return (
-    <div className="dsh-git-ui__row" style={css.centerRow}>
-      <input
-        type="checkbox"
-        style={css.changeCheckbox}
-        checked={checked}
-        disabled={busy}
-        onChange={() => { actions.onToggle(change.path) }}
-        aria-label={change.path}
-      />
-      <span style={css.changeChip} title={change.status}>
-        {CHIP_LETTERS[change.status] ?? '•'}
-      </span>
-      <span style={css.changePathText} title={change.path}>{change.path}</span>
-      {change.staged
-        ? <Button size="sm" disabled={busy} onClick={() => actions.onUnstage(change.path)}>{t('center.unstage')}</Button>
-        : <Button size="sm" disabled={busy} onClick={() => actions.onStage(change.path)}>{t('center.stage')}</Button>}
-      {!untracked && (
-        <Button size="sm" disabled={busy} onClick={() => actions.onDiscard(change.path)}>{t('center.discard')}</Button>
-      )}
-    </div>
-  )
-}
+const HISTORY_PAGE = 50
 
 const CHIP_LETTERS: Record<string, string> = {
   added: 'A', modified: 'M', deleted: 'D', renamed: 'R',
   untracked: '?', conflicted: '!', typechange: 'T',
 }
 
+/** Short relative time from an ISO date (same vocabulary as the popup). */
+function timeAgo(iso: string, now: number, t: (key: GitKey) => string): string {
+  const then = Date.parse(iso)
+  if (!Number.isFinite(then)) return iso
+  const seconds = Math.max(0, Math.floor((now - then) / 1000))
+  const fill = (template: GitKey, n: number): string => t(template).replace('{n}', String(n))
+  if (seconds < 60) return t('time.justNow')
+  if (seconds < 3600) return fill('time.minutesAgo', Math.floor(seconds / 60))
+  if (seconds < 86_400) return fill('time.hoursAgo', Math.floor(seconds / 3600))
+  return fill('time.daysAgo', Math.floor(seconds / 86_400))
+}
+
 /**
- * The management panel. Rendered by GitPill inside the platform Modal; the
- * snapshot prop comes from the live controller view, so every successful
- * operation re-renders this component with fresh state.
+ * The management panel. `snapshot` comes from the live controller view, so
+ * every successful operation re-renders this component with fresh state.
  */
 export function GitCenter({
-  open, onClose, snapshot, run, t,
+  open, onClose, snapshot, run, query, t,
 }: GitCenterProps): JSX.Element | null {
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
-  const [message, setMessage] = useState('')
+  const [tab, setTab] = useState<TabKey>('changes')
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState<Feedback>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
-  const [armed, setArmed] = useState<string | 'all' | null>(null)
 
-  // Auto-disarm the destructive confirm after 3s.
+  /** Execute a management action with shared busy/feedback/toast handling. */
+  const execute = async (action: GitAction, successText: string): Promise<boolean> => {
+    if (busy) return false
+    setBusy(true)
+    setFeedback(null)
+    const result = await run(action)
+    setBusy(false)
+    if (result.ok) {
+      setToast({ text: successText, seq: Date.now() })
+      return true
+    }
+    setFeedback({ text: result.error.message ?? result.error.code })
+    return false
+  }
+
+  const tabs: Array<{ key: TabKey; label: string }> = [
+    { key: 'changes', label: t('center.changes') },
+    { key: 'history', label: t('center.history') },
+    { key: 'branches', label: t('center.branches') },
+  ]
+
+  return (
+    <Modal open={open} onClose={onClose} title={t('center.title')} closeLabel={t('popup.refresh')} headless className="dsh-git-ui__center">
+      <div style={css.centerShell}>
+        <div style={css.centerHeader}>
+          <h2 style={css.centerTitle} title={snapshot.root}>{snapshot.branch ?? '(detached)'} — {t('center.title')}</h2>
+          <Button size="sm" onClick={onClose} aria-label={t('popup.refresh')}>✕</Button>
+        </div>
+
+        <div style={css.tabs} role="tablist">
+          {tabs.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              className={`dsh-git-ui__tab${tab === key ? ' dsh-git-ui__tab--active' : ''}`}
+              style={tab === key ? { ...css.tab, ...css.tabActive } : css.tab}
+              onClick={() => setTab(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div style={css.centerBody}>
+          {feedback !== null && (
+            <div style={css.feedbackError} role="alert">
+              <span style={{ flex: 1 }}>{feedback.text}</span>
+              <button type="button" style={css.feedbackClose} onClick={() => setFeedback(null)} aria-label={t('popup.refresh')}>✕</button>
+            </div>
+          )}
+
+          {tab === 'changes' && (
+            <ChangesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} />
+          )}
+          {tab === 'history' && (
+            <HistoryTab query={query} t={t} />
+          )}
+          {tab === 'branches' && (
+            <BranchesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} />
+          )}
+        </div>
+      </div>
+      {toast !== null && (
+        <Toast key={toast.seq} text={toast.text} onDone={() => setToast(null)} />
+      )}
+    </Modal>
+  )
+}
+
+// ── Changes tab ───────────────────────────────────────────────────────────
+
+function ChangesTab({
+  snapshot, busy, execute, query, t,
+}: {
+  snapshot: GitSnapshot
+  busy: boolean
+  execute: (action: GitAction, successText: string) => Promise<boolean>
+  query: GitCenterProps['query']
+  t: (key: GitKey) => string
+}): JSX.Element {
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [message, setMessage] = useState('')
+  const [armed, setArmed] = useState<string | 'all' | null>(null)
+  // Diff preview state for the clicked file.
+  const [diffPath, setDiffPath] = useState<string | null>(null)
+  const [diffText, setDiffText] = useState<string | null>(null)
+  const [diffLoading, setDiffLoading] = useState(false)
+
   useEffect(() => {
     if (armed === null) return
     const timer = setTimeout(() => setArmed(null), 3000)
@@ -118,129 +185,209 @@ export function GitCenter({
     })
   }
 
-  const doRun = async (action: GitAction, successText: string): Promise<void> => {
-    if (busy) return
-    setBusy(true)
-    setFeedback(null)
-    const result = await run(action)
-    setBusy(false)
-    setArmed(null)
-    if (result.ok) {
-      setSelected(new Set())
-      setMessage('')
-      // Transient system toast (holds ~3s, fades, unmounts itself).
-      setToast({ text: successText, seq: Date.now() })
-    } else {
-      // Persistent panel-level error banner with a dismiss button.
-      setFeedback({ kind: 'error', text: result.error.message ?? result.error.code })
-    }
-  }
-
-  const armDiscard = (target: string | 'all'): void => {
-    setArmed((prev) => (prev === target ? null : target))
-  }
-
-  const discardTarget = (path: string): void => {
-    if (armed === path) void doRun({ kind: 'discard', paths: [path] }, t('center.done'))
-    else armDiscard(path)
-  }
-
-  const discardAll = (): void => {
-    if (armed === 'all') void doRun({ kind: 'discard-all' }, t('center.done'))
-    else armDiscard('all')
+  const showDiff = async (path: string, change: GitChange): Promise<void> => {
+    setDiffPath(path)
+    setDiffText(null)
+    setDiffLoading(true)
+    const base = change.staged ? 'staged' : 'worktree'
+    const outcome = await query({ kind: 'diff', path, base })
+    setDiffLoading(false)
+    setDiffText(outcome.ok && outcome.value.kind === 'diff' ? outcome.value.text : null)
   }
 
   const commit = (): void => {
     const text = message.trim()
     if (text === '' || busy) return
     const paths = selected.size > 0 ? [...selected] : undefined
-    void doRun({ kind: 'commit', message: text, ...(paths === undefined ? {} : { paths }) }, t('center.done'))
+    void execute({ kind: 'commit', message: text, ...(paths === undefined ? {} : { paths }) }, t('center.done'))
+      .then((ok) => { if (ok) { setSelected(new Set()); setMessage('') } })
   }
 
-  const actions: RowActions = {
+  const rowActions = {
     onToggle: toggle,
-    onStage: (path) => void doRun({ kind: 'stage', paths: [path] }, t('center.done')),
-    onUnstage: (path) => void doRun({ kind: 'unstage', paths: [path] }, t('center.done')),
-    onDiscard: discardTarget,
+    onStage: (path: string) => void execute({ kind: 'stage', paths: [path] }, t('center.done')),
+    onUnstage: (path: string) => void execute({ kind: 'unstage', paths: [path] }, t('center.done')),
+    onDiscard: (path: string) => {
+      if (armed === path) {
+        void execute({ kind: 'discard', paths: [path] }, t('center.done'))
+        setDiffPath(null)
+        setDiffText(null)
+      } else {
+        setArmed((prev) => (prev === path ? null : path))
+      }
+    },
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={t('center.title')} closeLabel={t('popup.refresh')} headless className="dsh-git-ui__center">
-      <div style={css.centerShell}>
-        <div style={css.centerHeader}>
-          <h2 style={css.centerTitle} title={snapshot.root}>{snapshot.branch ?? '(detached)'} — {t('center.title')}</h2>
-          <Button size="sm" onClick={onClose} aria-label={t('popup.refresh')}>✕</Button>
-        </div>
+    <>
+      <div style={css.toolRow}>
+        <Button size="sm" disabled={busy || (unstaged.length === 0 && untracked.length === 0)} onClick={() => void execute({ kind: 'stage-all' }, t('center.done'))}>
+          {t('center.stageAll')}
+        </Button>
+        <Button size="sm" disabled={busy || staged.length === 0} onClick={() => void execute({ kind: 'unstage-all' }, t('center.done'))}>
+          {t('center.unstageAll')}
+        </Button>
+        <Button
+          size="sm"
+          disabled={busy || !hasTrackedChanges}
+          onClick={() => {
+            if (armed === 'all') {
+              void execute({ kind: 'discard-all' }, t('center.done'))
+              setDiffPath(null)
+              setDiffText(null)
+            } else {
+              setArmed((prev) => (prev === 'all' ? null : 'all'))
+            }
+          }}
+        >
+          {armed === 'all' ? t('center.confirmDiscard') : t('center.discardAll')}
+        </Button>
+      </div>
 
-        <div style={css.centerBody}>
-          {feedback !== null && (
-            <div style={css.feedbackError} role="alert">
-              <span style={{ flex: 1 }}>{feedback.text}</span>
-              <button type="button" style={css.feedbackClose} onClick={() => setFeedback(null)} aria-label={t('popup.refresh')}>✕</button>
-            </div>
-          )}
-
-          <div style={css.toolRow}>
-            <Button size="sm" disabled={busy || (unstaged.length === 0 && untracked.length === 0)} onClick={() => void doRun({ kind: 'stage-all' }, t('center.done'))}>
-              {t('center.stageAll')}
-            </Button>
-            <Button size="sm" disabled={busy || staged.length === 0} onClick={() => void doRun({ kind: 'unstage-all' }, t('center.done'))}>
-              {t('center.unstageAll')}
-            </Button>
-            <Button size="sm" disabled={busy || !hasTrackedChanges} onClick={discardAll}>
-              {armed === 'all' ? t('center.confirmDiscard') : t('center.discardAll')}
-            </Button>
-          </div>
-
-          {snapshot.changes.length === 0
-            ? <div style={css.emptyNote}>{t('center.empty')}</div>
-            : (
-              <>
-                {staged.length > 0 && <GroupedList title={t('center.staged')} changes={staged} checked={selected} busy={busy} actions={actions} t={t} />}
-                {unstaged.length > 0 && <GroupedList title={t('center.unstaged')} changes={unstaged} checked={selected} busy={busy} actions={actions} t={t} />}
-                {untracked.length > 0 && <GroupedList title={t('center.untracked')} changes={untracked} checked={selected} busy={busy} actions={actions} t={t} />}
-              </>
+      {snapshot.changes.length === 0
+        ? <div style={css.emptyNote}>{t('center.empty')}</div>
+        : (
+          <>
+            {staged.length > 0 && (
+              <ChangeGroup
+                title={t('center.staged')}
+                changes={staged}
+                checked={selected}
+                busy={busy}
+                armed={armed}
+                rowActions={rowActions}
+                onShowDiff={showDiff}
+                t={t}
+              />
             )}
-        </div>
+            {unstaged.length > 0 && (
+              <ChangeGroup
+                title={t('center.unstaged')}
+                changes={unstaged}
+                checked={selected}
+                busy={busy}
+                armed={armed}
+                rowActions={rowActions}
+                onShowDiff={showDiff}
+                t={t}
+              />
+            )}
+            {untracked.length > 0 && (
+              <ChangeGroup
+                title={t('center.untracked')}
+                changes={untracked}
+                checked={selected}
+                busy={busy}
+                armed={armed}
+                rowActions={rowActions}
+                onShowDiff={showDiff}
+                t={t}
+              />
+            )}
+          </>
+        )}
 
-        <div style={css.commitBox}>
-          <textarea
-            className="dsh-git-ui__commit-input"
-            style={css.commitInput}
-            placeholder={t('center.commitMessage')}
-            value={message}
-            disabled={busy}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) commit()
-            }}
-          />
-          <div style={css.commitFooter}>
-            <span style={css.commitHint}>
-              {selected.size > 0 ? t('center.commitSelected').replace('{count}', String(selected.size)) : t('center.commitHint')}
-            </span>
-            <Button variant="primary" size="sm" disabled={busy || message.trim() === ''} onClick={commit}>
-              {busy ? t('center.busy') : t('center.commit')}
-            </Button>
+      {diffPath !== null && (
+        <div style={{ borderTop: '1px solid var(--dsw-alias-border-l1)', paddingTop: 10 }}>
+          <div style={css.toolRow}>
+            <span style={css.commitHint}>{diffPath}</span>
+            <Button size="sm" onClick={() => { setDiffPath(null); setDiffText(null) }}>✕</Button>
           </div>
+          {diffLoading
+            ? <div style={css.emptyNote}>{t('center.diffLoading')}</div>
+            : <DiffView text={diffText ?? ''} t={t} />}
+        </div>
+      )}
+
+      <div style={css.commitBox}>
+        <textarea
+          className="dsh-git-ui__commit-input"
+          style={css.commitInput}
+          placeholder={t('center.commitMessage')}
+          value={message}
+          disabled={busy}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) commit()
+          }}
+        />
+        <div style={css.commitFooter}>
+          <span style={css.commitHint}>
+            {selected.size > 0 ? t('center.commitSelected').replace('{count}', String(selected.size)) : t('center.commitHint')}
+          </span>
+          <Button variant="primary" size="sm" disabled={busy || message.trim() === ''} onClick={commit}>
+            {busy ? t('center.busy') : t('center.commit')}
+          </Button>
         </div>
       </div>
-      {toast !== null && (
-        <Toast key={toast.seq} text={toast.text} onDone={() => setToast(null)} />
-      )}
-    </Modal>
+    </>
   )
 }
 
-/** One group of change rows (staged / unstaged / untracked). */
-function GroupedList({
-  title, changes, checked, busy, actions, t,
+/** One change row; clicking the path opens the inline diff preview. */
+function ChangeRow({
+  change, checked, busy, armed, rowActions, onShowDiff, t,
+}: {
+  change: GitChange
+  checked: boolean
+  busy: boolean
+  armed: string | 'all' | null
+  rowActions: {
+    onToggle: (path: string) => void
+    onStage: (path: string) => void
+    onUnstage: (path: string) => void
+    onDiscard: (path: string) => void
+  }
+  onShowDiff: (path: string, change: GitChange) => void
+  t: (key: GitKey) => string
+}): JSX.Element {
+  const untracked = change.status === 'untracked'
+  return (
+    <div className="dsh-git-ui__row" style={css.centerRow}>
+      <input
+        type="checkbox"
+        style={css.changeCheckbox}
+        checked={checked}
+        disabled={busy}
+        onChange={() => rowActions.onToggle(change.path)}
+        aria-label={change.path}
+      />
+      <span style={css.changeChip} title={change.status}>
+        {CHIP_LETTERS[change.status] ?? '•'}
+      </span>
+      <button
+        type="button"
+        style={{
+          ...css.changePathText,
+          border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', padding: 0, fontFamily: 'inherit',
+        }}
+        title={`${change.path} — ${t('center.showDiff')}`}
+        onClick={() => onShowDiff(change.path, change)}
+      >
+        {change.path}
+      </button>
+      {change.staged
+        ? <Button size="sm" disabled={busy} onClick={() => rowActions.onUnstage(change.path)}>{t('center.unstage')}</Button>
+        : <Button size="sm" disabled={busy} onClick={() => rowActions.onStage(change.path)}>{t('center.stage')}</Button>}
+      {!untracked && (
+        <Button size="sm" disabled={busy} onClick={() => rowActions.onDiscard(change.path)}>
+          {armed === change.path ? t('center.confirmDiscard') : t('center.discard')}
+        </Button>
+      )}
+    </div>
+  )
+}
+
+function ChangeGroup({
+  title, changes, checked, busy, armed, rowActions, onShowDiff, t,
 }: {
   title: string
   changes: readonly GitChange[]
   checked: ReadonlySet<string>
   busy: boolean
-  actions: RowActions
+  armed: string | 'all' | null
+  rowActions: Parameters<typeof ChangeRow>[0]['rowActions']
+  onShowDiff: (path: string, change: GitChange) => void
   t: (key: GitKey) => string
 }): JSX.Element {
   return (
@@ -252,10 +399,315 @@ function GroupedList({
           change={change}
           checked={checked.has(change.path)}
           busy={busy}
-          actions={actions}
+          armed={armed}
+          rowActions={rowActions}
+          onShowDiff={onShowDiff}
           t={t}
         />
       ))}
     </>
+  )
+}
+
+// ── History tab ───────────────────────────────────────────────────────────
+
+function HistoryTab({
+  query, t,
+}: {
+  query: GitCenterProps['query']
+  t: (key: GitKey) => string
+}): JSX.Element {
+  const [commits, setCommits] = useState<readonly GitCommit[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [selected, setSelected] = useState<GitCommit | null>(null)
+  const [detail, setDetail] = useState<{ commit: GitCommit; stats: readonly GitFileStat[] } | null>(null)
+  const [diff, setDiff] = useState<{ path: string; text: string | null; loading: boolean } | null>(null)
+  const now = Date.now()
+
+  const loadPage = async (skip: number): Promise<void> => {
+    setLoading(true)
+    const outcome = await query({ kind: 'history', limit: HISTORY_PAGE, skip })
+    setLoading(false)
+    if (!outcome.ok) return
+    if (outcome.value.kind !== 'history') return
+    const page = outcome.value.commits
+    setCommits((prev) => (skip === 0 ? page : [...prev, ...page]))
+    setTotal(outcome.value.total)
+  }
+
+  useEffect(() => {
+    void loadPage(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- first activation only
+  }, [])
+
+  const select = async (commit: GitCommit): Promise<void> => {
+    setSelected(commit)
+    setDetail(null)
+    setDiff(null)
+    const outcome = await query({ kind: 'show', ref: commit.hash })
+    if (outcome.ok && outcome.value.kind === 'show' && outcome.value.commit !== null) {
+      setDetail({ commit: outcome.value.commit, stats: outcome.value.stats })
+    }
+  }
+
+  const showFileDiff = async (ref: string, path: string): Promise<void> => {
+    setDiff({ path, text: null, loading: true })
+    const outcome = await query({ kind: 'diff-commit', path, ref })
+    setDiff((prev) => prev === null ? prev : {
+      path,
+      text: outcome.ok && outcome.value.kind === 'diff-commit' ? outcome.value.text : null,
+      loading: false,
+    })
+  }
+
+  if (total === 0 && !loading && commits.length === 0) {
+    return <div style={css.emptyNote}>{t('center.noCommits')}</div>
+  }
+
+  return (
+    <div style={css.historyLayout}>
+      <div style={css.historyList}>
+        {commits.map((commit) => (
+          <button
+            key={commit.hash}
+            type="button"
+            style={selected?.hash === commit.hash ? { ...css.commitRowButton, ...css.commitRowSelected } : css.commitRowButton}
+            onClick={() => void select(commit)}
+          >
+            <span style={css.commitSubjectLine}>{commit.subject}</span>
+            <span style={css.commitMetaLine}>
+              <span>{commit.shortHash}</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{commit.author}</span>
+              <span style={{ flex: 'none', marginLeft: 'auto' }}>{timeAgo(commit.dateIso, now, t)}</span>
+            </span>
+          </button>
+        ))}
+        {commits.length < total && (
+          <Button size="sm" disabled={loading} onClick={() => void loadPage(commits.length)}>
+            {t('center.loadMore').replace('{loaded}', String(commits.length)).replace('{total}', String(total))}
+          </Button>
+        )}
+      </div>
+
+      <div style={css.historyDetail}>
+        {selected === null
+          ? <div style={css.emptyNote}>{t('center.noCommits')}</div>
+          : (
+            <>
+              <div style={css.commitDetailHeader}>
+                <span style={css.commitDetailSubject}>{selected.subject}</span>
+                <span style={css.commitDetailMeta}>
+                  {selected.shortHash} · {selected.author} · {timeAgo(selected.dateIso, now, t)}
+                </span>
+              </div>
+              {detail === null
+                ? <div style={css.emptyNote}>{t('center.diffLoading')}</div>
+                : (
+                  <>
+                    {detail.stats.length === 0
+                      ? <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
+                      : detail.stats.map((stat) => (
+                        <div
+                          key={stat.path}
+                          className="dsh-git-ui__row"
+                          style={css.statRow}
+                          onClick={() => void showFileDiff(selected.hash, stat.path)}
+                        >
+                          <span style={css.statPath} title={stat.path}>{stat.path}</span>
+                          <span style={css.statCounts}>
+                            {stat.added > 0 && <span style={{ color: 'var(--dsw-alias-state-success-primary)' }}>+{stat.added}</span>}
+                            {stat.deleted > 0 && <span style={{ color: 'var(--dsw-alias-state-error-primary)' }}>−{stat.deleted}</span>}
+                          </span>
+                        </div>
+                      ))}
+                    {diff !== null && (
+                      <div>
+                        <div style={css.toolRow}>
+                          <span style={css.commitHint}>{diff.path}</span>
+                          <Button size="sm" onClick={() => setDiff(null)}>✕</Button>
+                        </div>
+                        {diff.loading
+                          ? <div style={css.emptyNote}>{t('center.diffLoading')}</div>
+                          : <DiffView text={diff.text ?? ''} t={t} />}
+                      </div>
+                    )}
+                  </>
+                )}
+            </>
+          )}
+      </div>
+    </div>
+  )
+}
+
+// ── Branches tab ──────────────────────────────────────────────────────────
+
+function BranchesTab({
+  snapshot, busy, execute, query, t,
+}: {
+  snapshot: GitSnapshot
+  busy: boolean
+  execute: (action: GitAction, successText: string) => Promise<boolean>
+  query: GitCenterProps['query']
+  t: (key: GitKey) => string
+}): JSX.Element {
+  const [data, setData] = useState<{ current: string | null; local: readonly GitBranch[]; remote: readonly GitBranch[] } | null>(null)
+  const [newName, setNewName] = useState('')
+  const [newFrom, setNewFrom] = useState('')
+  const [deleteArmed, setDeleteArmed] = useState<string | null>(null)
+  const [busyLocal, setBusyLocal] = useState(false)
+
+  const reload = async (): Promise<void> => {
+    const outcome = await query({ kind: 'branches' })
+    if (outcome.ok && outcome.value.kind === 'branches') {
+      setData({ current: outcome.value.current, local: outcome.value.local, remote: outcome.value.remote })
+    }
+  }
+
+  useEffect(() => {
+    void reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- first activation only
+  }, [])
+
+  useEffect(() => {
+    if (deleteArmed === null) return
+    const timer = setTimeout(() => setDeleteArmed(null), 3000)
+    return () => clearTimeout(timer)
+  }, [deleteArmed])
+
+  const createAndSwitch = async (): Promise<void> => {
+    const name = newName.trim()
+    if (name === '' || busyLocal) return
+    setBusyLocal(true)
+    const created = await execute({ kind: 'branch-create', name, ...(newFrom === '' ? {} : { from: newFrom }) }, t('center.done'))
+    if (created) {
+      await execute({ kind: 'branch-checkout', name }, t('center.done'))
+      setNewName('')
+      await reload()
+    }
+    setBusyLocal(false)
+  }
+
+  const switchTo = async (name: string): Promise<void> => {
+    if (busyLocal) return
+    setBusyLocal(true)
+    await execute({ kind: 'branch-checkout', name }, t('center.done'))
+    await reload()
+    setBusyLocal(false)
+  }
+
+  const deleteBranch = async (name: string): Promise<void> => {
+    if (deleteArmed !== name) {
+      setDeleteArmed(name)
+      return
+    }
+    setBusyLocal(true)
+    await execute({ kind: 'branch-delete', name }, t('center.done'))
+    setDeleteArmed(null)
+    await reload()
+    setBusyLocal(false)
+  }
+
+  const current = data?.current ?? snapshot.branch
+  const fromOptions = data === null ? [] : data.local.map((b) => b.name)
+
+  return (
+    <>
+      <div style={css.branchCreateRow}>
+        <input
+          className="dsh-git-ui__branch-input"
+          style={css.branchNameInput}
+          placeholder={t('center.branchName')}
+          value={newName}
+          disabled={busyLocal}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void createAndSwitch() }}
+        />
+        {fromOptions.length > 0 && (
+          <>
+            <span style={css.commitHint}>{t('center.branchFrom')}</span>
+            <select
+              style={css.branchSelect}
+              value={newFrom}
+              disabled={busyLocal}
+              onChange={(e) => setNewFrom(e.target.value)}
+            >
+              <option value="">{current ?? 'HEAD'}</option>
+              {fromOptions.filter((name) => name !== current).map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </>
+        )}
+        <Button variant="primary" size="sm" disabled={busyLocal || newName.trim() === ''} onClick={() => void createAndSwitch()}>
+          {t('center.createAndSwitch')}
+        </Button>
+      </div>
+
+      {data === null
+        ? <div style={css.emptyNote}>{t('center.diffLoading')}</div>
+        : (
+          <>
+            <div style={css.groupTitle}>{t('center.localBranches')}</div>
+            {data.local.map((branch) => {
+              const isCurrent = branch.name === current
+              return (
+                <div key={branch.name} className="dsh-git-ui__row" style={css.branchRow}>
+                  {isCurrent && <span style={css.branchMark}>✓</span>}
+                  <span style={isCurrent ? { ...css.branchName, ...css.branchCurrent } : css.branchName} title={branch.name}>
+                    {branch.name}
+                  </span>
+                  {branch.shortHash !== null && <span style={css.branchHash}>{branch.shortHash}</span>}
+                  {!isCurrent && (
+                    <>
+                      <Button size="sm" disabled={busyLocal} onClick={() => void switchTo(branch.name)}>{t('center.switchTo')}</Button>
+                      <Button size="sm" disabled={busyLocal} onClick={() => void deleteBranch(branch.name)}>
+                        {deleteArmed === branch.name ? t('center.confirmDeleteBranch') : t('center.deleteBranch')}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+
+            {data.remote.length > 0 && (
+              <>
+                <div style={css.groupTitle}>{t('center.remoteBranches')}</div>
+                {data.remote.map((branch) => (
+                  <div key={branch.name} className="dsh-git-ui__row" style={css.branchRow}>
+                    <span style={css.branchName} title={branch.name}>{branch.name}</span>
+                    <Button size="sm" disabled={busyLocal} onClick={() => void switchTo(branch.name)}>{t('center.switchTo')}</Button>
+                  </div>
+                ))}
+              </>
+            )}
+          </>
+        )}
+    </>
+  )
+}
+
+// ── Diff view ─────────────────────────────────────────────────────────────
+
+function diffStyle(type: DiffLineType): CSSProperties {
+  switch (type) {
+    case 'add': return css.diffLineAdd
+    case 'del': return css.diffLineDel
+    case 'hunk': return css.diffLineHunk
+    case 'meta': return css.diffLineMeta
+    default: return {}
+  }
+}
+
+function DiffView({ text, t }: { text: string; t: (key: GitKey) => string }): JSX.Element {
+  const lines = useMemo(() => parseUnifiedDiff(text), [text])
+  if (lines.length === 0) return <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
+  return (
+    <div style={css.diffContainer}>
+      {lines.map((line, index) => (
+        <span key={index} style={{ ...css.diffLine, ...diffStyle(line.type) }}>{line.text || ' '}</span>
+      ))}
+    </div>
   )
 }

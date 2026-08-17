@@ -74,12 +74,15 @@ export const gitActionSchema = z.discriminatedUnion('kind', [
     message: z.string(),
     paths: z.array(z.string()).optional(),
   }),
+  z.object({ kind: z.literal('branch-create'), name: z.string(), from: z.string().optional() }),
+  z.object({ kind: z.literal('branch-checkout'), name: z.string() }),
+  z.object({ kind: z.literal('branch-delete'), name: z.string(), force: z.boolean().optional() }),
 ])
 
 export const gitOperationErrorSchema = z.object({
   code: z.enum([
     'session-not-found', 'cwd-unavailable', 'path-not-found',
-    'not-a-git-repo', 'invalid-path', 'git-error', 'timeout',
+    'not-a-git-repo', 'invalid-path', 'invalid-name', 'git-error', 'timeout',
   ]),
   message: z.string().optional(),
 })
@@ -92,6 +95,40 @@ export const gitActionResultSchema = z.discriminatedUnion('ok', [
 export const gitActionRequestSchema = z.object({
   sessionId: z.string(),
   action: gitActionSchema,
+})
+
+/** One read-only query (mirrors `GitQuery` in src/host/types.ts). */
+export const gitQuerySchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('history'), limit: z.number(), skip: z.number() }),
+  z.object({
+    kind: z.literal('diff'),
+    path: z.string(),
+    base: z.enum(['worktree', 'staged', 'head']),
+  }),
+  z.object({ kind: z.literal('diff-commit'), path: z.string(), ref: z.string() }),
+  z.object({ kind: z.literal('show'), ref: z.string() }),
+  z.object({ kind: z.literal('branches') }),
+])
+
+const gitFileStatSchema = z.object({ path: z.string(), added: z.number(), deleted: z.number() })
+const gitBranchSchema = z.object({ name: z.string(), shortHash: z.string().nullable() })
+
+export const gitQueryResultSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('history'), commits: z.array(gitCommitSchema), total: z.number() }),
+  z.object({ kind: z.literal('diff'), path: z.string(), text: z.string() }),
+  z.object({ kind: z.literal('diff-commit'), path: z.string(), ref: z.string(), text: z.string() }),
+  z.object({ kind: z.literal('show'), ref: z.string(), commit: gitCommitSchema.nullable(), stats: z.array(gitFileStatSchema) }),
+  z.object({ kind: z.literal('branches'), current: z.string().nullable(), local: z.array(gitBranchSchema), remote: z.array(gitBranchSchema) }),
+])
+
+export const gitQueryResponseSchema = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true), value: gitQueryResultSchema }),
+  z.object({ ok: z.literal(false), error: gitOperationErrorSchema }),
+])
+
+export const gitQueryRequestSchema = z.object({
+  sessionId: z.string(),
+  query: gitQuerySchema,
 })
 
 /** The contribution mounted into `ctx.remote` by the client plugin body. */
@@ -149,6 +186,31 @@ export const gitInfoRemote: TypertRemoteContribution = {
         mode: 'strict',
         typeSymbol: 'dsh-git-ui/types#GitActionResult',
         schema: gitActionResultSchema,
+      },
+    },
+    {
+      id: 'dsh-git-ui#gitInfo/query',
+      service: 'gitInfo',
+      namespace: 'gitInfo',
+      method: 'query',
+      invocation: { kind: 'direct' },
+      cancellation: { parameter: 'signal' },
+      parameters: [
+        {
+          name: 'request',
+          wire: 'request',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-git-ui/types#GitQueryRequest',
+            schema: gitQueryRequestSchema,
+          },
+        },
+      ],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-git-ui/types#GitQueryResponse',
+        schema: gitQueryResponseSchema,
       },
     },
   ],

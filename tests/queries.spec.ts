@@ -1,0 +1,193 @@
+import { afterEach, describe, expect, it } from 'vitest'
+import { rm, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { realpath, stat } from 'node:fs/promises'
+import { createGitRunner } from '../src/host/git.ts'
+import { runQuery } from '../src/host/queries.ts'
+import { parseStatOutput } from '../src/host/parser.ts'
+import { normalizeConfig, type SnapshotDeps } from '../src/host/core.ts'
+import type { GitQueryRequest } from '../src/host/types.ts'
+import { addBareRemote, git, gitInit, makeTempDir, realSubprocess } from './helpers.ts'
+
+const temps: string[] = []
+async function tempDir(): Promise<string> {
+  const dir = await makeTempDir()
+  temps.push(dir)
+  return dir
+}
+afterEach(async () => {
+  await Promise.all(temps.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+})
+
+const CONFIG = normalizeConfig(undefined)
+
+function depsFor(cwd: string): SnapshotDeps {
+  return {
+    run: createGitRunner(realSubprocess(), CONFIG.timeoutMs, CONFIG.maxStatusBytes),
+    fs: { realpath, stat },
+    sessions: {
+      liveCwd: () => cwd,
+      persistedMeta: async () => ({ cwd }),
+    },
+  }
+}
+
+const request = (sessionId: string, query: GitQueryRequest['query']): GitQueryRequest => ({ sessionId, query })
+
+/** Three commits with known subjects; returns the dir. */
+async function repoWithCommits(): Promise<string> {
+  const dir = await tempDir()
+  await gitInit(dir)
+  await writeFile(join(dir, 'a.txt'), 'one\n')
+  git(dir, 'add', '.')
+  git(dir, 'commit', '-m', 'first commit')
+  await writeFile(join(dir, 'a.txt'), 'one\ntwo\n')
+  git(dir, 'add', '.')
+  git(dir, 'commit', '-m', 'second commit')
+  await writeFile(join(dir, 'b.txt'), 'three\n')
+  git(dir, 'add', '.')
+  git(dir, 'commit', '-m', 'third commit')
+  return dir
+}
+
+describe('runQuery — history', () => {
+  it('paginates newest-first with skip/limit and reports the total', async () => {
+    const dir = await repoWithCommits() // initial + 3 named commits = 4 total
+    const first = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 2, skip: 0 }))
+    expect(first.ok).toBe(true)
+    if (!first.ok) return
+    expect(first.value.kind).toBe('history')
+    if (first.value.kind !== 'history') return
+    expect(first.value.commits.map((c) => c.subject)).toEqual(['third commit', 'second commit'])
+    expect(first.value.total).toBe(4)
+
+    const second = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 2, skip: 2 }))
+    expect(second.ok).toBe(true)
+    if (!second.ok || second.value.kind !== 'history') return
+    expect(second.value.commits.map((c) => c.subject)).toEqual(['first commit', 'initial commit'])
+  })
+
+  it('clamps an oversized limit', async () => {
+    const dir = await repoWithCommits()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 9999, skip: 0 }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'history') return
+    expect(result.value.commits).toHaveLength(4)
+  })
+
+  it('returns an empty history for an unborn repository', async () => {
+    const dir = await tempDir()
+    await gitInit(dir, { commit: false })
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 50, skip: 0 }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'history') return
+    expect(result.value.commits).toEqual([])
+    expect(result.value.total).toBe(0)
+  })
+})
+
+describe('runQuery — diff', () => {
+  it('returns the worktree diff for a modified file', async () => {
+    const dir = await repoWithCommits()
+    await writeFile(join(dir, 'a.txt'), 'one\ntwo\nthree\n')
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: 'a.txt', base: 'worktree' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'diff') return
+    expect(result.value.text).toContain('diff --git a/a.txt b/a.txt')
+    expect(result.value.text).toContain('+three')
+  })
+
+  it('returns the staged diff with --cached semantics', async () => {
+    const dir = await repoWithCommits()
+    await writeFile(join(dir, 'a.txt'), 'one\nchanged\n')
+    git(dir, 'add', 'a.txt')
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: 'a.txt', base: 'staged' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'diff') return
+    expect(result.value.text).toContain('+changed')
+    expect(result.value.text).toContain('-two')
+  })
+
+  it('returns the HEAD diff (worktree + index combined)', async () => {
+    const dir = await repoWithCommits()
+    await writeFile(join(dir, 'a.txt'), 'one\ntwo\nthree\n')
+    git(dir, 'add', 'a.txt')
+    await writeFile(join(dir, 'a.txt'), 'one\ntwo\nthree\nfour\n')
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: 'a.txt', base: 'head' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'diff') return
+    expect(result.value.text).toContain('+three')
+    expect(result.value.text).toContain('+four')
+  })
+
+  it('rejects an unsafe path', async () => {
+    const dir = await repoWithCommits()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: '../etc/passwd', base: 'worktree' }))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.code).toBe('invalid-path')
+  })
+})
+
+describe('runQuery — diff-commit and show', () => {
+  it('returns the file diff introduced by a commit', async () => {
+    const dir = await repoWithCommits()
+    const second = git(dir, 'rev-parse', 'HEAD~1').trim()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff-commit', path: 'a.txt', ref: second }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'diff-commit') return
+    expect(result.value.text).toContain('+two')
+  })
+
+  it('returns commit metadata and file stats for show', async () => {
+    const dir = await repoWithCommits()
+    const head = git(dir, 'rev-parse', 'HEAD').trim()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'show', ref: head }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'show') return
+    expect(result.value.commit?.subject).toBe('third commit')
+    expect(result.value.stats).toEqual([{ path: 'b.txt', added: 1, deleted: 0 }])
+  })
+
+  it('rejects an invalid ref', async () => {
+    const dir = await repoWithCommits()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'show', ref: 'has space' }))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.code).toBe('invalid-name')
+  })
+})
+
+describe('runQuery — branches', () => {
+  it('lists local and remote branches with the current marker', async () => {
+    const dir = await repoWithCommits()
+    await addBareRemote(dir)
+    git(dir, 'checkout', '-b', 'feature/x')
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'branches' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'branches') return
+    expect(result.value.current).toBe('feature/x')
+    expect(result.value.local.map((b) => b.name).sort()).toEqual(['feature/x', 'main'])
+    expect(result.value.remote.some((b) => b.name === 'origin/main')).toBe(true)
+    // The symbolic origin/HEAD row is filtered out.
+    expect(result.value.remote.some((b) => b.name === 'origin/HEAD')).toBe(false)
+  })
+})
+
+describe('parseStatOutput', () => {
+  it('parses stat rows and skips summary/binary lines', () => {
+    const output = [
+      ' a.txt | 3 ++-',
+      ' "b c.txt" | 1 +',
+      ' img.png | Bin 0 -> 12 bytes',
+      ' 2 files changed, 4 insertions(+), 1 deletion(-)',
+    ].join('\n')
+    expect(parseStatOutput(output)).toEqual([
+      { path: 'a.txt', added: 2, deleted: 1 },
+      { path: 'b c.txt', added: 1, deleted: 0 },
+    ])
+  })
+
+  it('returns an empty list for no rows', () => {
+    expect(parseStatOutput('')).toEqual([])
+    expect(parseStatOutput('1 file changed, 1 insertion(+)')).toEqual([])
+  })
+})

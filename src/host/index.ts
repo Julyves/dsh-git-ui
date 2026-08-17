@@ -1,12 +1,12 @@
 /**
  * dsh-git-ui host half: the `gitInfo` Remote service.
  *
- * Cordis shell only — every behavior lives in `core.ts`/`actions.ts` behind
- * injected structural faces, so tests never need a cordis runtime. The class
- * is a plugin in its own right (class form), mounted by the bundle patch row
- * with the package name; the gateway exposes `gitInfo/snapshot` and
- * `gitInfo/run` through SRC discovery (`typertRemote` binding + `@Remote`
- * marker).
+ * Cordis shell only — every behavior lives in `core.ts`/`actions.ts`/
+ * `queries.ts` behind injected structural faces, so tests never need a
+ * cordis runtime. The class is a plugin in its own right (class form),
+ * mounted by the bundle patch row with the package name; the gateway exposes
+ * `gitInfo/snapshot`, `gitInfo/run` and `gitInfo/query` through SRC
+ * discovery (`typertRemote` binding + `@Remote` marker).
  */
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { Context } from '@deepseek-ai/cordis'
@@ -14,12 +14,14 @@ import { realpath, stat } from 'node:fs/promises'
 import { createGitRunner, type SubprocessLike } from './git.ts'
 import { normalizeConfig, snapshotForSession, type GitStatusConfig, type SnapshotDeps } from './core.ts'
 import { runAction } from './actions.ts'
-import type { GitActionResult, GitActionRequest, GitSnapshotRequest, GitSnapshotResult } from './types.ts'
+import { runQuery } from './queries.ts'
+import type { GitActionResult, GitActionRequest, GitQueryRequest, GitQueryResponse, GitSnapshotRequest, GitSnapshotResult } from './types.ts'
 
-export type { GitSnapshot, GitSnapshotResult, GitSnapshotFailure, GitSnapshotRequest, GitCommit, GitChange, GitAction, GitActionResult, GitActionRequest } from './types.ts'
+export type { GitSnapshot, GitSnapshotResult, GitSnapshotFailure, GitSnapshotRequest, GitCommit, GitChange, GitAction, GitActionResult, GitActionRequest, GitQuery, GitQueryResult, GitQueryRequest, GitQueryResponse, GitBranch, GitFileStat } from './types.ts'
 export { normalizeConfig, DEFAULT_CONFIG } from './core.ts'
-export { parseStatusOutput, parseLogOutput, parseBranchOutput } from './parser.ts'
-export { isSafePath, runAction } from './actions.ts'
+export { parseStatusOutput, parseLogOutput, parseBranchOutput, parseStatOutput } from './parser.ts'
+export { isSafePath, isValidBranchName, runAction } from './actions.ts'
+export { runQuery } from './queries.ts'
 
 /** Structural face of a live session header. */
 interface SessionLike {
@@ -91,6 +93,15 @@ export class GitStatusService extends TypertRemoteService {
       return { ok: false, error: { code: 'git-error', message: adapted.failure.detail } }
     }
     return runAction(adapted.deps, this.config, request)
+  }
+
+  @Remote('query')
+  async query(request: GitQueryRequest, signal?: AbortSignal): Promise<GitQueryResponse> {
+    const adapted = this.deps(signal)
+    if ('failure' in adapted) {
+      return { ok: false, error: { code: 'git-error', message: adapted.failure.detail } }
+    }
+    return runQuery(adapted.deps, this.config, request)
   }
 }
 

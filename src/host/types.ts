@@ -92,6 +92,9 @@ export type GitAction =
      * empty commits everything already staged. */
     readonly paths?: readonly string[]
   }
+  | { readonly kind: 'branch-create'; readonly name: string; readonly from?: string }
+  | { readonly kind: 'branch-checkout'; readonly name: string }
+  | { readonly kind: 'branch-delete'; readonly name: string; readonly force?: boolean }
 
 export type GitOperationErrorCode =
   | 'session-not-found'
@@ -99,6 +102,7 @@ export type GitOperationErrorCode =
   | 'path-not-found'
   | 'not-a-git-repo'
   | 'invalid-path'
+  | 'invalid-name'
   | 'git-error'
   | 'timeout'
 
@@ -110,4 +114,44 @@ export type GitActionResult =
 export interface GitActionRequest {
   readonly sessionId: string
   readonly action: GitAction
+}
+
+// ── Query endpoint (read-only inspections: history / diff / show / branches) ──
+
+/** One read-only query addressed by the `gitInfo/query` endpoint. */
+export type GitQuery =
+  | { readonly kind: 'history'; readonly limit: number; readonly skip: number }
+  | { readonly kind: 'diff'; readonly path: string; readonly base: 'worktree' | 'staged' | 'head' }
+  | { readonly kind: 'diff-commit'; readonly path: string; readonly ref: string }
+  | { readonly kind: 'show'; readonly ref: string }
+  | { readonly kind: 'branches' }
+
+/** One changed-file stat row from `git show --stat`. */
+export interface GitFileStat {
+  readonly path: string
+  readonly added: number
+  readonly deleted: number
+}
+
+/** One branch row from `git branch --format`. */
+export interface GitBranch {
+  readonly name: string
+  readonly shortHash: string | null
+}
+
+export type GitQueryResult =
+  | { readonly kind: 'history'; readonly commits: readonly GitCommit[]; readonly total: number }
+  | { readonly kind: 'diff'; readonly path: string; readonly text: string }
+  | { readonly kind: 'diff-commit'; readonly path: string; readonly ref: string; readonly text: string }
+  | { readonly kind: 'show'; readonly ref: string; readonly commit: GitCommit | null; readonly stats: readonly GitFileStat[] }
+  | { readonly kind: 'branches'; readonly current: string | null; readonly local: readonly GitBranch[]; readonly remote: readonly GitBranch[] }
+
+export type GitQueryResponse =
+  | { readonly ok: true; readonly value: GitQueryResult }
+  | { readonly ok: false; readonly error: { readonly code: GitOperationErrorCode; readonly message?: string } }
+
+/** Wire request of the `query` endpoint. */
+export interface GitQueryRequest {
+  readonly sessionId: string
+  readonly query: GitQuery
 }

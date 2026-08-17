@@ -45,7 +45,27 @@ function buildArgv(action: GitAction, root: string): { readonly argv: readonly (
       // IDE-style "commit selected files" semantics.
       return withPaths(['git', 'commit', '-m', message, '--'], action.paths, root)
     }
+    case 'branch-create': {
+      // Name validity is validated by runAction (invalid-name), not here.
+      const from = action.from === undefined || action.from === '' ? [] : [action.from]
+      return { argv: [['git', 'branch', action.name, ...from]] }
+    }
+    case 'branch-checkout':
+      return { argv: [['git', 'checkout', action.name]] }
+    case 'branch-delete':
+      return { argv: [['git', 'branch', action.force === true ? '-D' : '-d', action.name]] }
   }
+}
+
+/**
+ * A branch name is valid when it matches git's ref-name grammar at the level
+ * we care about: non-empty, ASCII ref chars only, no leading `-` (option
+ * injection guard, though argv never shells out), no `..` (path traversal of
+ * refs), no trailing `/`, and no double slashes.
+ */
+export function isValidBranchName(name: string): boolean {
+  if (name === '' || name.startsWith('-') || name.includes('..') || name.endsWith('/') || name.includes('//')) return false
+  return /^[A-Za-z0-9._/-]+$/.test(name)
 }
 
 /** Append validated repo-relative paths behind `--`. */
@@ -71,7 +91,7 @@ export function isSafePath(path: string, root: string): boolean {
 }
 
 /** Map a snapshot-flow failure (which may carry git-unavailable) onto the operation error shape. */
-function operationError(failure: Extract<Awaited<ReturnType<typeof resolveWorkspace>>, { ok: false }>['error']): GitActionResult & { ok: false } {
+export function operationError(failure: Extract<Awaited<ReturnType<typeof resolveWorkspace>>, { ok: false }>['error']): GitActionResult & { ok: false } {
   if (failure.code === 'git-unavailable') {
     return { ok: false, error: { code: 'git-error', message: failure.detail } }
   }
@@ -94,6 +114,14 @@ export async function runAction(
 
   if (request.action.kind === 'commit' && request.action.message.trim() === '') {
     return { ok: false, error: { code: 'git-error', message: 'commit message is empty' } }
+  }
+
+  const kind = request.action.kind
+  if (kind === 'branch-create' || kind === 'branch-checkout' || kind === 'branch-delete') {
+    const name = request.action.name
+    if (!isValidBranchName(name)) {
+      return { ok: false, error: { code: 'invalid-name', message: `invalid branch name: ${name}` } }
+    }
   }
 
   const built = buildArgv(request.action, root)

@@ -15,9 +15,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { JSX } from 'react'
 import { completedTurnCount, type TurnSignalSnapshot } from './turn-signal.ts'
-import type { GitObservable, GitView } from './controller.ts'
+import type { GitObservable, GitQueryOutcome, GitView } from './controller.ts'
 import { GitCenter } from './GitCenter.tsx'
-import type { GitAction, GitActionResult } from '../host/types.ts'
+import type { GitAction, GitActionResult, GitQueryRequest } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
 
@@ -35,6 +35,8 @@ export interface GitInjected {
   refresh: () => Promise<void>
   /** Execute one management action (host returns a fresh snapshot). */
   run: (action: GitAction) => Promise<GitActionResult>
+  /** Run one read-only query (history / diff / show / branches). */
+  query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
 }
 
 /** Selector hook shape the slot runtime binds from `hooks.git`. */
@@ -220,7 +222,7 @@ const VIEW_GUTTER = 8
  * The header utility entry: a branch pill that opens a portaled detail popup
  * and the Git center management panel.
  */
-export function GitPill({ useGit, useSession, refresh, run, t }: GitPillProps): JSX.Element | null {
+export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillProps): JSX.Element | null {
   // The selector hook requires a selector function (with-selector calls it
   // unconditionally); identity selection reads the whole view snapshot.
   const view = useGit((view) => view)
@@ -371,6 +373,7 @@ export function GitPill({ useGit, useSession, refresh, run, t }: GitPillProps): 
         onClose={() => setCenterOpen(false)}
         snapshot={display.snapshot}
         run={run}
+        query={query}
         t={t}
       />
     </span>

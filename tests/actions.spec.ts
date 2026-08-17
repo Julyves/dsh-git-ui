@@ -207,3 +207,72 @@ describe('runAction — failure codes', () => {
     if (!result.ok) expect(result.error.code).toBe('timeout')
   })
 })
+
+describe('runAction — branches', () => {
+  it('creates a branch from HEAD by default', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    const result = await runAction(depsFor(dir), CONFIG, request('s1', { kind: 'branch-create', name: 'feature/new' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.snapshot.branch).toBe('main') // still on main
+    expect(git(dir, 'branch', '--list', 'feature/new')).toContain('feature/new')
+  })
+
+  it('creates a branch from a named starting point', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    git(dir, 'checkout', '-b', 'base')
+    await runAction(depsFor(dir), CONFIG, request('s1', { kind: 'branch-create', name: 'derived', from: 'base' }))
+    expect(git(dir, 'branch', '--list', 'derived')).toContain('derived')
+  })
+
+  it('checks out an existing branch and refreshes the snapshot', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    git(dir, 'branch', 'other')
+    const result = await runAction(depsFor(dir), CONFIG, request('s1', { kind: 'branch-checkout', name: 'other' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.snapshot.branch).toBe('other')
+  })
+
+  it('surfaces a git error when checkout collides with a dirty tree', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    // Give `other` divergent content so the checkout really conflicts.
+    git(dir, 'checkout', '-b', 'other')
+    await writeFile(join(dir, 'readme.txt'), 'other version\n')
+    git(dir, 'add', '.')
+    git(dir, 'commit', '-m', 'other change')
+    git(dir, 'checkout', 'main')
+    await writeFile(join(dir, 'readme.txt'), 'dirty local change\n')
+    const result = await runAction(depsFor(dir), CONFIG, request('s1', { kind: 'branch-checkout', name: 'other' }))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.code).toBe('git-error')
+  })
+
+  it('deletes a merged branch safely and refuses the current branch', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    git(dir, 'branch', 'merged')
+    const deleted = await runAction(depsFor(dir), CONFIG, request('s1', { kind: 'branch-delete', name: 'merged' }))
+    expect(deleted.ok).toBe(true)
+    if (!deleted.ok) return
+    expect(git(dir, 'branch', '--list', 'merged')).toBe('')
+
+    const current = await runAction(depsFor(dir), CONFIG, request('s1', { kind: 'branch-delete', name: 'main' }))
+    expect(current.ok).toBe(false)
+    if (!current.ok) expect(current.error.code).toBe('git-error')
+  })
+
+  it('rejects invalid branch names with invalid-name', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    for (const name of ['-bad', 'a..b', 'bad//name', 'trailing/', 'has space', '']) {
+      const result = await runAction(depsFor(dir), CONFIG, request('s1', { kind: 'branch-create', name }))
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.error.code).toBe('invalid-name')
+    }
+  })
+})

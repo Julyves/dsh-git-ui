@@ -216,8 +216,12 @@ const globalCss = [
   '.dsh-git-ui__refresh:hover { color: var(--dsw-alias-state-business-primary); }',
   '.dsh-git-ui__refresh:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }',
   // Git center dialog: widen the platform Modal card (headless mode).
-  '.dsh-git-ui__center { width: min(880px, 100vw); max-height: min(720px, calc(100vh - 48px)); }',
+  '.dsh-git-ui__center { width: min(960px, 100vw); max-height: min(720px, calc(100vh - 48px)); }',
   '.dsh-git-ui__commit-input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  // System tab underline: 2px bar below the active tab.
+  '.dsh-git-ui__tab::after { content: ""; position: absolute; right: 0; bottom: 1px; left: 0; height: 2px; border-radius: 2px; background: transparent; }',
+  '.dsh-git-ui__tab--active::after { background: var(--dsw-alias-state-business-primary); }',
+  '.dsh-git-ui__branch-input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
 ].join('\n')
 
 /** Ensure the global interaction styles exist (idempotent; browser only). */
@@ -379,4 +383,252 @@ export const feedbackClose: CSSProperties = {
   fontSize: 13,
   lineHeight: '18px',
   opacity: 0.7,
+}
+
+// ── Git center tabs (system tab spec: 13/16/500, 2px indicator) ───────────
+
+export const tabs: CSSProperties = {
+  display: 'flex',
+  gap: 24,
+  padding: '0 20px',
+  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+  flex: 'none',
+}
+
+export const tab: CSSProperties = {
+  position: 'relative',
+  padding: '0 0 11px',
+  border: 'none',
+  background: 'transparent',
+  fontSize: 13,
+  lineHeight: '16px',
+  fontWeight: 500,
+  color: 'var(--dsw-alias-label-tertiary)',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+}
+
+/** Active-tab underline rides a pseudo-element (see global CSS). */
+export const tabActive: CSSProperties = {
+  color: 'var(--dsw-alias-state-business-primary)',
+}
+
+// ── History tab ───────────────────────────────────────────────────────────
+
+export const historyLayout: CSSProperties = {
+  display: 'flex',
+  gap: 14,
+  flex: 1,
+  minHeight: 0,
+}
+
+export const historyList: CSSProperties = {
+  flex: '0 0 320px',
+  overflowY: 'auto',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 2,
+  paddingRight: 4,
+  borderRight: '1px solid var(--dsw-alias-border-l1)',
+}
+
+export const commitRowButton: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 2,
+  width: '100%',
+  textAlign: 'left',
+  border: 'none',
+  background: 'transparent',
+  padding: '7px 10px',
+  borderRadius: 8,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+}
+
+export const commitRowSelected: CSSProperties = {
+  background: 'var(--dsw-alias-interactive-bg-hover)',
+}
+
+export const commitSubjectLine: CSSProperties = {
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontSize: 13,
+  lineHeight: '18px',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+export const commitMetaLine: CSSProperties = {
+  display: 'flex',
+  gap: 8,
+  fontSize: 11,
+  lineHeight: '16px',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+export const historyDetail: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  overflowY: 'auto',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+}
+
+export const commitDetailHeader: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+  padding: '2px 0 8px',
+  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+}
+
+export const commitDetailSubject: CSSProperties = {
+  fontSize: 14,
+  lineHeight: '22px',
+  fontWeight: 600,
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+export const commitDetailMeta: CSSProperties = {
+  fontSize: 12,
+  lineHeight: '18px',
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
+export const statRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '3px 8px',
+  borderRadius: 8,
+  cursor: 'pointer',
+  fontSize: 13,
+  lineHeight: '20px',
+}
+
+export const statPath: CSSProperties = {
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  flex: 1,
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+export const statCounts: CSSProperties = {
+  display: 'inline-flex',
+  gap: 6,
+  fontSize: 11,
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  flex: 'none',
+}
+
+// ── Diff view ─────────────────────────────────────────────────────────────
+
+export const diffContainer: CSSProperties = {
+  overflowX: 'auto',
+  borderRadius: 8,
+  border: '1px solid var(--dsw-alias-border-l1)',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  fontSize: 12,
+  lineHeight: '18px',
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+}
+
+export const diffLine: CSSProperties = {
+  display: 'block',
+  whiteSpace: 'pre',
+  padding: '0 10px',
+  minWidth: 'max-content',
+}
+
+export const diffLineAdd: CSSProperties = {
+  background: 'var(--dsw-alias-state-success-secondary)',
+  color: 'var(--dsw-alias-state-success-primary)',
+}
+
+export const diffLineDel: CSSProperties = {
+  background: 'var(--dsw-alias-state-error-secondary)',
+  color: 'var(--dsw-alias-state-error-primary)',
+}
+
+export const diffLineHunk: CSSProperties = {
+  background: 'var(--dsw-alias-interactive-bg-hover)',
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
+export const diffLineMeta: CSSProperties = {
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+// ── Branches tab ──────────────────────────────────────────────────────────
+
+export const branchCreateRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '8px 0',
+  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+}
+
+export const branchNameInput: CSSProperties = {
+  flex: 1,
+  minWidth: 120,
+  border: '1px solid var(--dsw-alias-border-l1)',
+  borderRadius: 8,
+  padding: '5px 10px',
+  fontSize: 13,
+  lineHeight: '20px',
+  fontFamily: 'inherit',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+export const branchSelect: CSSProperties = {
+  border: '1px solid var(--dsw-alias-border-l1)',
+  borderRadius: 8,
+  padding: '5px 8px',
+  fontSize: 13,
+  lineHeight: '20px',
+  fontFamily: 'inherit',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  color: 'var(--dsw-alias-label-primary)',
+  maxWidth: 180,
+}
+
+export const branchRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '4px 8px',
+  borderRadius: 8,
+  fontSize: 13,
+  lineHeight: '20px',
+}
+
+export const branchName: CSSProperties = {
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  flex: 1,
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+export const branchCurrent: CSSProperties = {
+  color: 'var(--dsw-alias-state-business-primary)',
+  fontWeight: 600,
+}
+
+export const branchHash: CSSProperties = {
+  fontSize: 11,
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  flex: 'none',
+}
+
+export const branchMark: CSSProperties = {
+  flex: 'none',
+  color: 'var(--dsw-alias-state-business-primary)',
+  fontSize: 12,
 }
