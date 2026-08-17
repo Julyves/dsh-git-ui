@@ -151,6 +151,7 @@ export type GitQuery =
     /** 日期下限（--since，如 '7 days ago'）。 */
     readonly since?: string
   }
+  | { readonly kind: 'diff'; readonly path: string; readonly base: 'worktree' | 'staged' }
   | { readonly kind: 'show'; readonly ref: string }
   | { readonly kind: 'branches' }
   | { readonly kind: 'tags' }
@@ -170,6 +171,7 @@ export interface GitBranch {
 
 export type GitQueryResult =
   | { readonly kind: 'history'; readonly commits: readonly GraphCommit[]; readonly total: number }
+  | { readonly kind: 'diff'; readonly path: string; readonly text: string }
   | {
     readonly kind: 'show'
     readonly ref: string

@@ -8,7 +8,7 @@
  */
 import { resolveWorkspace, runCommand, type GitStatusConfig, type SnapshotDeps } from './core.ts'
 import { parseBranchOutput, parseGraphLogOutput, parseNameStatusOutput, parseShowMeta } from './parser.ts'
-import { operationError } from './actions.ts'
+import { isSafePath, operationError } from './actions.ts'
 import type { GitBranch, GitQueryRequest, GitQueryResponse } from './types.ts'
 
 /** Machine-readable log format for show queries (no parents). */
@@ -44,6 +44,8 @@ export async function runQuery(
   switch (query.kind) {
     case 'history':
       return historyQuery(deps, root, query)
+    case 'diff':
+      return diffQuery(deps, root, query.path, query.base)
     case 'show':
       return showQuery(deps, root, query.ref)
     case 'branches':
@@ -113,6 +115,36 @@ async function historyQuery(
   }
 
   return { ok: true, value: { kind: 'history', commits: parseGraphLogOutput(log.run.stdout, remotes), total } }
+}
+
+/**
+ * 单文件差异（变更界面对照查看用）。
+ * staged = --cached；worktree = 工作区对索引；
+ * 未版本管理文件 worktree 差异为空 → 回退 --no-index 与 /dev/null 对比（退出码 1 视为有差异的成功）。
+ */
+async function diffQuery(
+  deps: SnapshotDeps,
+  root: string,
+  path: string,
+  base: 'worktree' | 'staged',
+): Promise<GitQueryResponse> {
+  if (!isSafePath(path, root)) return { ok: false, error: { code: 'invalid-path', message: `unsafe path: ${path}` } }
+  const argv = base === 'staged'
+    ? ['git', 'diff', '--cached', '--', path]
+    : ['git', 'diff', '--', path]
+  const run = await runCommand(deps.run, argv, root, 'diff', deps.signal)
+  if ('failure' in run) return { ok: false, error: operationError(run.failure).error }
+  if (run.run.timedOut) return { ok: false, error: { code: 'timeout' } }
+  if (run.run.exitCode !== 0) return gitError('diff', run.run.stderr, run.run.stdout)
+  if (run.run.stdout !== '' || base === 'staged') {
+    return { ok: true, value: { kind: 'diff', path, text: run.run.stdout } }
+  }
+  // 空差异：可能是未版本管理文件——与 /dev/null 对比生成全增差异。
+  const ni = await runCommand(deps.run, ['git', 'diff', '--no-index', '--', '/dev/null', path], root, 'diff --no-index', deps.signal)
+  if ('failure' in ni) return { ok: false, error: operationError(ni.failure).error }
+  if (ni.run.timedOut) return { ok: false, error: { code: 'timeout' } }
+  if (ni.run.exitCode !== 0 && ni.run.exitCode !== 1) return gitError('diff', ni.run.stderr, ni.run.stdout)
+  return { ok: true, value: { kind: 'diff', path, text: ni.run.stdout } }
 }
 
 async function showQuery(deps: SnapshotDeps, root: string, ref: string): Promise<GitQueryResponse> {

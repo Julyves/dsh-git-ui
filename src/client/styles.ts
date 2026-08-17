@@ -315,16 +315,6 @@ export const changeCheckbox: CSSProperties = {
   accentColor: 'var(--dsw-alias-state-business-primary)',
 }
 
-export const changePathText: CSSProperties = {
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  flex: 1,
-  color: 'var(--dsw-alias-label-primary)',
-  fontSize: 13,
-  lineHeight: '20px',
-}
-
 export const toolRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -399,6 +389,107 @@ export const feedbackClose: CSSProperties = {
   fontSize: 13,
   lineHeight: '18px',
   opacity: 0.7,
+}
+
+// ── Changes 双栏布局（IDEA 式：左列表 + 右对照）─────────────────────
+
+export const changesLayout: CSSProperties = {
+  display: 'flex',
+  gap: 12,
+  flex: 1,
+  minHeight: 0,
+}
+
+export const changesLeft: CSSProperties = {
+  flex: 'none',
+  width: 340,
+  minWidth: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  minHeight: 0,
+}
+
+export const changesList: CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  overflowY: 'auto',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 1,
+}
+
+export const changesRight: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  borderLeft: '1px solid var(--dsw-alias-border-l1)',
+  paddingLeft: 12,
+}
+
+/** 变更行目录部分（弱化显示）。 */
+export const changeDir: CSSProperties = {
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  flex: 1,
+  minWidth: 0,
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontSize: 11,
+}
+
+// ── 并排差异对照 ───────────────────────────────────────────────────────
+
+export const sbsContainer: CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  overflow: 'auto',
+  border: '1px solid var(--dsw-alias-border-l1)',
+  borderRadius: 8,
+  background: 'var(--dsw-alias-bg-layer-2)',
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSize: 11,
+  lineHeight: '18px',
+}
+
+export const sbsRow: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr',
+}
+
+export const sbsCell: CSSProperties = {
+  display: 'flex',
+  gap: 8,
+  padding: '0 8px',
+  whiteSpace: 'pre',
+  minWidth: 0,
+}
+
+export const sbsCellRight: CSSProperties = {
+  borderLeft: '1px solid var(--dsw-alias-border-l1)',
+}
+
+export const sbsNum: CSSProperties = {
+  flex: 'none',
+  width: 32,
+  textAlign: 'right',
+  color: 'var(--dsw-alias-label-tertiary)',
+  userSelect: 'none',
+}
+
+export const sbsDel: CSSProperties = {
+  background: 'var(--dsw-alias-state-error-secondary)',
+  color: 'var(--dsw-alias-state-error-primary)',
+}
+
+export const sbsAdd: CSSProperties = {
+  background: 'var(--dsw-alias-state-success-secondary)',
+  color: 'var(--dsw-alias-state-success-primary)',
+}
+
+export const sbsEmpty: CSSProperties = {
+  background: 'var(--dsw-alias-bg-layer-1)',
 }
 
 // ── Git center tabs (system tab spec: 13/16/500, 2px indicator) ───────────
@@ -713,13 +804,14 @@ export const paneHeadButton: CSSProperties = {
   color: 'var(--dsw-alias-label-secondary)',
 }
 
-/** 拖拽分割条（悬停淡底提示可拖）。 */
+/** 拖拽分割条：常驻发丝线（暗态可见）+ 悬停淡底提示可拖。 */
 export const splitter: CSSProperties = {
   flex: 'none',
   width: 5,
   marginLeft: -3,
   cursor: 'col-resize',
   background: 'transparent',
+  borderLeft: '1px solid var(--dsw-alias-border-l2)',
   zIndex: 1,
 }
 
@@ -729,6 +821,7 @@ export const splitterRow: CSSProperties = {
   marginTop: -3,
   cursor: 'row-resize',
   background: 'transparent',
+  borderTop: '1px solid var(--dsw-alias-border-l2)',
   zIndex: 1,
 }
 

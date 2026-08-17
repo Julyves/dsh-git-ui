@@ -200,6 +200,44 @@ describe('runQuery — history', () => {
   })
 })
 
+describe('runQuery — diff', () => {
+  it('returns the worktree diff for a modified file', async () => {
+    const dir = await repoWithCommits()
+    await writeFile(join(dir, 'a.txt'), 'one\ntwo\nthree\n')
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: 'a.txt', base: 'worktree' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'diff') return
+    expect(result.value.text).toContain('+three')
+  })
+
+  it('returns the staged diff with --cached semantics', async () => {
+    const dir = await repoWithCommits()
+    await writeFile(join(dir, 'a.txt'), 'one\nchanged\n')
+    git(dir, 'add', 'a.txt')
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: 'a.txt', base: 'staged' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'diff') return
+    expect(result.value.text).toContain('+changed')
+    expect(result.value.text).toContain('-two')
+  })
+
+  it('returns an all-add diff for unversioned files via --no-index', async () => {
+    const dir = await repoWithCommits()
+    await writeFile(join(dir, 'untracked.txt'), 'hello\n')
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: 'untracked.txt', base: 'worktree' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'diff') return
+    expect(result.value.text).toContain('+hello')
+  })
+
+  it('rejects an unsafe path', async () => {
+    const dir = await repoWithCommits()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: '../etc/passwd', base: 'worktree' }))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.code).toBe('invalid-path')
+  })
+})
+
 describe('runQuery — show', () => {
   it('returns commit metadata and file stats for show', async () => {
     const dir = await repoWithCommits()

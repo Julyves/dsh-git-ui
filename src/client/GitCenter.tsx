@@ -27,6 +27,7 @@ import type { GitQueryOutcome } from './controller.ts'
 import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph.ts'
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
+import { buildSideBySide, type SideCell } from './side-by-side.ts'
 import { BranchIcon, ChevronIcon, CollapseAllIcon, ExpandAllIcon, FileIcon, FolderIcon, StarIcon, TagIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
@@ -131,7 +132,7 @@ export function GitCenter({
 
           {/* 三标签保持挂载、display 切换：保留各自状态（选中/分页/分支列表），与 IDE 行为一致。 */}
           <div style={tab === 'changes' ? { display: 'contents' } : { display: 'none' }}>
-            <ChangesTab snapshot={snapshot} busy={busy} execute={execute} t={t} />
+            <ChangesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} />
           </div>
           <div style={tab === 'history' ? { display: 'contents' } : { display: 'none' }}>
             <HistoryTab query={query} t={t} />
@@ -148,16 +149,22 @@ export function GitCenter({
 // ── Changes tab ───────────────────────────────────────────────────────────
 
 function ChangesTab({
-  snapshot, busy, execute, t,
+  snapshot, busy, execute, query, t,
 }: {
   snapshot: GitSnapshot
   busy: boolean
   execute: (action: GitAction, successText: string) => Promise<boolean>
+  query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
   t: (key: GitKey) => string
 }): JSX.Element {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [message, setMessage] = useState('')
   const [armed, setArmed] = useState<string | 'all' | null>(null)
+  /** 当前对照查看的文件（base 取决于暂存态）。 */
+  const [diffSel, setDiffSel] = useState<{ path: string; base: 'worktree' | 'staged' } | null>(null)
+  const [diffText, setDiffText] = useState<string | null>(null)
+  const [diffLoading, setDiffLoading] = useState(false)
+  const diffSeq = useRef(0)
 
   useEffect(() => {
     if (armed === null) return
@@ -165,9 +172,10 @@ function ChangesTab({
     return () => clearTimeout(timer)
   }, [armed])
 
-  const staged = useMemo(() => snapshot.changes.filter((c) => c.staged), [snapshot])
-  const unstaged = useMemo(() => snapshot.changes.filter((c) => !c.staged && c.status !== 'untracked'), [snapshot])
+  const tracked = useMemo(() => snapshot.changes.filter((c) => c.status !== 'untracked'), [snapshot])
   const untracked = useMemo(() => snapshot.changes.filter((c) => c.status === 'untracked'), [snapshot])
+  const staged = useMemo(() => tracked.filter((c) => c.staged), [tracked])
+  const unstaged = useMemo(() => tracked.filter((c) => !c.staged), [tracked])
   const hasTrackedChanges = staged.length + unstaged.length > 0
 
   const toggle = (path: string): void => {
@@ -177,6 +185,17 @@ function ChangesTab({
       else next.add(path)
       return next
     })
+  }
+
+  const showDiff = async (path: string, base: 'worktree' | 'staged'): Promise<void> => {
+    const seq = ++diffSeq.current
+    setDiffSel({ path, base })
+    setDiffText(null)
+    setDiffLoading(true)
+    const outcome = await query({ kind: 'diff', path, base })
+    if (seq !== diffSeq.current) return
+    setDiffLoading(false)
+    setDiffText(outcome.ok && outcome.value.kind === 'diff' ? outcome.value.text : null)
   }
 
   const commit = (): void => {
@@ -201,97 +220,107 @@ function ChangesTab({
   }
 
   return (
-    <>
-      <div style={css.toolRow}>
-        <Button size="sm" disabled={busy || (unstaged.length === 0 && untracked.length === 0)} onClick={() => void execute({ kind: 'stage-all' }, t('center.done'))}>
-          {t('center.stageAll')}
-        </Button>
-        <Button size="sm" disabled={busy || staged.length === 0} onClick={() => void execute({ kind: 'unstage-all' }, t('center.done'))}>
-          {t('center.unstageAll')}
-        </Button>
-        <Button
-          size="sm"
-          disabled={busy || !hasTrackedChanges}
-          onClick={() => {
-            if (armed === 'all') {
-              void execute({ kind: 'discard-all' }, t('center.done'))
-            } else {
-              setArmed((prev) => (prev === 'all' ? null : 'all'))
-            }
-          }}
-        >
-          {armed === 'all' ? t('center.confirmDiscard') : t('center.discardAll')}
-        </Button>
-      </div>
-
-      {snapshot.changes.length === 0
-        ? <div style={css.emptyNote}>{t('center.empty')}</div>
-        : (
-          <>
-            {staged.length > 0 && (
-              <ChangeGroup
-                title={t('center.staged')}
-                changes={staged}
-                checked={selected}
-                busy={busy}
-                armed={armed}
-                rowActions={rowActions}
-                t={t}
-              />
-            )}
-            {unstaged.length > 0 && (
-              <ChangeGroup
-                title={t('center.unstaged')}
-                changes={unstaged}
-                checked={selected}
-                busy={busy}
-                armed={armed}
-                rowActions={rowActions}
-                t={t}
-              />
-            )}
-            {untracked.length > 0 && (
-              <ChangeGroup
-                title={t('center.untracked')}
-                changes={untracked}
-                checked={selected}
-                busy={busy}
-                armed={armed}
-                rowActions={rowActions}
-                t={t}
-              />
-            )}
-          </>
-        )}
-
-      <div style={css.commitBox}>
-        <textarea
-          className="dsh-git-ui__commit-input"
-          style={css.commitInput}
-          placeholder={t('center.commitMessage')}
-          value={message}
-          disabled={busy}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) commit()
-          }}
-        />
-        <div style={css.commitFooter}>
-          <span style={css.commitHint}>
-            {selected.size > 0 ? t('center.commitSelected').replace('{count}', String(selected.size)) : t('center.commitHint')}
-          </span>
-          <Button variant="primary" size="sm" disabled={busy || message.trim() === ''} onClick={commit}>
-            {busy ? t('center.busy') : t('center.commit')}
+    <div style={css.changesLayout}>
+      <div style={css.changesLeft}>
+        <div style={css.toolRow}>
+          <Button size="sm" disabled={busy || (unstaged.length === 0 && untracked.length === 0)} onClick={() => void execute({ kind: 'stage-all' }, t('center.done'))}>
+            {t('center.stageAll')}
+          </Button>
+          <Button size="sm" disabled={busy || staged.length === 0} onClick={() => void execute({ kind: 'unstage-all' }, t('center.done'))}>
+            {t('center.unstageAll')}
+          </Button>
+          <Button
+            size="sm"
+            disabled={busy || !hasTrackedChanges}
+            onClick={() => {
+              if (armed === 'all') {
+                void execute({ kind: 'discard-all' }, t('center.done'))
+              } else {
+                setArmed((prev) => (prev === 'all' ? null : 'all'))
+              }
+            }}
+          >
+            {armed === 'all' ? t('center.confirmDiscard') : t('center.discardAll')}
           </Button>
         </div>
+        <div style={css.changesList}>
+          {snapshot.changes.length === 0
+            ? <div style={css.emptyNote}>{t('center.empty')}</div>
+            : (
+              <>
+                <div style={css.groupTitle}>{t('center.changes')}</div>
+                {tracked.map((change) => (
+                  <ChangeRow
+                    key={change.path}
+                    change={change}
+                    checked={selected.has(change.path)}
+                    busy={busy}
+                    armed={armed}
+                    rowActions={rowActions}
+                    onShowDiff={(p, b) => void showDiff(p, b)}
+                    t={t}
+                  />
+                ))}
+                {untracked.length > 0 && <div style={css.groupTitle}>{t('center.untrackedFiles')}</div>}
+                {untracked.map((change) => (
+                  <ChangeRow
+                    key={change.path}
+                    change={change}
+                    checked={selected.has(change.path)}
+                    busy={busy}
+                    armed={armed}
+                    rowActions={rowActions}
+                    onShowDiff={(p, b) => void showDiff(p, b)}
+                    t={t}
+                  />
+                ))}
+              </>
+            )}
+        </div>
+        <div style={css.commitBox}>
+          <textarea
+            className="dsh-git-ui__commit-input"
+            style={css.commitInput}
+            placeholder={t('center.commitMessage')}
+            value={message}
+            disabled={busy}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) commit()
+            }}
+          />
+          <div style={css.commitFooter}>
+            <span style={css.commitHint}>
+              {selected.size > 0 ? t('center.commitSelected').replace('{count}', String(selected.size)) : t('center.commitHint')}
+            </span>
+            <Button variant="primary" size="sm" disabled={busy || message.trim() === ''} onClick={commit}>
+              {busy ? t('center.busy') : t('center.commit')}
+            </Button>
+          </div>
+        </div>
       </div>
-    </>
+      <div style={css.changesRight}>
+        {diffSel === null
+          ? <div style={css.rightEmptyZone}>{t('center.selectFileDiff')}</div>
+          : (
+            <>
+              <div style={css.toolRow}>
+                <span style={css.commitHint} title={diffSel.path}>{diffSel.path}</span>
+                <Button size="sm" aria-label={t('center.close')} onClick={() => { diffSeq.current += 1; setDiffSel(null); setDiffText(null) }}>✕</Button>
+              </div>
+              {diffLoading
+                ? <div style={css.emptyNote}>{t('center.loading')}</div>
+                : <DiffSideBySide text={diffText ?? ''} t={t} />}
+            </>
+          )}
+      </div>
+    </div>
   )
 }
 
-/** One change row; clicking the path opens the inline diff preview. */
+/** 变更行：复选 + 状态芯片 + 文件名(状态着色) + 目录弱化 + 操作按钮；点击文件名开对照。 */
 function ChangeRow({
-  change, checked, busy, armed, rowActions, t,
+  change, checked, busy, armed, rowActions, onShowDiff, t,
 }: {
   change: GitChange
   checked: boolean
@@ -303,9 +332,13 @@ function ChangeRow({
     onUnstage: (path: string) => void
     onDiscard: (path: string) => void
   }
+  onShowDiff: (path: string, base: 'worktree' | 'staged') => void
   t: (key: GitKey) => string
 }): JSX.Element {
   const untracked = change.status === 'untracked'
+  const slash = change.path.lastIndexOf('/')
+  const name = slash === -1 ? change.path : change.path.slice(slash + 1)
+  const dir = slash === -1 ? '' : change.path.slice(0, slash)
   return (
     <div className="dsh-git-ui__row" style={css.centerRow}>
       <input
@@ -319,8 +352,20 @@ function ChangeRow({
       <span style={{ ...css.changeChip, ...(css.chipStyles[change.status] ?? css.chipStyles.untracked) }} title={change.status}>
         {CHIP_LETTERS[change.status] ?? '•'}
       </span>
-      {/* 路径仅展示变更清单；具体差异引导用户至 IDE 查看（插件定位）。 */}
-      <span style={css.changePathText} title={change.path}>{change.path}</span>
+      <button
+        type="button"
+        style={{
+          border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, fontFamily: 'inherit',
+          fontSize: 13, lineHeight: '20px', textAlign: 'left',
+          flex: 'none', maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          color: css.statusTextColor[change.status] ?? 'var(--dsw-alias-label-primary)',
+        }}
+        title={change.path}
+        onClick={() => onShowDiff(change.path, change.staged ? 'staged' : 'worktree')}
+      >
+        {name}
+      </button>
+      {dir !== '' && <span style={css.changeDir}>{dir}</span>}
       {change.staged
         ? <Button size="sm" disabled={busy} onClick={() => rowActions.onUnstage(change.path)}>{t('center.unstage')}</Button>
         : <Button size="sm" disabled={busy} onClick={() => rowActions.onStage(change.path)}>{t('center.stage')}</Button>}
@@ -333,32 +378,30 @@ function ChangeRow({
   )
 }
 
-function ChangeGroup({
-  title, changes, checked, busy, armed, rowActions, t,
-}: {
-  title: string
-  changes: readonly GitChange[]
-  checked: ReadonlySet<string>
-  busy: boolean
-  armed: string | 'all' | null
-  rowActions: Parameters<typeof ChangeRow>[0]['rowActions']
-  t: (key: GitKey) => string
-}): JSX.Element {
+/** 并排差异对照查看器（IDEA 式：左变更前/右变更后，行号 + 状态着色）。 */
+function DiffSideBySide({ text, t }: { text: string; t: (key: GitKey) => string }): JSX.Element {
+  const rows = useMemo(() => buildSideBySide(text), [text])
+  if (rows.length === 0) return <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
+  const cellStyle = (cell: SideCell, right: boolean): CSSProperties => ({
+    ...css.sbsCell,
+    ...(right ? css.sbsCellRight : {}),
+    ...(cell.kind === 'del' ? css.sbsDel : cell.kind === 'add' ? css.sbsAdd : cell.kind === 'empty' ? css.sbsEmpty : {}),
+  })
   return (
-    <>
-      <div style={css.groupTitle}>{title}</div>
-      {changes.map((change) => (
-        <ChangeRow
-          key={change.path}
-          change={change}
-          checked={checked.has(change.path)}
-          busy={busy}
-          armed={armed}
-          rowActions={rowActions}
-          t={t}
-        />
+    <div style={css.sbsContainer}>
+      {rows.map((row, i) => (
+        <div key={i} style={css.sbsRow}>
+          <span style={cellStyle(row.left, false)}>
+            <span style={css.sbsNum}>{row.left.num ?? ''}</span>
+            {row.left.text}
+          </span>
+          <span style={cellStyle(row.right, true)}>
+            <span style={css.sbsNum}>{row.right.num ?? ''}</span>
+            {row.right.text}
+          </span>
+        </div>
       ))}
-    </>
+    </div>
   )
 }
 
@@ -543,7 +586,7 @@ function HistoryTab({
 
   return (
     <div style={css.historyLayout}>
-        <div style={{ ...css.paneSide, width: leftW, borderRight: '1px solid var(--dsw-alias-border-l2)' }}>
+        <div style={{ ...css.paneSide, width: leftW, borderRight: '1px solid var(--dsw-alias-border-l2)', borderRadius: '12px 0 0 12px' }}>
           <HistoryFilterTree
             tree={tree}
             filter={filter.ref === null ? { kind: 'all' } : { kind: 'ref', name: filter.ref }}
@@ -635,7 +678,7 @@ function HistoryTab({
           </div>
         </div>
         <Splitter kind="col" onDrag={(dx) => setRightW((w) => clampNum(w - dx, 260, 560))} />
-        <div style={{ ...css.paneSide, width: rightW, borderLeft: '1px solid var(--dsw-alias-border-l2)' }}>
+        <div style={{ ...css.paneSide, width: rightW, borderLeft: '1px solid var(--dsw-alias-border-l2)', borderRadius: '0 12px 12px 0' }}>
           <div style={css.paneHead}>
             <span style={css.commitHint}>{t('right.files')}</span>
             <span style={{ flex: 1 }} />
