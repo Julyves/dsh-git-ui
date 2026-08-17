@@ -7,7 +7,7 @@
  * against the repository root.
  */
 import { resolveWorkspace, runCommand, type GitStatusConfig, type SnapshotDeps } from './core.ts'
-import { parseBranchOutput, parseGraphLogOutput, parseShowMeta, parseStatOutput } from './parser.ts'
+import { parseBranchOutput, parseGraphLogOutput, parseNameStatusOutput, parseShowMeta } from './parser.ts'
 import { operationError } from './actions.ts'
 import type { GitBranch, GitQueryRequest, GitQueryResponse } from './types.ts'
 
@@ -117,10 +117,10 @@ async function historyQuery(
 
 async function showQuery(deps: SnapshotDeps, root: string, ref: string): Promise<GitQueryResponse> {
   if (!isValidRef(ref)) return { ok: false, error: { code: 'invalid-name', message: `invalid ref: ${ref}` } }
-  // -s 仅输出格式块：%B 可多行，独立调用避免与 stat 块解析歧义。
+  // -s 仅输出格式块：%b 为排除首段落后的正文，独立调用避免解析歧义。
   const meta = await runCommand(
     deps.run,
-    ['git', 'show', '-s', `--format=${LOG_FORMAT}%x1f%B`, ref],
+    ['git', 'show', '-s', `--format=${LOG_FORMAT}%x1f%b`, ref],
     root,
     'show',
     deps.signal,
@@ -131,9 +131,9 @@ async function showQuery(deps: SnapshotDeps, root: string, ref: string): Promise
 
   const stat = await runCommand(
     deps.run,
-    ['git', 'show', '--format=', '--stat', ref],
+    ['git', '-c', 'core.quotePath=false', 'show', '--format=', '--name-status', '-z', ref],
     root,
-    'show --stat',
+    'show --name-status',
     deps.signal,
   )
   if ('failure' in stat) return { ok: false, error: operationError(stat.failure).error }
@@ -148,7 +148,7 @@ async function showQuery(deps: SnapshotDeps, root: string, ref: string): Promise
       ref,
       commit: parsed?.commit ?? null,
       body: parsed?.body ?? '',
-      stats: parseStatOutput(stat.run.stdout),
+      stats: parseNameStatusOutput(stat.run.stdout),
     },
   }
 }

@@ -209,7 +209,21 @@ describe('runQuery — show', () => {
     expect(result.ok).toBe(true)
     if (!result.ok || result.value.kind !== 'show') return
     expect(result.value.commit?.subject).toBe('third commit')
-    expect(result.value.stats).toEqual([{ path: 'b.txt', added: 1, deleted: 0 }])
+    expect(result.value.stats).toEqual([{ path: 'b.txt', status: 'added' }])
+  })
+
+  it('returns raw UTF-8 paths for non-ASCII file names (no C-style quoting)', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    await writeFile(join(dir, '产品文档.md'), '内容\n')
+    git(dir, 'add', '.')
+    git(dir, 'commit', '-m', 'add chinese doc')
+    const head = git(dir, 'rev-parse', 'HEAD').trim()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'show', ref: head }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'show') return
+    // 旧 --stat 会输出 \346\226\207 八进制转义；name-status -z 必须原样返回。
+    expect(result.value.stats).toEqual([{ path: '产品文档.md', status: 'added' }])
   })
 
   it('returns the full commit body for multi-line messages', async () => {

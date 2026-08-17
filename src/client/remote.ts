@@ -121,7 +121,7 @@ export const gitQuerySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('authors') }),
 ])
 
-const gitFileStatSchema = z.object({ path: z.string(), added: z.number(), deleted: z.number() })
+const gitFileStatSchema = z.object({ path: z.string(), status: z.enum(['added', 'modified', 'deleted', 'renamed', 'untracked', 'conflicted', 'typechange']) })
 const gitBranchSchema = z.object({ name: z.string(), shortHash: z.string().nullable() })
 
 export const gitQueryResultSchema = z.discriminatedUnion('kind', [

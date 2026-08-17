@@ -218,19 +218,15 @@ export function parseDecorations(decorations: string, remotes: readonly string[]
 }
 
 /**
- * 解析 `git show -s --format=%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%B` 输出：
- * 前五个字段为机器可读元数据，第六字段起为 %B 原始报文
- * （首行即 subject，其后空行 + 正文）。
+ * 解析 `git show -s --format=%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%b` 输出：
+ * 前五个字段为机器可读元数据，第六字段起为 %b 正文
+ * （%b 已排除 subject 首段落，天然无重复展示问题）。
  */
 export function parseShowMeta(output: string): { readonly commit: GitCommit; readonly body: string } | null {
   const trimmed = output.trimEnd()
   if (trimmed === '') return null
   const [hash, shortHash, subject, author, dateIso, ...bodyParts] = trimmed.split(LOG_SEP)
   if (hash === undefined || hash === '') return null
-  const bodyLines = bodyParts.join(LOG_SEP).split('\n')
-  // %B 首行即 subject 行：去掉它与随后空行，余下为正文。
-  let start = 1
-  while (start < bodyLines.length && (bodyLines[start] ?? '').trim() === '') start += 1
   return {
     commit: {
       hash,
@@ -239,8 +235,45 @@ export function parseShowMeta(output: string): { readonly commit: GitCommit; rea
       author: author ?? '',
       dateIso: dateIso ?? '',
     },
-    body: bodyLines.slice(start).join('\n').trimEnd(),
+    body: bodyParts.join(LOG_SEP).trimEnd(),
   }
+}
+
+/** `--name-status` 状态码 → 变更状态映射。 */
+function nameStatusCode(code: string): GitChangeStatus {
+  switch (code) {
+    case 'A': return 'added'
+    case 'D': return 'deleted'
+    case 'R': return 'renamed'
+    case 'T': return 'typechange'
+    case 'U': return 'conflicted'
+    default: return 'modified'
+  }
+}
+
+/**
+ * 解析 `git show --format= --name-status -z` 输出：NUL 分隔，
+ * `X\0path\0`，rename/copy 为 `R100\0old\0new\0`（取新路径）。
+ * -z 原始输出不引号化，非 ASCII 路径天然免疫乱码（旧 --stat 八进制转义问题的根因消除）。
+ */
+export function parseNameStatusOutput(output: string): readonly { readonly path: string; readonly status: GitChangeStatus }[] {
+  const raw = output.split(NUL)
+  const segments = raw[raw.length - 1] === '' ? raw.slice(0, -1) : raw
+  const rows: { path: string; status: GitChangeStatus }[] = []
+  for (let i = 0; i < segments.length; i += 1) {
+    const entry = segments[i] ?? ''
+    if (entry === '') continue
+    const code = entry[0] ?? ' '
+    if (code === 'R' || code === 'C') {
+      // rename/copy：old 在 i+1、new 在 i+2，展示取新路径。
+      rows.push({ path: segments[i + 2] ?? '', status: nameStatusCode(code) })
+      i += 2
+    } else {
+      rows.push({ path: segments[i + 1] ?? '', status: nameStatusCode(code) })
+      i += 1
+    }
+  }
+  return rows
 }
 
 /**

@@ -19,7 +19,7 @@ import type { GitActionResult, GitActionRequest, GitQueryRequest, GitQueryRespon
 
 export type { GitSnapshot, GitSnapshotResult, GitSnapshotFailure, GitSnapshotRequest, GitCommit, GitChange, GitAction, GitActionResult, GitActionRequest, GitQuery, GitQueryResult, GitQueryRequest, GitQueryResponse, GitBranch, GitFileStat, GitRef } from './types.ts'
 export { normalizeConfig, DEFAULT_CONFIG } from './core.ts'
-export { parseStatusOutput, parseLogOutput, parseBranchOutput, parseStatOutput } from './parser.ts'
+export { parseStatusOutput, parseLogOutput, parseBranchOutput, parseNameStatusOutput } from './parser.ts'
 export { isSafePath, isValidBranchName, runAction } from './actions.ts'
 export { runQuery } from './queries.ts'
 

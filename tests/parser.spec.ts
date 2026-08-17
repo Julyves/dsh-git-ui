@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseBranchOutput, parseDecorations, parseGraphLogOutput, parseLogOutput, parseShowMeta, parseStatusHeader, parseStatusOutput } from '../src/host/parser.ts'
+import { parseBranchOutput, parseDecorations, parseGraphLogOutput, parseLogOutput, parseNameStatusOutput, parseShowMeta, parseStatusHeader, parseStatusOutput } from '../src/host/parser.ts'
 
 describe('parseStatusHeader', () => {
   it('parses a bare branch line', () => {
@@ -144,21 +144,49 @@ describe('parseDecorations', () => {
 })
 
 describe('parseShowMeta', () => {
-  it('parses metadata and strips the subject line from the body', () => {
-    const out = 'h1\x1fs1\x1fsubject line\x1fAlice\x1f2026-01-01T00:00:00Z\x1fsubject line\n\nbody one\nbody two\n'
+  it('parses metadata and passes the %b body through verbatim', () => {
+    const out = 'h1\x1fs1\x1fsubject line\x1fAlice\x1f2026-01-01T00:00:00Z\x1fbody one\nbody two\n'
     const parsed = parseShowMeta(out)
     expect(parsed).not.toBeNull()
     expect(parsed!.commit).toMatchObject({ hash: 'h1', subject: 'subject line', author: 'Alice' })
     expect(parsed!.body).toBe('body one\nbody two')
   })
 
-  it('yields an empty body for single-line messages', () => {
-    const parsed = parseShowMeta('h2\x1fs2\x1fonly subject\x1fBob\x1f2026-01-01T00:00:00Z\x1fonly subject\n')
+  it('keeps multi-paragraph bodies intact without subject duplication', () => {
+    // %b 已排除首段落：多行首段落的续行不会再混入正文。
+    const parsed = parseShowMeta('h3\x1fs3\x1flong subject\x1fBob\x1f2026-01-01T00:00:00Z\x1fpara two line\n')
+    expect(parsed!.body).toBe('para two line')
+  })
+
+  it('yields an empty body when %b is empty', () => {
+    const parsed = parseShowMeta('h2\x1fs2\x1fonly subject\x1fBob\x1f2026-01-01T00:00:00Z\x1f\n')
     expect(parsed!.body).toBe('')
   })
 
   it('returns null for empty output', () => {
     expect(parseShowMeta('')).toBeNull()
+  })
+})
+
+describe('parseNameStatusOutput', () => {
+  it('parses status codes and paths from NUL-separated output', () => {
+    const out = 'M\0src/a.ts\0A\0new.txt\0D\0old.txt\0'
+    expect(parseNameStatusOutput(out)).toEqual([
+      { path: 'src/a.ts', status: 'modified' },
+      { path: 'new.txt', status: 'added' },
+      { path: 'old.txt', status: 'deleted' },
+    ])
+  })
+
+  it('takes the new path for renames and keeps raw UTF-8 names', () => {
+    const out = 'R100\0旧目录/旧名.md\0新目录/新名.md\0'
+    expect(parseNameStatusOutput(out)).toEqual([
+      { path: '新目录/新名.md', status: 'renamed' },
+    ])
+  })
+
+  it('returns an empty list for empty output', () => {
+    expect(parseNameStatusOutput('')).toEqual([])
   })
 })
 

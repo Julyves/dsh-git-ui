@@ -100,30 +100,3 @@ export function TagIcon(): JSX.Element {
   )
 }
 
-/** 文件图标按扩展着色的语义映射（全令牌，明暗自适应）。 */
-export function fileColor(name: string): string {
-  const dot = name.lastIndexOf('.')
-  const ext = dot === -1 ? '' : name.slice(dot + 1)
-  switch (ext) {
-    case 'ts':
-    case 'tsx':
-      return 'var(--dsw-alias-state-business-primary)'
-    case 'js':
-    case 'jsx':
-    case 'mjs':
-      return 'var(--dsw-alias-state-warn-primary)'
-    case 'json':
-      return 'var(--dsw-alias-state-warn-label)'
-    case 'md':
-      return 'var(--dsw-alias-label-tertiary)'
-    case 'sh':
-    case 'bash':
-      return 'var(--dsw-alias-state-success-primary)'
-    case 'yml':
-    case 'yaml':
-    case 'toml':
-      return 'var(--dsw-alias-state-error-secondary)'
-    default:
-      return 'var(--dsw-alias-label-secondary)'
-  }
-}

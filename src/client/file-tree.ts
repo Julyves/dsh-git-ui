@@ -1,15 +1,15 @@
 /**
- * 文件统计路径 → 可折叠目录树（IDEA 右栏文件树形态）。
- * 输入为 show 查询的 stat 行（路径 + 增删行数），输出嵌套节点：
- * 目录在前、文件在后，同层按名称字母序；目录 path 为前缀路径，
- * 文件节点携带 stat。不依赖 React，可纯单元测试。
+ * 变更文件路径 → 可折叠目录树（IDEA 右栏文件树形态）。
+ * 输入为 show 查询的 name-status 行（路径 + 变更状态），输出嵌套节点：
+ * 目录在前、文件在后，同层按名称字母序；目录携带后代文件计数，
+ * 文件节点携带状态（右栏按状态着色展示，不再显示 +/- 行数）。
+ * 不依赖 React，可纯单元测试。
  */
 
-/** 一个 stat 行（与宿主 GitFileStat 同构）。 */
+/** 一个变更行（与宿主 GitFileStat 同构）。 */
 export interface FileStatLike {
   readonly path: string
-  readonly added: number
-  readonly deleted: number
+  readonly status: string
 }
 
 /** 目录树节点。 */
@@ -21,12 +21,10 @@ export interface FileTreeNode {
   readonly dir: boolean
   /** 目录节点的后代；文件节点恒为空。 */
   readonly children: readonly FileTreeNode[]
-  /** 文件节点的统计；目录节点为 undefined。 */
-  readonly stat?: FileStatLike
-  /** 聚合增行（文件 = 自身，目录 = 后代和；IDEA 式目录计数）。 */
-  readonly added: number
-  /** 聚合删行。 */
-  readonly deleted: number
+  /** 文件节点的变更状态；目录节点为 undefined。 */
+  readonly status?: string
+  /** 后代文件计数（文件 = 1，目录 = 后代和；IDEA 式「N 个文件」）。 */
+  readonly count: number
 }
 
 interface MutableNode {
@@ -34,16 +32,15 @@ interface MutableNode {
   path: string
   dir: boolean
   children: Map<string, MutableNode>
-  stat?: FileStatLike
-  added: number
-  deleted: number
+  status?: string
+  count: number
 }
 
 function newDirNode(name: string, path: string): MutableNode {
-  return { name, path, dir: true, children: new Map(), added: 0, deleted: 0 }
+  return { name, path, dir: true, children: new Map(), count: 0 }
 }
 
-/** 由 stat 路径列表构建目录树根节点集合。 */
+/** 由变更行列表构建目录树根节点集合。 */
 export function buildFileTree(stats: readonly FileStatLike[]): readonly FileTreeNode[] {
   const root: MutableNode = newDirNode('', '')
   for (const stat of stats) {
@@ -58,18 +55,17 @@ export function buildFileTree(stats: readonly FileStatLike[]): readonly FileTree
       let next = cursor.children.get(segment)
       if (next === undefined) {
         next = isLast
-          ? { name: segment, path: prefix, dir: false, children: new Map(), stat, added: 0, deleted: 0 }
+          ? { name: segment, path: prefix, dir: false, children: new Map(), status: stat.status, count: 0 }
           : newDirNode(segment, prefix)
         cursor.children.set(segment, next)
       }
       cursor = next
     }
-    // 沿路径向上聚合计数（叶子在创建时已计入自身）。
+    // 沿路径向上累加文件计数（叶子在下方统一置 1）。
     let walk: MutableNode = root
     for (const segment of segments) {
       walk = walk.children.get(segment)!
-      walk.added += stat.added
-      walk.deleted += stat.deleted
+      walk.count += 1
     }
   }
   return freeze(root.children)
@@ -84,9 +80,8 @@ function freeze(level: Map<string, MutableNode>): readonly FileTreeNode[] {
       path: node.path,
       dir: node.dir,
       children: node.dir ? freeze(node.children) : [],
-      ...(node.stat === undefined ? {} : { stat: node.stat }),
-      added: node.added,
-      deleted: node.deleted,
+      ...(node.status === undefined ? {} : { status: node.status }),
+      count: node.count,
     })
   }
   nodes.sort((a, b) => {

@@ -156,11 +156,10 @@ export type GitQuery =
   | { readonly kind: 'tags' }
   | { readonly kind: 'authors' }
 
-/** One changed-file stat row from `git show --stat`. */
+/** 提交变更文件行（`--name-status` 源：状态 + 路径，不再携带 +/- 行数）。 */
 export interface GitFileStat {
   readonly path: string
-  readonly added: number
-  readonly deleted: number
+  readonly status: GitChangeStatus
 }
 
 /** One branch row from `git branch --format`. */

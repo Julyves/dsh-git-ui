@@ -454,7 +454,8 @@ export const historyTree: CSSProperties = {
   flexDirection: 'column',
   gap: 1,
   padding: 6,
-  borderRight: '1px solid var(--dsw-alias-border-l1)',
+  borderRight: '1px solid var(--dsw-alias-border-l2)',
+  background: 'var(--dsw-alias-interactive-bg-hover)',
   fontSize: 12,
   lineHeight: '20px',
 }
@@ -533,13 +534,25 @@ export const treeFolderIcon: CSSProperties = {
   color: 'var(--dsw-alias-label-tertiary)',
 }
 
-/** 目录/文件聚合增删计数。 */
+/** 目录文件计数（IDEA 式「N 个文件」）。 */
 export const treeCounts: CSSProperties = {
   flex: 'none',
   display: 'inline-flex',
   gap: 6,
   fontSize: 10,
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+/** 右栏文件名按变更状态着色（IDEA 式：增绿/改蓝/删红/重命名琥珀）。 */
+export const statusTextColor: Record<string, string> = {
+  added: 'var(--dsw-alias-state-success-primary)',
+  untracked: 'var(--dsw-alias-state-success-primary)',
+  modified: 'var(--dsw-alias-state-business-primary)',
+  renamed: 'var(--dsw-alias-state-warn-primary)',
+  deleted: 'var(--dsw-alias-state-error-primary)',
+  conflicted: 'var(--dsw-alias-state-error-primary)',
+  typechange: 'var(--dsw-alias-state-warn-primary)',
 }
 
 /** 嵌套层引导线（IDEA 式目录树竖线）。 */
@@ -749,7 +762,8 @@ export const historyRight: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 8,
-  borderLeft: '1px solid var(--dsw-alias-border-l1)',
+  borderLeft: '1px solid var(--dsw-alias-border-l2)',
+  background: 'var(--dsw-alias-interactive-bg-hover)',
   paddingLeft: 12,
   overflowY: 'hidden',
 }

@@ -25,7 +25,7 @@ import type { GraphCommit, GitRef } from '../host/types.ts'
 import type { GitQueryOutcome } from './controller.ts'
 import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph.ts'
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
-import { BranchIcon, ChevronIcon, FileIcon, FolderIcon, StarIcon, TagIcon, fileColor } from './icons.tsx'
+import { BranchIcon, ChevronIcon, FileIcon, FolderIcon, StarIcon, TagIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
 
@@ -598,6 +598,7 @@ function HistoryTab({
                         nodes={fileTree}
                         collapsed={collapsed}
                         onToggle={toggleDir}
+                        t={t}
                       />
                     )}
               </div>
@@ -708,11 +709,12 @@ function HistoryFilterTree({
 /** 右栏文件目录树：引导线缩进、文件夹/文件图标、目录文件计数、可折叠。
  * 文件仅展示变更清单（按状态着色），点击查看差异已按定位移除。 */
 function FileTreeNodes({
-  nodes, collapsed, onToggle,
+  nodes, collapsed, onToggle, t,
 }: {
   nodes: readonly FileTreeNode[]
   collapsed: ReadonlySet<string>
   onToggle: (path: string) => void
+  t: (key: GitKey) => string
 }): JSX.Element {
   return (
     <>
@@ -728,10 +730,7 @@ function FileTreeNodes({
             <span style={css.treeCaret}><ChevronIcon open={!collapsed.has(node.path)} /></span>
             <span style={css.treeFolderIcon}><FolderIcon /></span>
             <span style={css.treeName}>{node.name}</span>
-            <span style={css.treeCounts}>
-              {node.added > 0 && <span style={{ color: 'var(--dsw-alias-state-success-primary)' }}>+{node.added}</span>}
-              {node.deleted > 0 && <span style={{ color: 'var(--dsw-alias-state-error-primary)' }}>−{node.deleted}</span>}
-            </span>
+            <span style={css.treeCounts}>{t('history.fileCount').replace('{n}', String(node.count))}</span>
           </button>
           {!collapsed.has(node.path) && (
             <div style={css.treeChildren}>
@@ -739,6 +738,7 @@ function FileTreeNodes({
                 nodes={node.children}
                 collapsed={collapsed}
                 onToggle={onToggle}
+                t={t}
               />
             </div>
           )}
@@ -746,8 +746,8 @@ function FileTreeNodes({
       ) : (
         <div key={node.path} className="dsh-git-ui__row" style={css.treeRow}>
           <span style={{ ...css.treeCaret, visibility: 'hidden' }} aria-hidden="true"><ChevronIcon open={false} /></span>
-          <span style={{ ...css.treeFolderIcon, color: fileColor(node.name) }}><FileIcon /></span>
-          <span style={css.treeName} title={node.path}>{node.name}</span>
+          <span style={{ ...css.treeFolderIcon, color: css.statusTextColor[node.status ?? 'modified'] }}><FileIcon /></span>
+          <span style={{ ...css.treeName, color: css.statusTextColor[node.status ?? 'modified'] }} title={node.path}>{node.name}</span>
         </div>
       ))}
     </>
