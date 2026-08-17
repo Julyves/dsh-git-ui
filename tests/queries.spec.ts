@@ -201,58 +201,7 @@ describe('runQuery — history', () => {
   })
 })
 
-describe('runQuery — diff', () => {
-  it('returns the worktree diff for a modified file', async () => {
-    const dir = await repoWithCommits()
-    await writeFile(join(dir, 'a.txt'), 'one\ntwo\nthree\n')
-    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: 'a.txt', base: 'worktree' }))
-    expect(result.ok).toBe(true)
-    if (!result.ok || result.value.kind !== 'diff') return
-    expect(result.value.text).toContain('diff --git a/a.txt b/a.txt')
-    expect(result.value.text).toContain('+three')
-  })
-
-  it('returns the staged diff with --cached semantics', async () => {
-    const dir = await repoWithCommits()
-    await writeFile(join(dir, 'a.txt'), 'one\nchanged\n')
-    git(dir, 'add', 'a.txt')
-    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: 'a.txt', base: 'staged' }))
-    expect(result.ok).toBe(true)
-    if (!result.ok || result.value.kind !== 'diff') return
-    expect(result.value.text).toContain('+changed')
-    expect(result.value.text).toContain('-two')
-  })
-
-  it('returns the HEAD diff (worktree + index combined)', async () => {
-    const dir = await repoWithCommits()
-    await writeFile(join(dir, 'a.txt'), 'one\ntwo\nthree\n')
-    git(dir, 'add', 'a.txt')
-    await writeFile(join(dir, 'a.txt'), 'one\ntwo\nthree\nfour\n')
-    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: 'a.txt', base: 'head' }))
-    expect(result.ok).toBe(true)
-    if (!result.ok || result.value.kind !== 'diff') return
-    expect(result.value.text).toContain('+three')
-    expect(result.value.text).toContain('+four')
-  })
-
-  it('rejects an unsafe path', async () => {
-    const dir = await repoWithCommits()
-    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: '../etc/passwd', base: 'worktree' }))
-    expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.error.code).toBe('invalid-path')
-  })
-})
-
-describe('runQuery — diff-commit and show', () => {
-  it('returns the file diff introduced by a commit', async () => {
-    const dir = await repoWithCommits()
-    const second = git(dir, 'rev-parse', 'HEAD~1').trim()
-    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff-commit', path: 'a.txt', ref: second }))
-    expect(result.ok).toBe(true)
-    if (!result.ok || result.value.kind !== 'diff-commit') return
-    expect(result.value.text).toContain('+two')
-  })
-
+describe('runQuery — show', () => {
   it('returns commit metadata and file stats for show', async () => {
     const dir = await repoWithCommits()
     const head = git(dir, 'rev-parse', 'HEAD').trim()

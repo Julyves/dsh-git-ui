@@ -14,7 +14,7 @@
  * in-panel banner. Discard/delete are destructive and require a second click
  * within 3s.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties, JSX } from 'react'
 import { Button, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
@@ -26,7 +26,6 @@ import type { GitQueryOutcome } from './controller.ts'
 import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph.ts'
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
 import { BranchIcon, ChevronIcon, FileIcon, FolderIcon, StarIcon, TagIcon, fileColor } from './icons.tsx'
-import { parseUnifiedDiff, type DiffLineType } from './unified-diff.ts'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
 
@@ -133,7 +132,7 @@ export function GitCenter({
 
           {/* 三标签保持挂载、display 切换：保留各自状态（选中/分页/分支列表），与 IDE 行为一致。 */}
           <div style={tab === 'changes' ? { display: 'contents' } : { display: 'none' }}>
-            <ChangesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} />
+            <ChangesTab snapshot={snapshot} busy={busy} execute={execute} t={t} />
           </div>
           <div style={tab === 'history' ? { display: 'contents' } : { display: 'none' }}>
             <HistoryTab query={query} t={t} />
@@ -150,23 +149,16 @@ export function GitCenter({
 // ── Changes tab ───────────────────────────────────────────────────────────
 
 function ChangesTab({
-  snapshot, busy, execute, query, t,
+  snapshot, busy, execute, t,
 }: {
   snapshot: GitSnapshot
   busy: boolean
   execute: (action: GitAction, successText: string) => Promise<boolean>
-  query: GitCenterProps['query']
   t: (key: GitKey) => string
 }): JSX.Element {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [message, setMessage] = useState('')
   const [armed, setArmed] = useState<string | 'all' | null>(null)
-  // Diff preview state for the clicked file.
-  const [diffPath, setDiffPath] = useState<string | null>(null)
-  const [diffText, setDiffText] = useState<string | null>(null)
-  const [diffLoading, setDiffLoading] = useState(false)
-  /** 请求序号令牌：连点文件时仅最新响应落地，陈旧响应不得覆盖新状态。 */
-  const diffSeq = useRef(0)
 
   useEffect(() => {
     if (armed === null) return
@@ -188,18 +180,6 @@ function ChangesTab({
     })
   }
 
-  const showDiff = async (path: string, change: GitChange): Promise<void> => {
-    const seq = ++diffSeq.current
-    setDiffPath(path)
-    setDiffText(null)
-    setDiffLoading(true)
-    const base = change.staged ? 'staged' : 'worktree'
-    const outcome = await query({ kind: 'diff', path, base })
-    if (seq !== diffSeq.current) return
-    setDiffLoading(false)
-    setDiffText(outcome.ok && outcome.value.kind === 'diff' ? outcome.value.text : null)
-  }
-
   const commit = (): void => {
     const text = message.trim()
     if (text === '' || busy) return
@@ -215,8 +195,6 @@ function ChangesTab({
     onDiscard: (path: string) => {
       if (armed === path) {
         void execute({ kind: 'discard', paths: [path] }, t('center.done'))
-        setDiffPath(null)
-        setDiffText(null)
       } else {
         setArmed((prev) => (prev === path ? null : path))
       }
@@ -238,8 +216,6 @@ function ChangesTab({
           onClick={() => {
             if (armed === 'all') {
               void execute({ kind: 'discard-all' }, t('center.done'))
-              setDiffPath(null)
-              setDiffText(null)
             } else {
               setArmed((prev) => (prev === 'all' ? null : 'all'))
             }
@@ -261,7 +237,6 @@ function ChangesTab({
                 busy={busy}
                 armed={armed}
                 rowActions={rowActions}
-                onShowDiff={showDiff}
                 t={t}
               />
             )}
@@ -273,7 +248,6 @@ function ChangesTab({
                 busy={busy}
                 armed={armed}
                 rowActions={rowActions}
-                onShowDiff={showDiff}
                 t={t}
               />
             )}
@@ -285,24 +259,11 @@ function ChangesTab({
                 busy={busy}
                 armed={armed}
                 rowActions={rowActions}
-                onShowDiff={showDiff}
                 t={t}
               />
             )}
           </>
         )}
-
-      {diffPath !== null && (
-        <div style={{ borderTop: '1px solid var(--dsw-alias-border-l1)', paddingTop: 10 }}>
-          <div style={css.toolRow}>
-            <span style={css.commitHint}>{diffPath}</span>
-            <Button size="sm" aria-label={t('center.close')} onClick={() => { diffSeq.current += 1; setDiffPath(null); setDiffText(null) }}>✕</Button>
-          </div>
-          {diffLoading
-            ? <div style={css.emptyNote}>{t('center.diffLoading')}</div>
-            : <DiffView text={diffText ?? ''} t={t} />}
-        </div>
-      )}
 
       <div style={css.commitBox}>
         <textarea
@@ -331,7 +292,7 @@ function ChangesTab({
 
 /** One change row; clicking the path opens the inline diff preview. */
 function ChangeRow({
-  change, checked, busy, armed, rowActions, onShowDiff, t,
+  change, checked, busy, armed, rowActions, t,
 }: {
   change: GitChange
   checked: boolean
@@ -343,7 +304,6 @@ function ChangeRow({
     onUnstage: (path: string) => void
     onDiscard: (path: string) => void
   }
-  onShowDiff: (path: string, change: GitChange) => void
   t: (key: GitKey) => string
 }): JSX.Element {
   const untracked = change.status === 'untracked'
@@ -360,17 +320,8 @@ function ChangeRow({
       <span style={{ ...css.changeChip, ...(css.chipStyles[change.status] ?? css.chipStyles.untracked) }} title={change.status}>
         {CHIP_LETTERS[change.status] ?? '•'}
       </span>
-      <button
-        type="button"
-        style={{
-          ...css.changePathText,
-          border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', padding: 0, fontFamily: 'inherit',
-        }}
-        title={`${change.path} — ${t('center.showDiff')}`}
-        onClick={() => onShowDiff(change.path, change)}
-      >
-        {change.path}
-      </button>
+      {/* 路径仅展示变更清单；具体差异引导用户至 IDE 查看（插件定位）。 */}
+      <span style={css.changePathText} title={change.path}>{change.path}</span>
       {change.staged
         ? <Button size="sm" disabled={busy} onClick={() => rowActions.onUnstage(change.path)}>{t('center.unstage')}</Button>
         : <Button size="sm" disabled={busy} onClick={() => rowActions.onStage(change.path)}>{t('center.stage')}</Button>}
@@ -384,7 +335,7 @@ function ChangeRow({
 }
 
 function ChangeGroup({
-  title, changes, checked, busy, armed, rowActions, onShowDiff, t,
+  title, changes, checked, busy, armed, rowActions, t,
 }: {
   title: string
   changes: readonly GitChange[]
@@ -392,7 +343,6 @@ function ChangeGroup({
   busy: boolean
   armed: string | 'all' | null
   rowActions: Parameters<typeof ChangeRow>[0]['rowActions']
-  onShowDiff: (path: string, change: GitChange) => void
   t: (key: GitKey) => string
 }): JSX.Element {
   return (
@@ -406,7 +356,6 @@ function ChangeGroup({
           busy={busy}
           armed={armed}
           rowActions={rowActions}
-          onShowDiff={onShowDiff}
           t={t}
         />
       ))}
@@ -434,7 +383,6 @@ function HistoryTab({
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<GraphCommit | null>(null)
   const [detail, setDetail] = useState<{ commit: GraphCommit; body: string; stats: readonly GitFileStat[] } | null>(null)
-  const [diff, setDiff] = useState<{ path: string; text: string | null; loading: boolean } | null>(null)
   /** 组合过滤条件（左树 ref + 工具栏搜索/用户/日期）；任一变化重载。 */
   const [filter, setFilter] = useState<{ ref: string | null; search: string; author: string; since: string }>({ ref: null, search: '', author: '', since: '' })
   /** 工具栏搜索输入（防抖 300ms 落地到 filter）。 */
@@ -451,8 +399,6 @@ function HistoryTab({
   const [closedSections, setClosedSections] = useState<ReadonlySet<string>>(new Set())
   /** 文件树折叠的目录路径集合。 */
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
-  /** 请求序号令牌：连点文件/切换提交时仅最新响应落地。 */
-  const diffSeq = useRef(0)
   const now = Date.now()
 
   /** 由提交序列计算图行与车道宽（每次加载后重算）。 */
@@ -500,10 +446,8 @@ function HistoryTab({
 
   // 过滤变化：重置选中与列表并重载首页（含首次激活）。
   useEffect(() => {
-    diffSeq.current += 1
     setSelected(null)
     setDetail(null)
-    setDiff(null)
     setCommits([])
     setTotal(0)
     void loadPage(0, filter)
@@ -519,26 +463,12 @@ function HistoryTab({
   }, [searchInput])
 
   const select = async (commit: GraphCommit): Promise<void> => {
-    diffSeq.current += 1
     setSelected(commit)
     setDetail(null)
-    setDiff(null)
     const outcome = await query({ kind: 'show', ref: commit.hash })
     if (outcome.ok && outcome.value.kind === 'show' && outcome.value.commit !== null) {
       setDetail({ commit: outcome.value.commit as GraphCommit, body: outcome.value.body, stats: outcome.value.stats })
     }
-  }
-
-  const showFileDiff = async (ref: string, path: string): Promise<void> => {
-    const seq = ++diffSeq.current
-    setDiff({ path, text: null, loading: true })
-    const outcome = await query({ kind: 'diff-commit', path, ref })
-    if (seq !== diffSeq.current) return
-    setDiff({
-      path,
-      text: outcome.ok && outcome.value.kind === 'diff-commit' ? outcome.value.text : null,
-      loading: false,
-    })
   }
 
   const toggleDir = (path: string): void => {
@@ -668,8 +598,6 @@ function HistoryTab({
                         nodes={fileTree}
                         collapsed={collapsed}
                         onToggle={toggleDir}
-                        activePath={diff?.path ?? null}
-                        onFile={(path) => void showFileDiff(selected.hash, path)}
                       />
                     )}
               </div>
@@ -682,17 +610,6 @@ function HistoryTab({
                 </div>
                 {detail !== null && detail.body !== '' && <pre style={css.msgBody}>{detail.body}</pre>}
               </div>
-              {diff !== null && (
-                <div style={css.rightDiff}>
-                  <div style={css.toolRow}>
-                    <span style={css.commitHint}>{diff.path}</span>
-                    <Button size="sm" aria-label={t('center.close')} onClick={() => { diffSeq.current += 1; setDiff(null) }}>✕</Button>
-                  </div>
-                  {diff.loading
-                    ? <div style={css.emptyNote}>{t('center.diffLoading')}</div>
-                    : <DiffView text={diff.text ?? ''} t={t} />}
-                </div>
-              )}
             </div>
           )}
     </div>
@@ -788,15 +705,14 @@ function HistoryFilterTree({
   )
 }
 
-/** 右栏文件目录树：引导线缩进、文件夹/文件图标、目录聚合计数、可折叠。 */
+/** 右栏文件目录树：引导线缩进、文件夹/文件图标、目录文件计数、可折叠。
+ * 文件仅展示变更清单（按状态着色），点击查看差异已按定位移除。 */
 function FileTreeNodes({
-  nodes, collapsed, onToggle, activePath, onFile,
+  nodes, collapsed, onToggle,
 }: {
   nodes: readonly FileTreeNode[]
   collapsed: ReadonlySet<string>
   onToggle: (path: string) => void
-  activePath: string | null
-  onFile: (path: string) => void
 }): JSX.Element {
   return (
     <>
@@ -823,26 +739,15 @@ function FileTreeNodes({
                 nodes={node.children}
                 collapsed={collapsed}
                 onToggle={onToggle}
-                activePath={activePath}
-                onFile={onFile}
               />
             </div>
           )}
         </div>
       ) : (
-        <div
-          key={node.path}
-          className="dsh-git-ui__row"
-          style={activePath === node.path ? { ...css.treeRow, ...css.statRowActive } : css.treeRow}
-          onClick={() => onFile(node.path)}
-        >
+        <div key={node.path} className="dsh-git-ui__row" style={css.treeRow}>
           <span style={{ ...css.treeCaret, visibility: 'hidden' }} aria-hidden="true"><ChevronIcon open={false} /></span>
           <span style={{ ...css.treeFolderIcon, color: fileColor(node.name) }}><FileIcon /></span>
           <span style={css.treeName} title={node.path}>{node.name}</span>
-          <span style={css.treeCounts}>
-            {node.stat !== undefined && node.stat.added > 0 && <span style={{ color: 'var(--dsw-alias-state-success-primary)' }}>+{node.stat.added}</span>}
-            {node.stat !== undefined && node.stat.deleted > 0 && <span style={{ color: 'var(--dsw-alias-state-error-primary)' }}>−{node.stat.deleted}</span>}
-          </span>
         </div>
       ))}
     </>
@@ -925,26 +830,3 @@ function GraphStrip({ row, cols }: { row: GraphRow; cols: number }): JSX.Element
   )
 }
 
-// ── Diff view ─────────────────────────────────────────────────────────────
-
-function diffStyle(type: DiffLineType): CSSProperties {
-  switch (type) {
-    case 'add': return css.diffLineAdd
-    case 'del': return css.diffLineDel
-    case 'hunk': return css.diffLineHunk
-    case 'meta': return css.diffLineMeta
-    default: return {}
-  }
-}
-
-function DiffView({ text, t }: { text: string; t: (key: GitKey) => string }): JSX.Element {
-  const lines = useMemo(() => parseUnifiedDiff(text), [text])
-  if (lines.length === 0) return <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
-  return (
-    <div style={css.diffContainer}>
-      {lines.map((line, index) => (
-        <span key={index} style={{ ...css.diffLine, ...diffStyle(line.type) }}>{line.text || ' '}</span>
-      ))}
-    </div>
-  )
-}

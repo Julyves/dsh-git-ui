@@ -822,45 +822,7 @@ export const commitDetailMeta: CSSProperties = {
   color: 'var(--dsw-alias-label-secondary)',
 }
 
-// ── Diff view ─────────────────────────────────────────────────────────────
-
-export const diffContainer: CSSProperties = {
-  overflowX: 'auto',
-  borderRadius: 8,
-  border: '1px solid var(--dsw-alias-border-l1)',
-  background: 'var(--dsw-alias-bg-layer-2)',
-  fontSize: 12,
-  lineHeight: '18px',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-}
-
-export const diffLine: CSSProperties = {
-  display: 'block',
-  whiteSpace: 'pre',
-  padding: '0 10px',
-  minWidth: 'max-content',
-}
-
-export const diffLineAdd: CSSProperties = {
-  background: 'var(--dsw-alias-state-success-secondary)',
-  color: 'var(--dsw-alias-state-success-primary)',
-}
-
-export const diffLineDel: CSSProperties = {
-  background: 'var(--dsw-alias-state-error-secondary)',
-  color: 'var(--dsw-alias-state-error-primary)',
-}
-
-export const diffLineHunk: CSSProperties = {
-  background: 'var(--dsw-alias-interactive-bg-hover)',
-  color: 'var(--dsw-alias-label-secondary)',
-}
-
-export const diffLineMeta: CSSProperties = {
-  color: 'var(--dsw-alias-label-tertiary)',
-}
-
-// ── Branches tab ──────────────────────────────────────────────────────────
+// ── Branches 管理（popup）─────────────────────────────────────────────
 
 /** popup 分支管理行。 */
 export const branchManageRow: CSSProperties = {

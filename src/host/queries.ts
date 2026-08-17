@@ -8,7 +8,7 @@
  */
 import { resolveWorkspace, runCommand, type GitStatusConfig, type SnapshotDeps } from './core.ts'
 import { parseBranchOutput, parseGraphLogOutput, parseShowMeta, parseStatOutput } from './parser.ts'
-import { isSafePath, operationError } from './actions.ts'
+import { operationError } from './actions.ts'
 import type { GitBranch, GitQueryRequest, GitQueryResponse } from './types.ts'
 
 /** Machine-readable log format for show queries (no parents). */
@@ -44,10 +44,6 @@ export async function runQuery(
   switch (query.kind) {
     case 'history':
       return historyQuery(deps, root, query)
-    case 'diff':
-      return diffQuery(deps, root, query.path, query.base)
-    case 'diff-commit':
-      return diffCommitQuery(deps, root, query.path, query.ref)
     case 'show':
       return showQuery(deps, root, query.ref)
     case 'branches':
@@ -117,37 +113,6 @@ async function historyQuery(
   }
 
   return { ok: true, value: { kind: 'history', commits: parseGraphLogOutput(log.run.stdout, remotes), total } }
-}
-
-async function diffQuery(
-  deps: SnapshotDeps,
-  root: string,
-  path: string,
-  base: 'worktree' | 'staged' | 'head',
-): Promise<GitQueryResponse> {
-  if (!isSafePath(path, root)) return { ok: false, error: { code: 'invalid-path', message: `unsafe path: ${path}` } }
-  const baseArg = base === 'staged' ? ['--cached'] : base === 'head' ? ['HEAD'] : []
-  const run = await runCommand(deps.run, ['git', 'diff', ...baseArg, '--', path], root, 'diff', deps.signal)
-  if ('failure' in run) return { ok: false, error: operationError(run.failure).error }
-  if (run.run.timedOut) return { ok: false, error: { code: 'timeout' } }
-  if (run.run.exitCode !== 0) return gitError('diff', run.run.stderr, run.run.stdout)
-  return { ok: true, value: { kind: 'diff', path, text: run.run.stdout } }
-}
-
-async function diffCommitQuery(
-  deps: SnapshotDeps,
-  root: string,
-  path: string,
-  ref: string,
-): Promise<GitQueryResponse> {
-  if (!isSafePath(path, root)) return { ok: false, error: { code: 'invalid-path', message: `unsafe path: ${path}` } }
-  if (!isValidRef(ref)) return { ok: false, error: { code: 'invalid-name', message: `invalid ref: ${ref}` } }
-  // --format= suppresses the commit header so the output is pure unified diff.
-  const run = await runCommand(deps.run, ['git', 'show', ref, '--format=', '--', path], root, 'show', deps.signal)
-  if ('failure' in run) return { ok: false, error: operationError(run.failure).error }
-  if (run.run.timedOut) return { ok: false, error: { code: 'timeout' } }
-  if (run.run.exitCode !== 0) return gitError('show', run.run.stderr, run.run.stdout)
-  return { ok: true, value: { kind: 'diff-commit', path, ref, text: run.run.stdout } }
 }
 
 async function showQuery(deps: SnapshotDeps, root: string, ref: string): Promise<GitQueryResponse> {
