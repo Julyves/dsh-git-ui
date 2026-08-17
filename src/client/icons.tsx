@@ -84,6 +84,24 @@ export function StarIcon(): JSX.Element {
   )
 }
 
+/** 全部展开（双箭头下）。 */
+export function ExpandAllIcon(): JSX.Element {
+  return (
+    <svg width={12} height={12} viewBox="0 0 12 12" style={{ display: 'block' }} aria-hidden="true">
+      <path d="M2 1.5 L6 5 L10 1.5 M2 6 L6 9.5 L10 6" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** 全部收起（双箭头上）。 */
+export function CollapseAllIcon(): JSX.Element {
+  return (
+    <svg width={12} height={12} viewBox="0 0 12 12" style={{ display: 'block' }} aria-hidden="true">
+      <path d="M2 4.5 L6 1 L10 4.5 M2 9 L6 5.5 L10 9" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 /** 标签图标。 */
 export function TagIcon(): JSX.Element {
   return (

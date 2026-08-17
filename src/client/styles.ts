@@ -227,6 +227,7 @@ const globalCss = [
   '.dsh-git-ui__commit-row, .dsh-git-ui__row { transition: background var(--ds-transition-duration-fast) linear; }',
   '.dsh-git-ui__commit-row:active, .dsh-git-ui__row:active { background: var(--dsw-alias-interactive-bg-active); }',
   '.dsh-git-ui__row:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__splitter:hover { background: var(--dsw-alias-interactive-bg-hover); }',
   '.dsh-git-ui__refresh:hover { color: var(--dsw-alias-state-business-primary); }',
   '.dsh-git-ui__commit-row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
   '.dsh-git-ui__commit-row:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
@@ -443,18 +444,15 @@ export const historyLayout: CSSProperties = {
   minHeight: 0,
 }
 
-/** 左栏：分支/标签过滤树（IDEA 式）。 */
+/** 左栏滚动区（外壳 paneSide 提供宽/底/边线）。 */
 export const historyTree: CSSProperties = {
-  flex: 'none',
-  width: 170,
-  minWidth: 0,
+  flex: 1,
+  minHeight: 0,
   overflowY: 'auto',
   display: 'flex',
   flexDirection: 'column',
   gap: 1,
   padding: 6,
-  borderRight: '1px solid var(--dsw-alias-border-l2)',
-  background: 'var(--dsw-alias-interactive-bg-hover)',
   fontSize: 12,
   lineHeight: '20px',
 }
@@ -533,16 +531,6 @@ export const treeFolderIcon: CSSProperties = {
   color: 'var(--dsw-alias-label-tertiary)',
 }
 
-/** 目录文件计数（IDEA 式「N 个文件」）。 */
-export const treeCounts: CSSProperties = {
-  flex: 'none',
-  display: 'inline-flex',
-  gap: 6,
-  fontSize: 10,
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  color: 'var(--dsw-alias-label-tertiary)',
-}
-
 /** 右栏文件名按变更状态着色（IDEA 式：增绿/改蓝/删红/重命名琥珀）。 */
 export const statusTextColor: Record<string, string> = {
   added: 'var(--dsw-alias-state-success-primary)',
@@ -573,13 +561,15 @@ export const treeNameCurrent: CSSProperties = {
   fontWeight: 600,
 }
 
-/** 中栏顶部工具栏：搜索 + 分支/用户/日期筛选（IDEA 式）。 */
+/** 中栏顶部工具栏：与左右 paneHead 同高同边线，组成统一头带。 */
 export const historyToolbar: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 6,
-  padding: '6px 0',
-  flexShrink: 0,
+  flex: 'none',
+  height: 40,
+  padding: '0 8px',
+  borderBottom: '1px solid var(--dsw-alias-border-l1)',
 }
 
 export const toolbarSearch: CSSProperties = {
@@ -666,6 +656,80 @@ export const loadSentinel: CSSProperties = {
   color: 'var(--dsw-alias-label-tertiary)',
   fontSize: 11,
   lineHeight: '16px',
+}
+
+/** 三pane 统一头带（40px，底边线对齐成带）。 */
+export const paneHead: CSSProperties = {
+  flex: 'none',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  height: 40,
+  padding: '0 8px',
+  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+}
+
+/** 左右侧栏外壳（淡底；分隔线按侧内联）。 */
+export const paneSide: CSSProperties = {
+  flex: 'none',
+  display: 'flex',
+  flexDirection: 'column',
+  minWidth: 0,
+  background: 'var(--dsw-alias-interactive-bg-hover)',
+}
+
+/** 左栏搜索框（分支或标签）。 */
+export const treeSearch: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  border: '1px solid var(--dsw-alias-border-l1)',
+  borderRadius: 8,
+  padding: '3px 8px',
+  fontSize: 12,
+  lineHeight: '18px',
+  fontFamily: 'inherit',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+/** 左栏搜索匹配文字高亮。 */
+export const treeMatch: CSSProperties = {
+  color: 'var(--dsw-alias-state-business-primary)',
+  fontWeight: 600,
+}
+
+/** 头带小图标按钮（全部展开/收起等）。 */
+export const paneHeadButton: CSSProperties = {
+  flex: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 24,
+  height: 24,
+  border: 'none',
+  background: 'transparent',
+  borderRadius: 6,
+  cursor: 'pointer',
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
+/** 拖拽分割条（悬停淡底提示可拖）。 */
+export const splitter: CSSProperties = {
+  flex: 'none',
+  width: 5,
+  marginLeft: -3,
+  cursor: 'col-resize',
+  background: 'transparent',
+  zIndex: 1,
+}
+
+export const splitterRow: CSSProperties = {
+  flex: 'none',
+  height: 5,
+  marginTop: -3,
+  cursor: 'row-resize',
+  background: 'transparent',
+  zIndex: 1,
 }
 
 /** 中栏外壳：工具栏固定 + 滚动列表（工具栏不随列表滚动）。 */
@@ -822,16 +886,13 @@ export const refPillTag: CSSProperties = {
   background: 'var(--dsw-alias-bg-layer-2)',
 }
 
-/** 右栏：提交详情（文件树 + 完整报文 + diff 预览）。 */
+/** 右栏内容列（外壳 paneSide 提供宽/底/边线）。 */
 export const historyRight: CSSProperties = {
-  flex: 'none',
-  width: 360,
-  minWidth: 0,
+  flex: 1,
+  minHeight: 0,
   display: 'flex',
   flexDirection: 'column',
   gap: 8,
-  borderLeft: '1px solid var(--dsw-alias-border-l2)',
-  background: 'var(--dsw-alias-interactive-bg-hover)',
   paddingLeft: 12,
   overflowY: 'hidden',
 }
@@ -846,14 +907,12 @@ export const rightFiles: CSSProperties = {
 }
 
 export const rightMsg: CSSProperties = {
-  flex: 'none',
-  maxHeight: '38%',
+  flex: 1,
+  minHeight: 0,
   overflowY: 'auto',
   display: 'flex',
   flexDirection: 'column',
   gap: 4,
-  borderTop: '1px solid var(--dsw-alias-border-l1)',
-  paddingTop: 6,
 }
 
 /** 提交正文（等宽保留换行）。 */

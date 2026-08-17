@@ -12,11 +12,11 @@ describe('buildFileTree', () => {
   it('keeps root files as leaf nodes with status', () => {
     const tree = buildFileTree([{ path: 'readme.md', status: 'modified' }])
     expect(tree).toEqual([
-      { name: 'readme.md', path: 'readme.md', dir: false, children: [], status: 'modified', count: 1 },
+      { name: 'readme.md', path: 'readme.md', dir: false, children: [], status: 'modified' },
     ])
   })
 
-  it('nests directories, attaches status to leaves and counts to dirs', () => {
+  it('nests directories and attaches status to leaves', () => {
     const tree = buildFileTree([
       { path: 'src/a/x.ts', status: 'modified' },
       { path: 'src/b.ts', status: 'added' },
@@ -26,11 +26,9 @@ describe('buildFileTree', () => {
     expect(tree.map((n) => n.name)).toEqual(['src', 'root.txt'])
     const src = tree[0]!
     expect(src.dir).toBe(true)
-    expect(src.count).toBe(2)
     // src 内：目录 a 先于文件 b.ts。
     expect(src.children.map((n) => n.name)).toEqual(['a', 'b.ts'])
     const a = src.children[0]!
-    expect(a.count).toBe(1)
     expect(a.children[0]).toMatchObject({ name: 'x.ts', dir: false, status: 'modified' })
   })
 
@@ -51,7 +49,6 @@ describe('buildFileTree', () => {
     ])
     expect(tree).toHaveLength(1)
     expect(tree[0]!.name).toBe('deep')
-    expect(tree[0]!.count).toBe(2)
     expect(tree[0]!.children[0]!.children).toHaveLength(2)
   })
 })

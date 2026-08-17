@@ -15,7 +15,7 @@
  * within 3s.
  */
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, JSX } from 'react'
+import type { CSSProperties, JSX, MouseEvent as ReactMouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Button, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
@@ -27,7 +27,7 @@ import type { GitQueryOutcome } from './controller.ts'
 import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph.ts'
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
-import { BranchIcon, ChevronIcon, FileIcon, FolderIcon, StarIcon, TagIcon } from './icons.tsx'
+import { BranchIcon, ChevronIcon, CollapseAllIcon, ExpandAllIcon, FileIcon, FolderIcon, StarIcon, TagIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
 
@@ -398,6 +398,11 @@ function HistoryTab({
   const [closedSections, setClosedSections] = useState<ReadonlySet<string>>(new Set())
   /** 文件树折叠的目录路径集合。 */
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
+  /** 三栏可拖拽尺寸：左宽/右宽/右栏上区比例。 */
+  const [leftW, setLeftW] = useState(170)
+  const [rightW, setRightW] = useState(360)
+  const [rightTopPct, setRightTopPct] = useState(58)
+  const rightBodyRef = useRef<HTMLDivElement>(null)
   /** now 随提交批次稳定，避免行 memo 因时间戳失效。 */
   const now = useMemo(() => Date.now(), [commits])
   /** 列表滚动容器与单航守卫（无限滚动）。 */
@@ -522,16 +527,33 @@ function HistoryTab({
     })
   }
 
+  /** 右栏头带：收起全部目录。 */
+  const collapseAllDirs = (): void => {
+    const paths: string[] = []
+    const walk = (nodes: readonly FileTreeNode[]): void => {
+      for (const n of nodes) {
+        if (!n.dir) continue
+        paths.push(n.path)
+        walk(n.children)
+      }
+    }
+    walk(fileTree)
+    setCollapsed(new Set(paths))
+  }
+
   return (
     <div style={css.historyLayout}>
-        <HistoryFilterTree
-          tree={tree}
-          filter={filter.ref === null ? { kind: 'all' } : { kind: 'ref', name: filter.ref }}
-          onFilter={(f) => setFilter((prev) => ({ ...prev, ref: f.kind === 'all' ? null : f.name }))}
-          closed={closedSections}
-          onToggleSection={toggleSection}
-          t={t}
-        />
+        <div style={{ ...css.paneSide, width: leftW, borderRight: '1px solid var(--dsw-alias-border-l2)' }}>
+          <HistoryFilterTree
+            tree={tree}
+            filter={filter.ref === null ? { kind: 'all' } : { kind: 'ref', name: filter.ref }}
+            onFilter={(f) => setFilter((prev) => ({ ...prev, ref: f.kind === 'all' ? null : f.name }))}
+            closed={closedSections}
+            onToggleSection={toggleSection}
+            t={t}
+          />
+        </div>
+        <Splitter kind="col" onDrag={(dx) => setLeftW((w) => clampNum(w + dx, 140, 320))} />
         <div style={css.historyColumn}>
           <div style={css.historyToolbar}>
             <input
@@ -612,17 +634,43 @@ function HistoryTab({
             )}
           </div>
         </div>
-
-        {selected === null
-          ? (
-            <div style={css.historyRight}>
-              <div style={css.rightEmptyZone}>{t('right.selectCommit')}</div>
-              <div style={{ ...css.rightEmptyZone, ...css.rightEmptyZoneBottom }}>{t('right.commitDetails')}</div>
-            </div>
-          )
-          : (
-            <div style={css.historyRight}>
-              <div style={css.rightFiles}>
+        <Splitter kind="col" onDrag={(dx) => setRightW((w) => clampNum(w - dx, 260, 560))} />
+        <div style={{ ...css.paneSide, width: rightW, borderLeft: '1px solid var(--dsw-alias-border-l2)' }}>
+          <div style={css.paneHead}>
+            <span style={css.commitHint}>{t('right.files')}</span>
+            <span style={{ flex: 1 }} />
+            <button
+              type="button"
+              style={css.paneHeadButton}
+              className="dsh-git-ui__refresh"
+              aria-label={t('right.expandAll')}
+              title={t('right.expandAll')}
+              onClick={() => setCollapsed(new Set())}
+            >
+              <ExpandAllIcon />
+            </button>
+            <button
+              type="button"
+              style={css.paneHeadButton}
+              className="dsh-git-ui__refresh"
+              aria-label={t('right.collapseAll')}
+              title={t('right.collapseAll')}
+              onClick={collapseAllDirs}
+            >
+              <CollapseAllIcon />
+            </button>
+          </div>
+          <div style={css.historyRight} ref={rightBodyRef}>
+            {selected === null
+              ? (
+                <>
+                  <div style={css.rightEmptyZone}>{t('right.selectCommit')}</div>
+                  <div style={{ ...css.rightEmptyZone, ...css.rightEmptyZoneBottom }}>{t('right.commitDetails')}</div>
+                </>
+              )
+              : (
+                <>
+                  <div style={{ ...css.rightFiles, flex: 'none', height: `${rightTopPct}%` }}>
                 {detail === null
                   ? <div style={css.emptyNote}>{t('center.loading')}</div>
                   : detail.stats.length === 0
@@ -632,21 +680,29 @@ function HistoryTab({
                         nodes={fileTree}
                         collapsed={collapsed}
                         onToggle={toggleDir}
-                        t={t}
                       />
                     )}
               </div>
-              <div style={css.rightMsg}>
-                <div style={css.commitDetailHeader}>
-                  <span style={css.commitDetailSubject}>{selected.subject}</span>
-                  <span style={css.commitDetailMeta}>
-                    {selected.shortHash} · {selected.author} · {timeAgo(selected.dateIso, now, t)}
-                  </span>
-                </div>
-                {detail !== null && detail.body !== '' && <pre style={css.msgBody}>{detail.body}</pre>}
-              </div>
-            </div>
-          )}
+                  <Splitter
+                    kind="row"
+                    onDrag={(dy) => {
+                      const h = rightBodyRef.current?.clientHeight ?? 1
+                      setRightTopPct((p) => clampNum(p + (dy / h) * 100, 25, 75))
+                    }}
+                  />
+                  <div style={css.rightMsg}>
+                    <div style={css.commitDetailHeader}>
+                      <span style={css.commitDetailSubject}>{selected.subject}</span>
+                      <span style={css.commitDetailMeta}>
+                        {selected.shortHash} · {selected.author} · {timeAgo(selected.dateIso, now, t)}
+                      </span>
+                    </div>
+                    {detail !== null && detail.body !== '' && <pre style={css.msgBody}>{detail.body}</pre>}
+                  </div>
+                </>
+              )}
+          </div>
+        </div>
     </div>
   )
 }
@@ -671,6 +727,23 @@ function HistoryFilterTree({
   onToggleSection: (section: string) => void
   t: (key: GitKey) => string
 }): JSX.Element {
+  /** 搜索（分支或标签）：匹配行高亮，搜索时平铺展示并忽略折叠态。 */
+  const [search, setSearch] = useState('')
+  const q = search.trim().toLowerCase()
+  const searching = q !== ''
+  const matches = (name: string): boolean => !searching || name.toLowerCase().includes(q)
+  const highlight = (name: string): JSX.Element | string => {
+    if (!searching) return name
+    const idx = name.toLowerCase().indexOf(q)
+    if (idx === -1) return name
+    return (
+      <>
+        {name.slice(0, idx)}
+        <span style={css.treeMatch}>{name.slice(idx, idx + q.length)}</span>
+        {name.slice(idx + q.length)}
+      </>
+    )
+  }
   const amber = 'var(--dsw-alias-state-warn-primary)'
   /** 分支图标与着色：当前检出 > 默认分支 > 普通。 */
   const branchFace = (name: string, bare: string): { icon: JSX.Element; color?: string } => {
@@ -689,11 +762,24 @@ function HistoryFilterTree({
         title={name}
       >
         <span style={face.color === undefined ? css.treeIcon : { ...css.treeIcon, color: face.color }} aria-hidden="true">{face.icon}</span>
-        <span style={mark ? { ...css.treeName, ...css.treeNameCurrent } : css.treeName}>{name}</span>
+        <span style={mark ? { ...css.treeName, ...css.treeNameCurrent } : css.treeName}>{highlight(name)}</span>
         {mark && <span style={css.branchMark}>✓</span>}
       </button>
     )
   }
+  const tagRow = (name: string): JSX.Element => (
+    <button
+      key={`t-${name}`}
+      type="button"
+      className="dsh-git-ui__row"
+      style={{ ...(filter.kind === 'ref' && filter.name === name ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow), paddingLeft: 24 }}
+      onClick={() => onFilter({ kind: 'ref', name })}
+      title={name}
+    >
+      <span style={css.treeIcon} aria-hidden="true"><TagIcon /></span>
+      <span style={css.treeName}>{highlight(name)}</span>
+    </button>
+  )
   const sectionHead = (key: string, label: string): JSX.Element => (
     <button type="button" style={css.treeSectionHead} onClick={() => onToggleSection(key)} aria-expanded={!closed.has(key)}>
       <ChevronIcon open={!closed.has(key)} />
@@ -713,70 +799,74 @@ function HistoryFilterTree({
     }
     remoteGroups.push(...map.entries())
   }
+  const bareOf = (name: string): string => name.slice(name.indexOf('/') + 1)
   return (
-    <div style={css.historyTree}>
-      <button
-        type="button"
-        className="dsh-git-ui__row"
-        style={filter.kind === 'all' ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow}
-        onClick={() => onFilter({ kind: 'all' })}
-      >
-        <span style={css.treeIcon} aria-hidden="true"><BranchIcon /></span>
-        <span style={css.treeName}>{t('history.allBranches')}</span>
-      </button>
-      {tree !== null && (
-        <>
-          {sectionHead('local', t('center.localBranches'))}
-          {!closed.has('local') && tree.local.map((b) => row(b.name, b.name, filter.kind === 'ref' && filter.name === b.name, b.name === tree.current, 24))}
-          {tree.remote.length > 0 && sectionHead('remote', t('center.remoteBranches'))}
-          {!closed.has('remote') && remoteGroups.map(([remoteName, branches]) => (
-            <div key={`g-${remoteName}`}>
-              <button
-                type="button"
-                className="dsh-git-ui__row"
-                style={{ ...css.treeRow, paddingLeft: 24 }}
-                onClick={() => onToggleSection(`remote:${remoteName}`)}
-                aria-expanded={!closed.has(`remote:${remoteName}`)}
-              >
-                <span style={css.treeCaret}><ChevronIcon open={!closed.has(`remote:${remoteName}`)} /></span>
-                <span style={css.treeFolderIcon}><FolderIcon /></span>
-                <span style={css.treeName}>{remoteName}</span>
-              </button>
-              {!closed.has(`remote:${remoteName}`) && branches.map((b) => {
-                const bare = b.name.slice(b.name.indexOf('/') + 1)
-                return row(b.name, bare, filter.kind === 'ref' && filter.name === b.name, false, 44)
-              })}
-            </div>
-          ))}
-          {tree.tags.length > 0 && sectionHead('tags', t('history.tags'))}
-          {!closed.has('tags') && tree.tags.map((b) => (
-            <button
-              key={`t-${b.name}`}
-              type="button"
-              className="dsh-git-ui__row"
-              style={{ ...(filter.kind === 'ref' && filter.name === b.name ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow), paddingLeft: 24 }}
-              onClick={() => onFilter({ kind: 'ref', name: b.name })}
-              title={b.name}
-            >
-              <span style={css.treeIcon} aria-hidden="true"><TagIcon /></span>
-              <span style={css.treeName}>{b.name}</span>
-            </button>
-          ))}
-        </>
-      )}
-    </div>
+    <>
+      <div style={css.paneHead}>
+        <input
+          className="dsh-git-ui__branch-input"
+          style={css.treeSearch}
+          placeholder={t('history.searchTree')}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label={t('history.searchTree')}
+        />
+      </div>
+      <div style={css.historyTree}>
+        <button
+          type="button"
+          className="dsh-git-ui__row"
+          style={filter.kind === 'all' ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow}
+          onClick={() => onFilter({ kind: 'all' })}
+        >
+          <span style={css.treeIcon} aria-hidden="true"><BranchIcon /></span>
+          <span style={css.treeName}>{t('history.allBranches')}</span>
+        </button>
+        {tree !== null && (searching ? (
+          // 搜索态：匹配行平铺（本地→远程→标签），忽略折叠。
+          <>
+            {tree.local.filter((b) => matches(b.name)).map((b) => row(b.name, b.name, filter.kind === 'ref' && filter.name === b.name, b.name === tree.current, 24))}
+            {tree.remote.filter((b) => matches(b.name)).map((b) => row(b.name, bareOf(b.name), filter.kind === 'ref' && filter.name === b.name, false, 24))}
+            {tree.tags.filter((b) => matches(b.name)).map((b) => tagRow(b.name))}
+          </>
+        ) : (
+          <>
+            {sectionHead('local', t('center.localBranches'))}
+            {!closed.has('local') && tree.local.map((b) => row(b.name, b.name, filter.kind === 'ref' && filter.name === b.name, b.name === tree.current, 24))}
+            {tree.remote.length > 0 && sectionHead('remote', t('center.remoteBranches'))}
+            {!closed.has('remote') && remoteGroups.map(([remoteName, branches]) => (
+              <div key={`g-${remoteName}`}>
+                <button
+                  type="button"
+                  className="dsh-git-ui__row"
+                  style={{ ...css.treeRow, paddingLeft: 24 }}
+                  onClick={() => onToggleSection(`remote:${remoteName}`)}
+                  aria-expanded={!closed.has(`remote:${remoteName}`)}
+                >
+                  <span style={css.treeCaret}><ChevronIcon open={!closed.has(`remote:${remoteName}`)} /></span>
+                  <span style={css.treeFolderIcon}><FolderIcon /></span>
+                  <span style={css.treeName}>{remoteName}</span>
+                </button>
+                {!closed.has(`remote:${remoteName}`) && branches.map((b) => row(b.name, bareOf(b.name), filter.kind === 'ref' && filter.name === b.name, false, 44))}
+              </div>
+            ))}
+            {tree.tags.length > 0 && sectionHead('tags', t('history.tags'))}
+            {!closed.has('tags') && tree.tags.map((b) => tagRow(b.name))}
+          </>
+        ))}
+      </div>
+    </>
   )
 }
 
 /** 右栏文件目录树：引导线缩进、文件夹/文件图标、目录文件计数、可折叠。
  * 文件仅展示变更清单（按状态着色），点击查看差异已按定位移除。 */
 function FileTreeNodes({
-  nodes, collapsed, onToggle, t,
+  nodes, collapsed, onToggle,
 }: {
   nodes: readonly FileTreeNode[]
   collapsed: ReadonlySet<string>
   onToggle: (path: string) => void
-  t: (key: GitKey) => string
 }): JSX.Element {
   return (
     <>
@@ -792,7 +882,6 @@ function FileTreeNodes({
             <span style={css.treeCaret}><ChevronIcon open={!collapsed.has(node.path)} /></span>
             <span style={css.treeFolderIcon}><FolderIcon /></span>
             <span style={css.treeName}>{node.name}</span>
-            <span style={css.treeCounts}>{t('history.fileCount').replace('{n}', String(node.count))}</span>
           </button>
           {!collapsed.has(node.path) && (
             <div style={css.treeChildren}>
@@ -800,7 +889,6 @@ function FileTreeNodes({
                 nodes={node.children}
                 collapsed={collapsed}
                 onToggle={onToggle}
-                t={t}
               />
             </div>
           )}
@@ -813,6 +901,40 @@ function FileTreeNodes({
         </div>
       ))}
     </>
+  )
+}
+
+/** 数值夹取。 */
+function clampNum(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v))
+}
+
+/** 拖拽分割条：col/row 两向；拖动期间 window mousemove 累加 delta。 */
+function Splitter({ kind, onDrag }: { kind: 'col' | 'row'; onDrag: (delta: number) => void }): JSX.Element {
+  const onMouseDown = (e: ReactMouseEvent): void => {
+    e.preventDefault()
+    let lastX = e.clientX
+    let lastY = e.clientY
+    const move = (ev: MouseEvent): void => {
+      onDrag(kind === 'col' ? ev.clientX - lastX : ev.clientY - lastY)
+      lastX = ev.clientX
+      lastY = ev.clientY
+    }
+    const up = (): void => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+  return (
+    <div
+      className="dsh-git-ui__splitter"
+      style={kind === 'col' ? css.splitter : css.splitterRow}
+      role="separator"
+      aria-orientation={kind === 'col' ? 'vertical' : 'horizontal'}
+      onMouseDown={onMouseDown}
+    />
   )
 }
 
