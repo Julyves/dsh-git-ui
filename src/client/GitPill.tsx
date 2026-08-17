@@ -59,16 +59,7 @@ export interface GitPillProps extends GitInjected {
   readonly t: (key: GitKey) => string
 }
 
-/** Status chip colors for the changed-file list. */
-const CHIP_COLORS: Record<string, string> = {
-  added: '#2e7d32',
-  modified: '#b26a00',
-  deleted: '#c62828',
-  renamed: '#1565c0',
-  untracked: '#6a6a6a',
-  conflicted: '#d32f2f',
-  typechange: '#7b1fa2',
-}
+/** 状态字符映射（配色见 styles.chipStyles，全语义 token）。 */
 
 const CHIP_LETTERS: Record<string, string> = {
   added: 'A', modified: 'M', deleted: 'D', renamed: 'R',
@@ -170,7 +161,7 @@ function GitPopupBody({
             {s.changes.map((change) => (
               <div key={change.path} style={css.changeRow}>
                 <span
-                  style={{ ...css.changeChip, background: CHIP_COLORS[change.status] ?? '#888' }}
+                  style={{ ...css.changeChip, ...(css.chipStyles[change.status] ?? css.chipStyles.untracked) }}
                   title={change.status}
                 >
                   {CHIP_LETTERS[change.status] ?? '•'}

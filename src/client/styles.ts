@@ -161,7 +161,17 @@ export const changeChip: CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
   flexShrink: 0,
-  color: '#fff',
+}
+
+/** 状态字符徽标配色：全语义 token，明暗主题自适应（取代旧硬编码 hex）。 */
+export const chipStyles: Record<string, CSSProperties> = {
+  added: { background: 'var(--dsw-alias-state-success-secondary)', color: 'var(--dsw-alias-state-success-primary)' },
+  modified: { background: 'var(--dsw-alias-interactive-bg-hover)', color: 'var(--dsw-alias-state-warn-primary)' },
+  deleted: { background: 'var(--dsw-alias-state-error-secondary)', color: 'var(--dsw-alias-state-error-primary)' },
+  renamed: { background: 'var(--dsw-alias-interactive-bg-hover)', color: 'var(--dsw-alias-state-business-primary)' },
+  untracked: { background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-secondary)' },
+  conflicted: { background: 'var(--dsw-alias-state-error-secondary)', color: 'var(--dsw-alias-state-error-primary)' },
+  typechange: { background: 'var(--dsw-alias-interactive-bg-hover)', color: 'var(--dsw-alias-state-warn-primary)' },
 }
 
 export const changePath: CSSProperties = {

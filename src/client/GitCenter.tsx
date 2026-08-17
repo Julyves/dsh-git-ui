@@ -130,15 +130,16 @@ export function GitCenter({
             </div>
           )}
 
-          {tab === 'changes' && (
+          {/* 三标签保持挂载、display 切换：保留各自状态（选中/分页/分支列表），与 IDE 行为一致。 */}
+          <div style={tab === 'changes' ? { display: 'contents' } : { display: 'none' }}>
             <ChangesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} />
-          )}
-          {tab === 'history' && (
+          </div>
+          <div style={tab === 'history' ? { display: 'contents' } : { display: 'none' }}>
             <HistoryTab query={query} t={t} />
-          )}
-          {tab === 'branches' && (
+          </div>
+          <div style={tab === 'branches' ? { display: 'contents' } : { display: 'none' }}>
             <BranchesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} />
-          )}
+          </div>
         </div>
       </div>
       {toast !== null && (
@@ -358,7 +359,7 @@ function ChangeRow({
         onChange={() => rowActions.onToggle(change.path)}
         aria-label={change.path}
       />
-      <span style={css.changeChip} title={change.status}>
+      <span style={{ ...css.changeChip, ...(css.chipStyles[change.status] ?? css.chipStyles.untracked) }} title={change.status}>
         {CHIP_LETTERS[change.status] ?? '•'}
       </span>
       <button
@@ -492,6 +493,9 @@ function HistoryTab({
   return (
     <div style={css.historyLayout}>
         <div style={css.historyList}>
+          {loading && commits.length === 0 && (
+            <div style={css.emptyNote}>{t('center.loading')}</div>
+          )}
           {graphRows.length > 0 && (
             <div style={{ ...css.historyHead, gridTemplateColumns: gridTpl }} aria-hidden="true">
               <span />
