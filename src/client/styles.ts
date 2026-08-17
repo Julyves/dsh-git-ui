@@ -232,7 +232,7 @@ const globalCss = [
   '.dsh-git-ui__commit-row:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   '.dsh-git-ui__refresh:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }',
   // Git center dialog: widen the platform Modal card (headless mode).
-  '.dsh-git-ui__center { width: min(1200px, 100vw); max-height: min(720px, calc(100vh - 48px)); }',
+  '.dsh-git-ui__center { width: min(1200px, 100vw); height: min(760px, calc(100vh - 48px)); }',
   '.dsh-git-ui__commit-input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   // System tab underline: 2px bar below the active tab.
   '.dsh-git-ui__tab::after { content: ""; position: absolute; right: 0; bottom: 1px; left: 0; height: 2px; border-radius: 2px; background: transparent; }',
@@ -257,8 +257,6 @@ export const centerShell: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   height: '100%',
-  maxHeight: 'min(720px, calc(100vh - 48px))',
-  minHeight: 420,
   fontSize: 13,
   lineHeight: '20px',
   color: 'var(--dsw-alias-label-primary)',
@@ -341,6 +339,7 @@ export const commitBox: CSSProperties = {
   flexDirection: 'column',
   gap: 8,
   flex: 'none',
+  marginTop: 'auto',
   background: 'var(--dsw-alias-bg-layer-1)',
 }
 
@@ -795,11 +794,11 @@ export const refPill: CSSProperties = {
   lineHeight: '14px',
 }
 
-/** 当前分支（HEAD ->）：成功色。 */
+/** 当前分支（HEAD ->）：描边式胶囊（与列表标签胶囊同族，避免绿底绿字低对比）。 */
 export const refPillHead: CSSProperties = {
   color: 'var(--dsw-alias-state-success-primary)',
   borderColor: 'var(--dsw-alias-state-success-primary)',
-  background: 'var(--dsw-alias-state-success-secondary)',
+  background: 'transparent',
 }
 
 /** 其他本地分支：中性描边。 */

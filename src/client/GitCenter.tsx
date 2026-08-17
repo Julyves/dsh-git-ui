@@ -26,6 +26,7 @@ import type { GraphCommit, GitRef } from '../host/types.ts'
 import type { GitQueryOutcome } from './controller.ts'
 import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph.ts'
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
+import { formatWhen } from './time-format.ts'
 import { BranchIcon, ChevronIcon, FileIcon, FolderIcon, StarIcon, TagIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
@@ -55,16 +56,13 @@ const CHIP_LETTERS: Record<string, string> = {
   untracked: '?', conflicted: '!', typechange: 'T',
 }
 
-/** Short relative time from an ISO date (same vocabulary as the popup). */
+/** IDEA 式时间：不足 60 分钟「x 分钟前」、今天/昨天 HH:mm，其余 Y/M/D HH:mm。 */
 function timeAgo(iso: string, now: number, t: (key: GitKey) => string): string {
-  const then = Date.parse(iso)
-  if (!Number.isFinite(then)) return iso
-  const seconds = Math.max(0, Math.floor((now - then) / 1000))
-  const fill = (template: GitKey, n: number): string => t(template).replace('{n}', String(n))
-  if (seconds < 60) return t('time.justNow')
-  if (seconds < 3600) return fill('time.minutesAgo', Math.floor(seconds / 60))
-  if (seconds < 86_400) return fill('time.hoursAgo', Math.floor(seconds / 3600))
-  return fill('time.daysAgo', Math.floor(seconds / 86_400))
+  return formatWhen(iso, now, {
+    minutesAgo: (n) => t('time.minutesAgo').replace('{n}', String(n)),
+    today: t('time.today'),
+    yesterday: t('time.yesterday'),
+  })
 }
 
 /**
@@ -405,12 +403,27 @@ function HistoryTab({
   /** 列表滚动容器与单航守卫（无限滚动）。 */
   const listRef = useRef<HTMLDivElement>(null)
   const inflightSkip = useRef<number | null>(null)
+  /** 按过滤组合的历史首页缓存（上限 10，切回瞬显，减缓“闪烁”与加载延迟）。 */
+  const historyCache = useRef(new Map<string, { commits: readonly GraphCommit[]; total: number }>())
+  const cacheKey = (f: { ref: string | null; search: string; author: string; since: string }): string =>
+    JSON.stringify([f.ref, f.search, f.author, f.since])
+  const writeHistoryCache = (f: { ref: string | null; search: string; author: string; since: string }, commits: readonly GraphCommit[], total: number): void => {
+    const cache = historyCache.current
+    const key = cacheKey(f)
+    cache.delete(key)
+    cache.set(key, { commits, total })
+    while (cache.size > 10) {
+      const first = cache.keys().next().value
+      if (first === undefined) break
+      cache.delete(first)
+    }
+  }
 
   /** 由提交序列计算图行与车道宽（每次加载后重算）。 */
   const graphRows = useMemo(() => buildGraph(commits), [commits])
   const graphCols = useMemo(() => graphWidth(graphRows), [graphRows])
   /** 表格列模板：图 | 提交(refs+主题) | 哈希 | 作者 | 时间；行与表头共用。 */
-  const gridTpl = `${graphCols * GRAPH_COL_W}px minmax(0,1fr) 64px 110px 76px`
+  const gridTpl = `${graphCols * GRAPH_COL_W}px minmax(0,1fr) 64px 110px 110px`
   /** 右栏文件目录树（随选中提交的 stats 重算）。 */
   const fileTree = useMemo(() => (detail === null ? [] : buildFileTree(detail.stats)), [detail])
 
@@ -432,8 +445,10 @@ function HistoryTab({
     if (!outcome.ok) return
     if (outcome.value.kind !== 'history') return
     const page = outcome.value.commits
-    setCommits((prev) => (skip === 0 ? page : [...prev, ...page]))
+    const next = skip === 0 ? page : [...commits, ...page]
+    setCommits(next)
     setTotal(outcome.value.total)
+    writeHistoryCache(f, next, outcome.value.total)
   }
 
   /** 无限滚动：接近底部 240px 自动加载下一批。 */
@@ -459,12 +474,15 @@ function HistoryTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- first activation only
   }, [])
 
-  // 过滤变化：重置选中与列表并重载首页（含首次激活）。
+  // 过滤变化：缓存命中瞬显；不清空旧数据，新数据就位后整体替换旧行，避免空白“闪烁”。
   useEffect(() => {
     setSelected(null)
     setDetail(null)
-    setCommits([])
-    setTotal(0)
+    const cached = historyCache.current.get(cacheKey(filter))
+    if (cached !== undefined) {
+      setCommits(cached.commits)
+      setTotal(cached.total)
+    }
     void loadPage(0, filter)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filter-driven reload
   }, [filter])
@@ -556,7 +574,15 @@ function HistoryTab({
               onSelect={(value) => setFilter((prev) => ({ ...prev, since: value }))}
             />
           </div>
-          <div style={css.historyList} ref={listRef} onScroll={onScroll}>
+          <div
+            style={{
+              ...css.historyList,
+              opacity: loading && commits.length > 0 ? 0.55 : 1,
+              transition: 'opacity var(--ds-transition-duration) linear',
+            }}
+            ref={listRef}
+            onScroll={onScroll}
+          >
             {loading && commits.length === 0 && (
               <div style={css.emptyNote}>{t('center.loading')}</div>
             )}

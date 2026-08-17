@@ -79,6 +79,8 @@ export const zh = {
   'time.minutesAgo': '{n} 分钟前',
   'time.hoursAgo': '{n} 小时前',
   'time.daysAgo': '{n} 天前',
+  'time.today': '今天',
+  'time.yesterday': '昨天',
 } satisfies Record<string, string>
 
 export type GitKey = keyof typeof zh
@@ -162,4 +164,6 @@ export const en: Record<GitKey, string> = {
   'time.minutesAgo': '{n}m ago',
   'time.hoursAgo': '{n}h ago',
   'time.daysAgo': '{n}d ago',
+  'time.today': 'Today',
+  'time.yesterday': 'Yesterday',
 }
