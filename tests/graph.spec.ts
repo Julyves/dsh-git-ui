@@ -63,14 +63,16 @@ describe('buildGraph', () => {
 
   it('opens a lane on merge and closes it with a back-edge at the merge-back', () => {
     const rows = buildGraph(MERGE_SEQUENCE)
-    // merge 行:节点列 0,分裂曲线 0→1,车道 1 开始等待 feat-1。
+    // merge 行:节点列 0,分裂曲线 0→1(着子分支色),车道 1 开始等待 feat-1。
     expect(rows[0]).toMatchObject({ column: 0, nodeFromTop: false, nodeContinues: true })
-    expect(rows[0]!.edges).toEqual([{ from: 0, to: 1 }])
+    expect(rows[0]!.edges).toEqual([{ from: 0, to: 1, kind: 'split' }])
+    // 残桩回归:本行新开的车道不画贯穿竖线(分裂曲线是该线唯一部分)。
+    expect(rows[0]!.verticals).toEqual([])
     // main 行:车道 1 竖线贯穿,节点在 0 延续等待 init。
     expect(rows[1]).toMatchObject({ column: 0, nodeFromTop: true, nodeContinues: true, verticals: [1] })
-    // feat 行:节点在 1,首父 init 已被车道 0 等待 → 回归曲线 1→0,本车道关闭。
+    // feat 行:节点在 1,首父 init 已被车道 0 等待 → 回归曲线 1→0(着源车道色),本车道关闭。
     expect(rows[2]).toMatchObject({ column: 1, nodeFromTop: true, nodeContinues: false, verticals: [0] })
-    expect(rows[2]!.edges).toEqual([{ from: 1, to: 0 }])
+    expect(rows[2]!.edges).toEqual([{ from: 1, to: 0, kind: 'return' }])
     // init 行:车道 0 承载节点后关闭,无残留竖线(车道不泄漏)。
     expect(rows[3]).toMatchObject({ column: 0, nodeFromTop: true, nodeContinues: false, verticals: [] })
   })
@@ -79,7 +81,7 @@ describe('buildGraph', () => {
     const rows = buildGraph([commit('B', ['root']), commit('A', ['root']), commit('root', [])])
     expect(rows.map((r) => r.column)).toEqual([0, 1, 0])
     // A 的首父 root 已被车道 0 等待 → 回归曲线 1→0。
-    expect(rows[1]!.edges).toEqual([{ from: 1, to: 0 }])
+    expect(rows[1]!.edges).toEqual([{ from: 1, to: 0, kind: 'return' }])
     expect(rows[2]).toMatchObject({ column: 0, verticals: [] })
   })
 
@@ -109,7 +111,7 @@ describe('buildGraph', () => {
     // ch1 开车道 0 等待 base；ch2 新开车道 1，首父 base 已被车道 0 等待 → 回归曲线 1→0。
     expect(rows[0]).toMatchObject({ column: 0, nodeContinues: true })
     expect(rows[1]).toMatchObject({ column: 1, nodeFromTop: false, nodeContinues: false })
-    expect(rows[1]!.edges).toEqual([{ from: 1, to: 0 }])
+    expect(rows[1]!.edges).toEqual([{ from: 1, to: 0, kind: 'return' }])
     // base 行：车道 0 承载节点后关闭，车道 1 已关闭，无残留竖线。
     expect(rows[2]).toMatchObject({ column: 0, nodeFromTop: true, nodeContinues: false, verticals: [] })
   })

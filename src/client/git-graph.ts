@@ -34,10 +34,15 @@ export interface GraphRow {
   readonly edges: readonly GraphEdge[]
 }
 
-/** 一条非竖直连接：from 车道（节点所在列）→ to 车道（行底）。 */
+/** 一条非竖直连接。 */
 export interface GraphEdge {
   readonly from: number
   readonly to: number
+  /**
+   * split = merge 提交开辟子分支车道：曲线属于子分支线路，着目标车道色；
+   * return = 首父移交已有车道（分支回归）：曲线属于源分支线路，着源车道色。
+   */
+  readonly kind: 'split' | 'return'
 }
 
 /**
@@ -55,16 +60,19 @@ export function buildGraph(commits: readonly GraphCommit[]): readonly GraphRow[]
   const rows: GraphRow[] = []
   /** lanes[i] = 该车道等待的提交哈希；null = 空闲（可回收）。 */
   const lanes: (string | null)[] = []
+  /** 本行新开的车道：不画贯穿竖线（分裂曲线是该线在本行的唯一部分，消除残桩）。 */
+  let opened: Set<number> = new Set()
 
   /** 回收第一个空闲车道索引；无空闲则扩容。 */
   const freeLane = (): number => {
     const index = lanes.indexOf(null)
-    if (index !== -1) return index
-    lanes.push(null)
-    return lanes.length - 1
+    const lane = index === -1 ? (lanes.push(null), lanes.length - 1) : index
+    opened.add(lane)
+    return lane
   }
 
   for (const commit of commits) {
+    opened = new Set()
     // 1. 节点列：等待该提交的车道；否则开辟新车道（分支尖端）。
     //    （同一哈希至多一条车道等待，见模块不变量。）
     const waitingLane = lanes.indexOf(commit.hash)
@@ -84,8 +92,8 @@ export function buildGraph(commits: readonly GraphCommit[]): readonly GraphRow[]
         lanes[column] = firstParent
         nodeContinues = true
       } else {
-        // 首父已被其他车道等待：本车道以回归曲线收尾关闭。
-        edges.push({ from: column, to: parentLane })
+        // 首父已被其他车道等待：本车道以回归曲线收尾关闭（着源车道色）。
+        edges.push({ from: column, to: parentLane, kind: 'return' })
         lanes[column] = null
       }
     }
@@ -98,13 +106,14 @@ export function buildGraph(commits: readonly GraphCommit[]): readonly GraphRow[]
         target = freeLane()
         lanes[target] = parentHash
       }
-      edges.push({ from: column, to: target })
+      edges.push({ from: column, to: target, kind: 'split' })
     }
 
-    // 4. 贯穿竖线：处理后仍在等待的车道（节点列由 nodeContinues 半段表达，不重复画）。
+    // 4. 贯穿竖线：处理后仍在等待的车道；
+    //    节点列与本行新开车道除外（后者仅由分裂曲线表达，消除合并行残桩）。
     const verticals: number[] = []
     lanes.forEach((waitingHash, index) => {
-      if (waitingHash === null || index === column) return
+      if (waitingHash === null || index === column || opened.has(index)) return
       verticals.push(index)
     })
 

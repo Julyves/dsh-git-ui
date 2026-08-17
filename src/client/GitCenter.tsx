@@ -808,7 +808,7 @@ function GraphStrip({ row, cols }: { row: GraphRow; cols: number }): JSX.Element
           key={`e-${i}`}
           d={`M ${x(edge.from)} ${cy} C ${x(edge.from)} ${(cy + h) / 2}, ${x(edge.to)} ${(cy + h) / 2}, ${x(edge.to)} ${h}`}
           fill="none"
-          stroke={color(edge.from)}
+          stroke={color(edge.kind === 'split' ? edge.to : edge.from)}
           strokeWidth={1.5}
         />
       ))}
