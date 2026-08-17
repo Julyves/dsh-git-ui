@@ -261,6 +261,21 @@ describe('runQuery — branches', () => {
     // The symbolic origin/HEAD row is filtered out.
     expect(result.value.remote.some((b) => b.name === 'origin/HEAD')).toBe(false)
   })
+
+  it('reports the default branch from origin/HEAD when available', async () => {
+    const dir = await repoWithCommits()
+    await addBareRemote(dir)
+    // 未设置符号引用时为 null。
+    const before = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'branches' }))
+    expect(before.ok).toBe(true)
+    if (!before.ok || before.value.kind !== 'branches') return
+    expect(before.value.defaultBranch).toBeNull()
+    git(dir, 'remote', 'set-head', 'origin', 'main')
+    const after = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'branches' }))
+    expect(after.ok).toBe(true)
+    if (!after.ok || after.value.kind !== 'branches') return
+    expect(after.value.defaultBranch).toBe('main')
+  })
 })
 
 describe('runQuery — tags', () => {

@@ -176,7 +176,7 @@ export type GitQueryResult =
     readonly body: string
     readonly stats: readonly GitFileStat[]
   }
-  | { readonly kind: 'branches'; readonly current: string | null; readonly local: readonly GitBranch[]; readonly remote: readonly GitBranch[] }
+  | { readonly kind: 'branches'; readonly current: string | null; readonly defaultBranch: string | null; readonly local: readonly GitBranch[]; readonly remote: readonly GitBranch[] }
   | { readonly kind: 'tags'; readonly tags: readonly GitBranch[] }
 
 export type GitQueryResponse =

@@ -71,16 +71,14 @@ export function BranchIcon(): JSX.Element {
   )
 }
 
-/** 远程（云）图标。 */
-export function CloudIcon(): JSX.Element {
+
+/** 星形图标（默认/main 分支标识，IDEA 式）。 */
+export function StarIcon(): JSX.Element {
   return (
     <svg width={12} height={12} viewBox="0 0 12 12" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
       <path
-        d="M3.5 9 a2.2 2.2 0 0 1-.3-4.4 a3 3 0 0 1 5.8.6 a2 2 0 0 1-.4 3.8 Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.2}
-        strokeLinejoin="round"
+        d="M6 0.8 l1.5 3.1 3.4 0.45 -2.5 2.35 0.65 3.35 L6 8.45 l-3.05 1.6 0.65-3.35 -2.5-2.35 3.4-0.45 Z"
+        fill="currentColor"
       />
     </svg>
   )

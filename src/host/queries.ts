@@ -203,11 +203,21 @@ async function branchesQuery(deps: SnapshotDeps, root: string): Promise<GitQuery
   const current = await runCommand(deps.run, ['git', 'branch', '--show-current'], root, 'branch', deps.signal)
   const currentName = 'run' in current && current.run.exitCode === 0 ? parseBranchOutput(current.run.stdout) : null
 
+  // 默认分支：origin/HEAD 符号引用（如 origin/main）；失败降级 null。
+  let defaultBranch: string | null = null
+  const def = await runCommand(deps.run, ['git', 'symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'], root, 'symbolic-ref', deps.signal)
+  if ('run' in def && def.run.exitCode === 0) {
+    const value = def.run.stdout.trim()
+    const slash = value.indexOf('/')
+    defaultBranch = value === '' ? null : slash === -1 ? value : value.slice(slash + 1)
+  }
+
   return {
     ok: true,
     value: {
       kind: 'branches',
       current: currentName,
+      defaultBranch,
       local: parseBranchList(local.run.stdout),
       remote: parseBranchList(remote.run.stdout).filter((branch) => !branch.name.endsWith('/HEAD')),
     },

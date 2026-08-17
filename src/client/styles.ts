@@ -467,6 +467,25 @@ export const treeGroupTitle: CSSProperties = {
   color: 'var(--dsw-alias-label-tertiary)',
 }
 
+/** 可折叠分组头（箭头 + 标题）。 */
+export const treeSectionHead: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
+  margin: '8px 0 2px',
+  padding: '2px 8px',
+  border: 'none',
+  background: 'transparent',
+  borderRadius: 6,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  fontSize: 11,
+  fontWeight: 600,
+  lineHeight: '16px',
+  textAlign: 'left',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
 export const treeRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',

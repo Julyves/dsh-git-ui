@@ -134,7 +134,7 @@ export const gitQueryResultSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('diff'), path: z.string(), text: z.string() }),
   z.object({ kind: z.literal('diff-commit'), path: z.string(), ref: z.string(), text: z.string() }),
   z.object({ kind: z.literal('show'), ref: z.string(), commit: gitCommitSchema.nullable(), body: z.string(), stats: z.array(gitFileStatSchema) }),
-  z.object({ kind: z.literal('branches'), current: z.string().nullable(), local: z.array(gitBranchSchema), remote: z.array(gitBranchSchema) }),
+  z.object({ kind: z.literal('branches'), current: z.string().nullable(), defaultBranch: z.string().nullable(), local: z.array(gitBranchSchema), remote: z.array(gitBranchSchema) }),
   z.object({ kind: z.literal('tags'), tags: z.array(gitBranchSchema) }),
 ])
 

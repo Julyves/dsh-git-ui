@@ -280,7 +280,7 @@ describe('GitController', () => {
     remote.enqueue(okResult(snapshot()))
     controller.ensure()
     await tick()
-    remote.enqueueQuery(okQuery({ kind: 'branches', current: 'main', local: [{ name: 'main', shortHash: 'abc1234' }], remote: [] }))
+    remote.enqueueQuery(okQuery({ kind: 'branches', current: 'main', defaultBranch: 'main', local: [{ name: 'main', shortHash: 'abc1234' }], remote: [] }))
     const outcome = await controller.query({ kind: 'branches' })
     expect(outcome.ok).toBe(true)
     if (!outcome.ok) return

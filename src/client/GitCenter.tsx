@@ -25,7 +25,7 @@ import type { GraphCommit, GitRef } from '../host/types.ts'
 import type { GitQueryOutcome } from './controller.ts'
 import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph.ts'
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
-import { BranchIcon, ChevronIcon, CloudIcon, FileIcon, FolderIcon, TagIcon, fileColor } from './icons.tsx'
+import { BranchIcon, ChevronIcon, FileIcon, FolderIcon, StarIcon, TagIcon, fileColor } from './icons.tsx'
 import { parseUnifiedDiff, type DiffLineType } from './unified-diff.ts'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
@@ -443,10 +443,13 @@ function HistoryTab({
   const [filter, setFilter] = useState<{ kind: 'all' } | { kind: 'ref'; name: string }>({ kind: 'all' })
   const [tree, setTree] = useState<{
     current: string | null
+    defaultBranch: string | null
     local: readonly GitBranch[]
     remote: readonly GitBranch[]
     tags: readonly GitBranch[]
   } | null>(null)
+  /** 左树折叠的分组。 */
+  const [closedSections, setClosedSections] = useState<ReadonlySet<string>>(new Set())
   /** 文件树折叠的目录路径集合。 */
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
   /** 请求序号令牌：连点文件/切换提交时仅最新响应落地。 */
@@ -483,6 +486,7 @@ function HistoryTab({
       const [branches, tags] = await Promise.all([query({ kind: 'branches' }), query({ kind: 'tags' })])
       setTree({
         current: branches.ok && branches.value.kind === 'branches' ? branches.value.current : null,
+        defaultBranch: branches.ok && branches.value.kind === 'branches' ? branches.value.defaultBranch : null,
         local: branches.ok && branches.value.kind === 'branches' ? branches.value.local : [],
         remote: branches.ok && branches.value.kind === 'branches' ? branches.value.remote : [],
         tags: tags.ok && tags.value.kind === 'tags' ? tags.value.tags : [],
@@ -535,9 +539,25 @@ function HistoryTab({
     })
   }
 
+  const toggleSection = (section: string): void => {
+    setClosedSections((prev) => {
+      const next = new Set(prev)
+      if (next.has(section)) next.delete(section)
+      else next.add(section)
+      return next
+    })
+  }
+
   return (
     <div style={css.historyLayout}>
-        <HistoryFilterTree tree={tree} filter={filter} onFilter={setFilter} t={t} />
+        <HistoryFilterTree
+          tree={tree}
+          filter={filter}
+          onFilter={setFilter}
+          closed={closedSections}
+          onToggleSection={toggleSection}
+          t={t}
+        />
         <div style={css.historyList}>
           {filter.kind === 'ref' && (
             <div style={css.filterChipRow}>
@@ -635,31 +655,51 @@ function HistoryTab({
 
 // ── 左栏过滤树与右栏文件树 ─────────────────────────────────────────────
 
-/** 左栏：全部分支入口 + 本地/远程/标签分组，点击过滤历史。 */
+/** 左栏：全部分支入口 + 本地/远程/标签可折叠分组，点击过滤历史。
+ * 图标语义（IDEA 式）：默认分支=星形、当前检出=橙色签出标、普通=灰色分支、标签=标签形。 */
 function HistoryFilterTree({
-  tree, filter, onFilter, t,
+  tree, filter, onFilter, closed, onToggleSection, t,
 }: {
   tree: {
     current: string | null
+    defaultBranch: string | null
     local: readonly GitBranch[]
     remote: readonly GitBranch[]
     tags: readonly GitBranch[]
   } | null
   filter: { kind: 'all' } | { kind: 'ref'; name: string }
   onFilter: (filter: { kind: 'all' } | { kind: 'ref'; name: string }) => void
+  closed: ReadonlySet<string>
+  onToggleSection: (section: string) => void
   t: (key: GitKey) => string
 }): JSX.Element {
-  const row = (name: string, active: boolean, icon: JSX.Element, mark: boolean): JSX.Element => (
-    <button
-      type="button"
-      className="dsh-git-ui__row"
-      style={active ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow}
-      onClick={() => onFilter({ kind: 'ref', name })}
-      title={name}
-    >
-      <span style={mark ? { ...css.treeIcon, color: 'var(--dsw-alias-state-business-primary)' } : css.treeIcon} aria-hidden="true">{icon}</span>
-      <span style={mark ? { ...css.treeName, ...css.treeNameCurrent } : css.treeName}>{name}</span>
-      {mark && <span style={css.branchMark}>✓</span>}
+  const amber = 'var(--dsw-alias-state-warn-primary)'
+  /** 分支图标与着色：当前检出 > 默认分支 > 普通。 */
+  const branchFace = (name: string, bare: string): { icon: JSX.Element; color?: string } => {
+    if (tree !== null && name === tree.current) return { icon: <TagIcon />, color: amber }
+    if (tree !== null && tree.defaultBranch !== null && bare === tree.defaultBranch) return { icon: <StarIcon />, color: amber }
+    return { icon: <BranchIcon /> }
+  }
+  const row = (name: string, bare: string, active: boolean, mark: boolean): JSX.Element => {
+    const face = branchFace(name, bare)
+    return (
+      <button
+        type="button"
+        className="dsh-git-ui__row"
+        style={active ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow}
+        onClick={() => onFilter({ kind: 'ref', name })}
+        title={name}
+      >
+        <span style={face.color === undefined ? css.treeIcon : { ...css.treeIcon, color: face.color }} aria-hidden="true">{face.icon}</span>
+        <span style={mark ? { ...css.treeName, ...css.treeNameCurrent } : css.treeName}>{name}</span>
+        {mark && <span style={css.branchMark}>✓</span>}
+      </button>
+    )
+  }
+  const sectionHead = (key: string, label: string): JSX.Element => (
+    <button type="button" style={css.treeSectionHead} onClick={() => onToggleSection(key)} aria-expanded={!closed.has(key)}>
+      <ChevronIcon open={!closed.has(key)} />
+      <span>{label}</span>
     </button>
   )
   return (
@@ -675,12 +715,27 @@ function HistoryFilterTree({
       </button>
       {tree !== null && (
         <>
-          <div style={css.treeGroupTitle}>{t('center.localBranches')}</div>
-          {tree.local.map((b) => row(b.name, filter.kind === 'ref' && filter.name === b.name, <BranchIcon />, b.name === tree.current))}
-          {tree.remote.length > 0 && <div style={css.treeGroupTitle}>{t('center.remoteBranches')}</div>}
-          {tree.remote.map((b) => row(b.name, filter.kind === 'ref' && filter.name === b.name, <CloudIcon />, false))}
-          {tree.tags.length > 0 && <div style={css.treeGroupTitle}>{t('history.tags')}</div>}
-          {tree.tags.map((b) => row(b.name, filter.kind === 'ref' && filter.name === b.name, <TagIcon />, false))}
+          {sectionHead('local', t('center.localBranches'))}
+          {!closed.has('local') && tree.local.map((b) => row(b.name, b.name, filter.kind === 'ref' && filter.name === b.name, b.name === tree.current))}
+          {tree.remote.length > 0 && sectionHead('remote', t('center.remoteBranches'))}
+          {!closed.has('remote') && tree.remote.map((b) => {
+            const bare = b.name.slice(b.name.indexOf('/') + 1)
+            return row(b.name, bare, filter.kind === 'ref' && filter.name === b.name, false)
+          })}
+          {tree.tags.length > 0 && sectionHead('tags', t('history.tags'))}
+          {!closed.has('tags') && tree.tags.map((b) => (
+            <button
+              key={`t-${b.name}`}
+              type="button"
+              className="dsh-git-ui__row"
+              style={filter.kind === 'ref' && filter.name === b.name ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow}
+              onClick={() => onFilter({ kind: 'ref', name: b.name })}
+              title={b.name}
+            >
+              <span style={css.treeIcon} aria-hidden="true"><TagIcon /></span>
+              <span style={css.treeName}>{b.name}</span>
+            </button>
+          ))}
         </>
       )}
     </div>
