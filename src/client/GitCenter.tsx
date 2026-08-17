@@ -14,8 +14,9 @@
  * in-panel banner. Discard/delete are destructive and require a second click
  * within 3s.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, JSX } from 'react'
+import { createPortal } from 'react-dom'
 import { Button, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   GitAction, GitActionResult, GitBranch, GitChange, GitFileStat,
@@ -47,7 +48,7 @@ interface ToastState {
   readonly seq: number
 }
 
-const HISTORY_PAGE = 50
+const HISTORY_PAGE = 1000
 
 const CHIP_LETTERS: Record<string, string> = {
   added: 'A', modified: 'M', deleted: 'D', renamed: 'R',
@@ -399,7 +400,11 @@ function HistoryTab({
   const [closedSections, setClosedSections] = useState<ReadonlySet<string>>(new Set())
   /** 文件树折叠的目录路径集合。 */
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
-  const now = Date.now()
+  /** now 随提交批次稳定，避免行 memo 因时间戳失效。 */
+  const now = useMemo(() => Date.now(), [commits])
+  /** 列表滚动容器与单航守卫（无限滚动）。 */
+  const listRef = useRef<HTMLDivElement>(null)
+  const inflightSkip = useRef<number | null>(null)
 
   /** 由提交序列计算图行与车道宽（每次加载后重算）。 */
   const graphRows = useMemo(() => buildGraph(commits), [commits])
@@ -410,6 +415,8 @@ function HistoryTab({
   const fileTree = useMemo(() => (detail === null ? [] : buildFileTree(detail.stats)), [detail])
 
   const loadPage = async (skip: number, f: { ref: string | null; search: string; author: string; since: string }): Promise<void> => {
+    if (inflightSkip.current !== null) return
+    inflightSkip.current = skip
     setLoading(true)
     const outcome = await query({
       kind: 'history',
@@ -421,11 +428,19 @@ function HistoryTab({
       ...(f.since !== '' ? { since: f.since } : {}),
     })
     setLoading(false)
+    inflightSkip.current = null
     if (!outcome.ok) return
     if (outcome.value.kind !== 'history') return
     const page = outcome.value.commits
     setCommits((prev) => (skip === 0 ? page : [...prev, ...page]))
     setTotal(outcome.value.total)
+  }
+
+  /** 无限滚动：接近底部 240px 自动加载下一批。 */
+  const onScroll = (): void => {
+    const el = listRef.current
+    if (el === null || loading || commits.length >= total) return
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 240) void loadPage(commits.length, filter)
   }
 
   // 首次激活：并行加载过滤树（分支 + 标签）。
@@ -462,14 +477,14 @@ function HistoryTab({
     return () => clearTimeout(timer)
   }, [searchInput])
 
-  const select = async (commit: GraphCommit): Promise<void> => {
+  const select = useCallback(async (commit: GraphCommit): Promise<void> => {
     setSelected(commit)
     setDetail(null)
     const outcome = await query({ kind: 'show', ref: commit.hash })
     if (outcome.ok && outcome.value.kind === 'show' && outcome.value.commit !== null) {
       setDetail({ commit: outcome.value.commit as GraphCommit, body: outcome.value.body, stats: outcome.value.stats })
     }
-  }
+  }, [query])
 
   const toggleDir = (path: string): void => {
     setCollapsed((prev) => {
@@ -499,7 +514,7 @@ function HistoryTab({
           onToggleSection={toggleSection}
           t={t}
         />
-        <div style={css.historyList}>
+        <div style={css.historyColumn}>
           <div style={css.historyToolbar}>
             <input
               className="dsh-git-ui__branch-input"
@@ -509,83 +524,76 @@ function HistoryTab({
               onChange={(e) => setSearchInput(e.target.value)}
               aria-label={t('history.search')}
             />
-            <select
-              style={css.toolbarSelect}
+            <SelectMenu
+              ariaLabel={t('history.branch')}
               value={filter.ref ?? ''}
-              aria-label={t('history.branch')}
-              onChange={(e) => setFilter((prev) => ({ ...prev, ref: e.target.value === '' ? null : e.target.value }))}
-            >
-              <option value="">{t('history.allBranches')}</option>
-              {tree?.local.map((b) => <option key={`l-${b.name}`} value={b.name}>{b.name}</option>)}
-              {tree?.remote.map((b) => <option key={`r-${b.name}`} value={b.name}>{b.name}</option>)}
-            </select>
-            <select
-              style={css.toolbarSelect}
+              options={[
+                { value: '', label: t('history.allBranches') },
+                ...(tree?.local.map((b) => ({ value: b.name, label: b.name })) ?? []),
+                ...(tree?.remote.map((b) => ({ value: b.name, label: b.name })) ?? []),
+              ]}
+              onSelect={(value) => setFilter((prev) => ({ ...prev, ref: value === '' ? null : value }))}
+            />
+            <SelectMenu
+              ariaLabel={t('history.allUsers')}
               value={filter.author}
-              aria-label={t('history.allUsers')}
-              onChange={(e) => setFilter((prev) => ({ ...prev, author: e.target.value }))}
-            >
-              <option value="">{t('history.allUsers')}</option>
-              {authors.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
-            <select
-              style={css.toolbarSelect}
+              options={[
+                { value: '', label: t('history.allUsers') },
+                ...authors.map((name) => ({ value: name, label: name })),
+              ]}
+              onSelect={(value) => setFilter((prev) => ({ ...prev, author: value }))}
+            />
+            <SelectMenu
+              ariaLabel={t('history.allTime')}
               value={filter.since}
-              aria-label={t('history.allTime')}
-              onChange={(e) => setFilter((prev) => ({ ...prev, since: e.target.value }))}
-            >
-              <option value="">{t('history.allTime')}</option>
-              <option value="1 day ago">{t('history.today')}</option>
-              <option value="7 days ago">{t('history.last7d')}</option>
-              <option value="30 days ago">{t('history.last30d')}</option>
-              <option value="90 days ago">{t('history.last90d')}</option>
-            </select>
+              options={[
+                { value: '', label: t('history.allTime') },
+                { value: '1 day ago', label: t('history.today') },
+                { value: '7 days ago', label: t('history.last7d') },
+                { value: '30 days ago', label: t('history.last30d') },
+                { value: '90 days ago', label: t('history.last90d') },
+              ]}
+              onSelect={(value) => setFilter((prev) => ({ ...prev, since: value }))}
+            />
           </div>
-          {loading && commits.length === 0 && (
-            <div style={css.emptyNote}>{t('center.loading')}</div>
-          )}
-          {graphRows.length > 0 && (
-            <div style={{ ...css.historyHead, gridTemplateColumns: gridTpl }} aria-hidden="true">
-              <span />
-              <span>{t('history.commit')}</span>
-              <span>{t('history.hash')}</span>
-              <span>{t('history.author')}</span>
-              <span>{t('history.time')}</span>
-            </div>
-          )}
-          {graphRows.map((row) => {
-            const isSelected = selected?.hash === row.commit.hash
-            return (
-              <button
+          <div style={css.historyList} ref={listRef} onScroll={onScroll}>
+            {loading && commits.length === 0 && (
+              <div style={css.emptyNote}>{t('center.loading')}</div>
+            )}
+            {graphRows.length > 0 && (
+              <div style={{ ...css.historyHead, gridTemplateColumns: gridTpl }} aria-hidden="true">
+                <span />
+                <span>{t('history.commit')}</span>
+                <span>{t('history.hash')}</span>
+                <span>{t('history.author')}</span>
+                <span>{t('history.time')}</span>
+              </div>
+            )}
+            {graphRows.map((row) => (
+              <CommitRow
                 key={row.commit.hash}
-                type="button"
-                className="dsh-git-ui__commit-row"
-                style={{
-                  ...(isSelected ? { ...css.historyRow, ...css.historyRowSelected } : css.historyRow),
-                  gridTemplateColumns: gridTpl,
-                }}
-                onClick={() => void select(row.commit)}
-              >
-                <GraphStrip row={row} cols={graphCols} />
-                <span style={css.historySubjectCell}>
-                  <RefPills refs={row.commit.refs} />
-                  <span style={css.commitSubjectLine} title={row.commit.subject}>{row.commit.subject}</span>
-                </span>
-                <span style={css.historyHash} title={row.commit.hash}>{row.commit.shortHash}</span>
-                <span style={css.historyAuthor} title={row.commit.author}>{row.commit.author}</span>
-                <span style={css.historyTime}>{timeAgo(row.commit.dateIso, now, t)}</span>
-              </button>
-            )
-          })}
-          {commits.length < total && (
-            <Button size="sm" disabled={loading} onClick={() => void loadPage(commits.length, filter)}>
-              {t('center.loadMore').replace('{loaded}', String(commits.length)).replace('{total}', String(total))}
-            </Button>
-          )}
+                row={row}
+                cols={graphCols}
+                gridTpl={gridTpl}
+                isSelected={selected?.hash === row.commit.hash}
+                now={now}
+                onSelect={select}
+                t={t}
+              />
+            ))}
+            {commits.length < total && (
+              <div style={css.loadSentinel}>{loading ? t('center.loading') : ''}</div>
+            )}
+          </div>
         </div>
 
         {selected === null
-          ? <div style={css.historyRight}><div style={css.emptyNote}>{t('center.selectCommit')}</div></div>
+          ? (
+            <div style={css.historyRight}>
+              <div style={css.rightEmptyZone}>{t('right.selectCommit')}</div>
+              <div style={{ ...css.rightEmptyZone, ...css.rightEmptyZoneBottom }}>{t('right.commitDetails')}</div>
+            </div>
+          )
           : (
             <div style={css.historyRight}>
               <div style={css.rightFiles}>
@@ -644,13 +652,13 @@ function HistoryFilterTree({
     if (tree !== null && tree.defaultBranch !== null && bare === tree.defaultBranch) return { icon: <StarIcon />, color: amber }
     return { icon: <BranchIcon /> }
   }
-  const row = (name: string, bare: string, active: boolean, mark: boolean): JSX.Element => {
+  const row = (name: string, bare: string, active: boolean, mark: boolean, indent: number): JSX.Element => {
     const face = branchFace(name, bare)
     return (
       <button
         type="button"
         className="dsh-git-ui__row"
-        style={active ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow}
+        style={{ ...(active ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow), paddingLeft: indent }}
         onClick={() => onFilter({ kind: 'ref', name })}
         title={name}
       >
@@ -666,6 +674,19 @@ function HistoryFilterTree({
       <span>{label}</span>
     </button>
   )
+  // 远程按远程名分组为文件夹节点（IDEA 式 origin 文件夹）。
+  const remoteGroups: Array<[string, readonly GitBranch[]]> = []
+  if (tree !== null) {
+    const map = new Map<string, GitBranch[]>()
+    for (const b of tree.remote) {
+      const slash = b.name.indexOf('/')
+      const remoteName = slash === -1 ? b.name : b.name.slice(0, slash)
+      const list = map.get(remoteName)
+      if (list === undefined) map.set(remoteName, [b])
+      else list.push(b)
+    }
+    remoteGroups.push(...map.entries())
+  }
   return (
     <div style={css.historyTree}>
       <button
@@ -680,19 +701,34 @@ function HistoryFilterTree({
       {tree !== null && (
         <>
           {sectionHead('local', t('center.localBranches'))}
-          {!closed.has('local') && tree.local.map((b) => row(b.name, b.name, filter.kind === 'ref' && filter.name === b.name, b.name === tree.current))}
+          {!closed.has('local') && tree.local.map((b) => row(b.name, b.name, filter.kind === 'ref' && filter.name === b.name, b.name === tree.current, 24))}
           {tree.remote.length > 0 && sectionHead('remote', t('center.remoteBranches'))}
-          {!closed.has('remote') && tree.remote.map((b) => {
-            const bare = b.name.slice(b.name.indexOf('/') + 1)
-            return row(b.name, bare, filter.kind === 'ref' && filter.name === b.name, false)
-          })}
+          {!closed.has('remote') && remoteGroups.map(([remoteName, branches]) => (
+            <div key={`g-${remoteName}`}>
+              <button
+                type="button"
+                className="dsh-git-ui__row"
+                style={{ ...css.treeRow, paddingLeft: 24 }}
+                onClick={() => onToggleSection(`remote:${remoteName}`)}
+                aria-expanded={!closed.has(`remote:${remoteName}`)}
+              >
+                <span style={css.treeCaret}><ChevronIcon open={!closed.has(`remote:${remoteName}`)} /></span>
+                <span style={css.treeFolderIcon}><FolderIcon /></span>
+                <span style={css.treeName}>{remoteName}</span>
+              </button>
+              {!closed.has(`remote:${remoteName}`) && branches.map((b) => {
+                const bare = b.name.slice(b.name.indexOf('/') + 1)
+                return row(b.name, bare, filter.kind === 'ref' && filter.name === b.name, false, 44)
+              })}
+            </div>
+          ))}
           {tree.tags.length > 0 && sectionHead('tags', t('history.tags'))}
           {!closed.has('tags') && tree.tags.map((b) => (
             <button
               key={`t-${b.name}`}
               type="button"
               className="dsh-git-ui__row"
-              style={filter.kind === 'ref' && filter.name === b.name ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow}
+              style={{ ...(filter.kind === 'ref' && filter.name === b.name ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow), paddingLeft: 24 }}
               onClick={() => onFilter({ kind: 'ref', name: b.name })}
               title={b.name}
             >
@@ -750,6 +786,142 @@ function FileTreeNodes({
           <span style={{ ...css.treeName, color: css.statusTextColor[node.status ?? 'modified'] }} title={node.path}>{node.name}</span>
         </div>
       ))}
+    </>
+  )
+}
+
+// ── 提交行（memo）与自绘下拉 ────────────────────────────────────────
+
+/** 提交行：memo 化保证千条级加载下过滤/选中变更仅重渲染受影响行。 */
+const CommitRow = memo(function CommitRow({
+  row, cols, gridTpl, isSelected, now, onSelect, t,
+}: {
+  row: GraphRow
+  cols: number
+  gridTpl: string
+  isSelected: boolean
+  now: number
+  onSelect: (commit: GraphCommit) => void
+  t: (key: GitKey) => string
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      className="dsh-git-ui__commit-row"
+      style={{
+        ...(isSelected ? { ...css.historyRow, ...css.historyRowSelected } : css.historyRow),
+        gridTemplateColumns: gridTpl,
+      }}
+      onClick={() => onSelect(row.commit)}
+    >
+      <GraphStrip row={row} cols={cols} />
+      <span style={css.historySubjectCell}>
+        <RefPills refs={row.commit.refs} />
+        <span style={css.commitSubjectLine} title={row.commit.subject}>{row.commit.subject}</span>
+      </span>
+      <span style={css.historyHash} title={row.commit.hash}>{row.commit.shortHash}</span>
+      <span style={css.historyAuthor} title={row.commit.author}>{row.commit.author}</span>
+      <span style={css.historyTime}>{timeAgo(row.commit.dateIso, now, t)}</span>
+    </button>
+  )
+})
+
+/** 自绘下拉选择器（平台 Menu 规范）：取代原生 select，明暗主题与系统样式统一。 */
+function SelectMenu({
+  value, options, onSelect, ariaLabel,
+}: {
+  value: string
+  options: readonly { value: string; label: string }[]
+  onSelect: (value: string) => void
+  ariaLabel: string
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const current = options.find((o) => o.value === value)
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null)
+      return
+    }
+    const place = (): void => {
+      const r = btnRef.current?.getBoundingClientRect()
+      if (r) setPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 140) })
+    }
+    place()
+    window.addEventListener('resize', place)
+    return () => window.removeEventListener('resize', place)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent): void => {
+      const target = e.target as Node
+      if (btnRef.current?.contains(target) ?? false) return
+      if (menuRef.current?.contains(target) ?? false) return
+      setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        style={css.toolbarSelect}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <span style={css.selectLabel}>{current?.label ?? ''}</span>
+        <span
+          aria-hidden="true"
+          style={{
+            display: 'inline-flex',
+            flex: 'none',
+            transition: 'transform var(--ds-transition-duration-fast) linear',
+            transform: open ? 'rotate(180deg)' : 'none',
+          }}
+        >
+          <svg width={10} height={10} viewBox="0 0 10 10">
+            <path d="M1.5 3 L5 7 L8.5 3" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      </button>
+      {open && pos !== null && createPortal(
+        <div
+          ref={menuRef}
+          role="listbox"
+          aria-label={ariaLabel}
+          style={{ ...css.selectMenu, top: pos.top, left: pos.left, minWidth: pos.width }}
+        >
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              role="option"
+              aria-selected={o.value === value}
+              style={o.value === value ? { ...css.selectOption, ...css.selectOptionActive } : css.selectOption}
+              className="dsh-git-ui__row"
+              onClick={() => { onSelect(o.value); setOpen(false) }}
+            >
+              <span style={{ ...css.treeCaret, visibility: o.value === value ? 'visible' : 'hidden' }} aria-hidden="true">✓</span>
+              <span style={css.selectLabel}>{o.label}</span>
+            </button>
+          ))}
+        </div>,
+        document.body,
+      )}
     </>
   )
 }

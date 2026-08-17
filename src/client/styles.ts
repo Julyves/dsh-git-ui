@@ -598,15 +598,84 @@ export const toolbarSearch: CSSProperties = {
 
 export const toolbarSelect: CSSProperties = {
   flex: 'none',
-  maxWidth: 130,
+  maxWidth: 150,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
   border: '1px solid var(--dsw-alias-border-l1)',
   borderRadius: 8,
-  padding: '4px 6px',
+  padding: '4px 8px',
   fontSize: 12,
   lineHeight: '18px',
   fontFamily: 'inherit',
   background: 'var(--dsw-alias-bg-layer-2)',
   color: 'var(--dsw-alias-label-primary)',
+  cursor: 'pointer',
+}
+
+export const selectLabel: CSSProperties = {
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  flex: 1,
+  minWidth: 0,
+  textAlign: 'left',
+}
+
+/** 自绘下拉菜单卡（平台 Menu 规范：layer-3 面 + l1 边 + lv3 阴影）。 */
+export const selectMenu: CSSProperties = {
+  position: 'fixed',
+  zIndex: 1200,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 1,
+  padding: 4,
+  maxHeight: 280,
+  overflowY: 'auto',
+  background: 'var(--dsw-alias-bg-layer-3)',
+  border: '1px solid var(--dsw-alias-border-l1)',
+  borderRadius: 12,
+  boxShadow: 'var(--dsw-shadow-lv3)',
+}
+
+export const selectOption: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '4px 10px',
+  border: 'none',
+  background: 'transparent',
+  borderRadius: 6,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  fontSize: 12,
+  lineHeight: '20px',
+  textAlign: 'left',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+export const selectOptionActive: CSSProperties = {
+  background: 'var(--dsw-alias-interactive-bg-hover)',
+  color: 'var(--dsw-alias-state-business-primary)',
+}
+
+/** 无限滚动底部哨兵区。 */
+export const loadSentinel: CSSProperties = {
+  flex: 'none',
+  padding: '8px 0',
+  textAlign: 'center',
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontSize: 11,
+  lineHeight: '16px',
+}
+
+/** 中栏外壳：工具栏固定 + 滚动列表（工具栏不随列表滚动）。 */
+export const historyColumn: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  flex: 1,
+  minHeight: 0,
+  minWidth: 0,
 }
 
 export const historyList: CSSProperties = {
@@ -797,6 +866,25 @@ export const msgBody: CSSProperties = {
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
   color: 'var(--dsw-alias-label-secondary)',
+}
+
+/** 右栏未选中时的占位区（IDEA 式双区居中提示）。 */
+export const rightEmptyZone: CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontSize: 12,
+  lineHeight: '18px',
+}
+
+/** 下占位区（提交详细信息）：固定比例 + 顶部分隔线。 */
+export const rightEmptyZoneBottom: CSSProperties = {
+  flex: 'none',
+  height: '34%',
+  borderTop: '1px solid var(--dsw-alias-border-l1)',
 }
 
 export const commitDetailHeader: CSSProperties = {

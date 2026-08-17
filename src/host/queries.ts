@@ -16,8 +16,8 @@ const LOG_FORMAT = '%H%x1f%h%x1f%s%x1f%an%x1f%aI'
 /** 带图的 log 格式（%P = 父提交，%D = ref 装饰）。 */
 const GRAPH_FORMAT = '%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%P%x1f%D'
 
-/** History page size cap (and default). */
-const MAX_HISTORY_LIMIT = 100
+/** History page size cap (and default). 千条级 + 无限滚动。 */
+const MAX_HISTORY_LIMIT = 1000
 
 /** A ref is acceptable when non-empty and free of whitespace. */
 function isValidRef(ref: string): boolean {
