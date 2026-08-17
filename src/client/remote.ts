@@ -18,6 +18,16 @@ export const gitCommitSchema = z.object({
   dateIso: z.string(),
 })
 
+/** GraphCommit: GitCommit enriched with parent hashes for graph rendering. */
+export const gitGraphCommitSchema = z.object({
+  hash: z.string(),
+  shortHash: z.string(),
+  subject: z.string(),
+  author: z.string(),
+  dateIso: z.string(),
+  parents: z.array(z.string()),
+})
+
 export const gitChangeSchema = z.object({
   path: z.string(),
   status: z.enum(['added', 'modified', 'deleted', 'renamed', 'untracked', 'conflicted', 'typechange']),
@@ -114,7 +124,7 @@ const gitFileStatSchema = z.object({ path: z.string(), added: z.number(), delete
 const gitBranchSchema = z.object({ name: z.string(), shortHash: z.string().nullable() })
 
 export const gitQueryResultSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('history'), commits: z.array(gitCommitSchema), total: z.number() }),
+  z.object({ kind: z.literal('history'), commits: z.array(gitGraphCommitSchema), total: z.number() }),
   z.object({ kind: z.literal('diff'), path: z.string(), text: z.string() }),
   z.object({ kind: z.literal('diff-commit'), path: z.string(), ref: z.string(), text: z.string() }),
   z.object({ kind: z.literal('show'), ref: z.string(), commit: gitCommitSchema.nullable(), stats: z.array(gitFileStatSchema) }),

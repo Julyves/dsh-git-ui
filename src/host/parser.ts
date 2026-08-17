@@ -3,7 +3,7 @@
  * No side effects and no I/O — fully unit-testable against literal fixtures
  * (verified against real `git status --porcelain=v1 -z --branch` output).
  */
-import type { GitChange, GitChangeStatus, GitCommit } from './types.ts'
+import type { GitChange, GitChangeStatus, GitCommit, GraphCommit } from './types.ts'
 
 /** Parsed status counts plus the (possibly capped) change list. */
 export interface ParsedStatus {
@@ -161,6 +161,33 @@ export function parseLogOutput(output: string): readonly GitCommit[] {
       subject: subject ?? '',
       author: author ?? '',
       dateIso: dateIso ?? '',
+    })
+  }
+  return commits
+}
+
+/**
+ * Parse graph-aware log output:
+ * `%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%P`
+ * where `%P` is a space-separated list of parent hashes (empty for roots).
+ * Returns `GraphCommit[]` suitable for the branch-graph renderer.
+ */
+export function parseGraphLogOutput(output: string): readonly GraphCommit[] {
+  const commits: GraphCommit[] = []
+  for (const line of output.split('\n')) {
+    if (line === '') continue
+    const [hash, shortHash, subject, author, dateIso, parentField] = line.split(LOG_SEP)
+    if (hash === undefined || hash === '') continue
+    const parents = (parentField ?? '')
+      .split(' ')
+      .filter((p) => p !== '')
+    commits.push({
+      hash,
+      shortHash: shortHash ?? '',
+      subject: subject ?? '',
+      author: author ?? '',
+      dateIso: dateIso ?? '',
+      parents,
     })
   }
   return commits

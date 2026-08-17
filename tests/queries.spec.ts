@@ -50,6 +50,23 @@ async function repoWithCommits(): Promise<string> {
   return dir
 }
 
+/** A repo with a merge commit (branch + merge), suitable for graph verification. */
+async function repoWithMerge(): Promise<string> {
+  const dir = await tempDir()
+  await gitInit(dir)
+  git(dir, 'checkout', '-b', 'feature')
+  await writeFile(join(dir, 'f.txt'), 'feat\n')
+  git(dir, 'add', '.')
+  git(dir, 'commit', '-m', 'feature commit')
+  git(dir, 'checkout', '-q', 'main')
+  // Advance main so the merge is not fast-forward → creates a real merge commit.
+  await writeFile(join(dir, 'm.txt'), 'main advance\n')
+  git(dir, 'add', '.')
+  git(dir, 'commit', '-m', 'main advance')
+  git(dir, 'merge', '-m', 'merge feature', 'feature')
+  return dir
+}
+
 describe('runQuery — history', () => {
   it('paginates newest-first with skip/limit and reports the total', async () => {
     const dir = await repoWithCommits() // initial + 3 named commits = 4 total
@@ -83,6 +100,28 @@ describe('runQuery — history', () => {
     if (!result.ok || result.value.kind !== 'history') return
     expect(result.value.commits).toEqual([])
     expect(result.value.total).toBe(0)
+  })
+
+  it('every commit has a parents array (root parents is empty)', async () => {
+    const dir = await repoWithCommits()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0 }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'history') return
+    const commits = result.value.commits
+    // All non-root commits should have 1+ parents; root has empty parents.
+    expect(commits[0]?.parents).toHaveLength(1) // third → second
+    expect(commits[commits.length - 1]?.parents).toEqual([]) // initial = root
+  })
+
+  it('returns merge commits with 2+ parents (graph data)', async () => {
+    const dir = await repoWithMerge()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0 }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'history') return
+    // The merge commit should have 2 parents.
+    const merge = result.value.commits.find((c) => c.subject === 'merge feature')
+    expect(merge).toBeDefined()
+    expect(merge!.parents.length).toBe(2)
   })
 })
 

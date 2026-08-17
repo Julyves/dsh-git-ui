@@ -58,6 +58,15 @@ export interface GitCommit {
   readonly dateIso: string
 }
 
+/**
+ * A commit enriched with parent references for graph rendering.
+ * `parents` are full SHA hashes (space-separated in the wire format);
+ * root commits have an empty parents array.
+ */
+export interface GraphCommit extends GitCommit {
+  readonly parents: readonly string[]
+}
+
 export interface GitChange {
   readonly path: string
   readonly status: GitChangeStatus
@@ -140,7 +149,7 @@ export interface GitBranch {
 }
 
 export type GitQueryResult =
-  | { readonly kind: 'history'; readonly commits: readonly GitCommit[]; readonly total: number }
+  | { readonly kind: 'history'; readonly commits: readonly GraphCommit[]; readonly total: number }
   | { readonly kind: 'diff'; readonly path: string; readonly text: string }
   | { readonly kind: 'diff-commit'; readonly path: string; readonly ref: string; readonly text: string }
   | { readonly kind: 'show'; readonly ref: string; readonly commit: GitCommit | null; readonly stats: readonly GitFileStat[] }

@@ -7,12 +7,14 @@
  * against the repository root.
  */
 import { resolveWorkspace, runCommand, type GitStatusConfig, type SnapshotDeps } from './core.ts'
-import { parseBranchOutput, parseLogOutput, parseStatOutput } from './parser.ts'
+import { parseBranchOutput, parseGraphLogOutput, parseLogOutput, parseStatOutput } from './parser.ts'
 import { isSafePath, operationError } from './actions.ts'
-import type { GitBranch, GitCommit, GitFileStat, GitQuery, GitQueryRequest, GitQueryResponse } from './types.ts'
+import type { GitBranch, GitCommit, GitFileStat, GitQuery, GitQueryRequest, GitQueryResponse, GraphCommit } from './types.ts'
 
-/** Machine-readable log format shared by history and show queries. */
+/** Machine-readable log format for show queries (no parents). */
 const LOG_FORMAT = '%H%x1f%h%x1f%s%x1f%an%x1f%aI'
+/** Graph-aware log format for history queries (%P = parents). */
+const GRAPH_FORMAT = '%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%P'
 
 /** History page size cap (and default). */
 const MAX_HISTORY_LIMIT = 100
@@ -61,7 +63,7 @@ async function historyQuery(
 
   const log = await runCommand(
     deps.run,
-    ['git', 'log', `--skip=${String(safeSkip)}`, '-n', String(safeLimit), `--format=${LOG_FORMAT}`],
+    ['git', 'log', '--all', `--skip=${String(safeSkip)}`, '-n', String(safeLimit), `--format=${GRAPH_FORMAT}`],
     root,
     'log',
     deps.signal,
@@ -77,15 +79,15 @@ async function historyQuery(
     return gitError('log', log.run.stderr, log.run.stdout)
   }
 
-  // Total commit count is best-effort: a failure only zeroes it.
+  // Total commit count across all branches is best-effort.
   let total = 0
-  const count = await runCommand(deps.run, ['git', 'rev-list', '--count', 'HEAD'], root, 'rev-list', deps.signal)
+  const count = await runCommand(deps.run, ['git', 'rev-list', '--count', '--all'], root, 'rev-list', deps.signal)
   if ('run' in count && count.run.exitCode === 0) {
     const parsed = Number(count.run.stdout.trim())
     if (Number.isFinite(parsed) && parsed >= 0) total = parsed
   }
 
-  return { ok: true, value: { kind: 'history', commits: parseLogOutput(log.run.stdout), total } }
+  return { ok: true, value: { kind: 'history', commits: parseGraphLogOutput(log.run.stdout), total } }
 }
 
 async function diffQuery(
