@@ -28,6 +28,7 @@ import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
 import { buildSideBySide, type SideCell } from './side-by-side.ts'
+import { reconcileDiffSelection, type DiffSelection } from './changes-diff.ts'
 import { BranchIcon, ChevronIcon, CollapseAllIcon, ExpandAllIcon, FileIcon, FolderIcon, StarIcon, TagIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
@@ -161,7 +162,7 @@ function ChangesTab({
   const [message, setMessage] = useState('')
   const [armed, setArmed] = useState<string | 'all' | null>(null)
   /** 当前对照查看的文件（base 取决于暂存态）。 */
-  const [diffSel, setDiffSel] = useState<{ path: string; base: 'worktree' | 'staged' } | null>(null)
+  const [diffSel, setDiffSel] = useState<DiffSelection | null>(null)
   const [diffText, setDiffText] = useState<string | null>(null)
   const [diffLoading, setDiffLoading] = useState(false)
   const diffSeq = useRef(0)
@@ -197,6 +198,21 @@ function ChangesTab({
     setDiffLoading(false)
     setDiffText(outcome.ok && outcome.value.kind === 'diff' ? outcome.value.text : null)
   }
+
+  // 差异视图跟随快照：管理操作成功/轮询刷新后，文件消失 → 关闭对照；
+  // 暂存侧迁移（MM 双条目）→ 按新基线重取；内容也可能随操作变化 → 一律重取。
+  useEffect(() => {
+    if (diffSel === null) return
+    const desired = reconcileDiffSelection(diffSel, snapshot.changes)
+    if (desired === null) {
+      diffSeq.current += 1
+      setDiffSel(null)
+      setDiffText(null)
+    } else {
+      void showDiff(desired.path, desired.base)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 快照驱动的差异协调；showDiff 经 diffSeq 防竞态
+  }, [snapshot])
 
   const commit = (): void => {
     const text = message.trim()
