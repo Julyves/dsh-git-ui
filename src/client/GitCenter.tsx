@@ -372,9 +372,12 @@ function ChangesTab({
             }}
           />
           <div style={css.commitFooter}>
-            <span style={css.commitHint}>
-              {selected.size > 0 ? t('center.commitSelected').replace('{count}', String(selected.size)) : t('center.commitHint')}
-            </span>
+            {selected.size > 0 && (
+              <span style={css.commitHint}>
+                {t('center.commitSelected').replace('{count}', String(selected.size))}
+              </span>
+            )}
+            <span style={{ flex: 1 }} />
             <span style={css.commitKbd} aria-hidden="true">⌘/Ctrl + ↵</span>
             <Button variant="primary" size="sm" disabled={busy || message.trim() === ''} onClick={commit}>
               {busy ? t('center.busy') : t('center.commit')}
