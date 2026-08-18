@@ -3,7 +3,7 @@
  * 用例覆盖:线性延续、分裂、merge 回归、车道回收复用、收敛、图宽度。
  */
 import { describe, expect, it } from 'vitest'
-import { buildGraph, graphWidth, GRAPH_COLORS } from '../src/client/git-graph.ts'
+import { buildGraph, graphWidth, markFilterEnds, GRAPH_COLORS } from '../src/client/git-graph.ts'
 import type { GraphCommit } from '../src/host/types.ts'
 
 /** 构造简单提交链(新→旧,与 git log 输出序一致)。 */
@@ -137,5 +137,37 @@ describe('graphWidth', () => {
 describe('GRAPH_COLORS', () => {
   it('has enough color palette entries', () => {
     expect(GRAPH_COLORS.length).toBeGreaterThanOrEqual(16)
+  })
+})
+
+describe('markFilterEnds', () => {
+  const seq = [commit('a', ['b']), commit('b', [])]
+
+  it('returns the same rows unchanged when not filtered', () => {
+    const rows = buildGraph(seq)
+    expect(markFilterEnds(rows, new Set(['a', 'b']), false)).toBe(rows)
+  })
+
+  it('leaves continuations solid when the parent is loaded', () => {
+    const marked = markFilterEnds(buildGraph(seq), new Set(['a', 'b']), true)
+    expect(marked[0]!.endOpen).toBeUndefined()
+    // 根提交 nodeContinues=false，恒不标记
+    expect(marked[1]!.endOpen).toBeUndefined()
+  })
+
+  it('marks a continuation whose parent is missing from the loaded set', () => {
+    // 'b' 不在已加载集合（被过滤/未载入）→ a 的延续线悬垂 → 标 endOpen
+    const marked = markFilterEnds(buildGraph(seq), new Set(['a']), true)
+    expect(marked[0]!.endOpen).toBe(true)
+    expect(marked[1]!.endOpen).toBeUndefined()
+  })
+
+  it('leaves rows that do not continue (closed/return/root) unmarked even under filters', () => {
+    const rows = buildGraph(MERGE_SEQUENCE)
+    // feat 行为回归行（nodeContinues=false，首父 init 缺失也不延续）；init 为根。
+    // 集合缺 init：merge 行延续 main-1（在场）不标；main 行延续 init（缺失）标；feat/init 非延续不标。
+    const marked = markFilterEnds(rows, new Set(['merge', 'main-1', 'feat-1']), true)
+    expect(marked[2]!.endOpen).toBeUndefined()
+    expect(marked[3]!.endOpen).toBeUndefined()
   })
 })

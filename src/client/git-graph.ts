@@ -136,3 +136,32 @@ export function graphWidth(rows: readonly GraphRow[]): number {
   }
   return width
 }
+
+/** 带悬垂标记的行：`endOpen` 表示延续线指向的父提交不在已加载集合（图上会悬垂）。 */
+export interface GraphRowMarker extends GraphRow {
+  readonly endOpen?: boolean
+}
+
+/**
+ * 标记「延续线指向的父提交不在已加载集合」的行——图上的悬垂竖线。
+ *
+ * 过滤（搜索/作者/日期）下结果集不含某些提交的父节点，`buildGraph` 的车道
+ * 永远等不到父，`nodeContinues` 的延续线会永久悬垂；分页边界同理但随下页
+ * 加载消散。`filtered` 为 false 时不标记，让边界悬垂随下页自愈。
+ * 纯函数，可单测。
+ */
+export function markFilterEnds(
+  rows: readonly GraphRow[],
+  loadedHashes: ReadonlySet<string>,
+  filtered: boolean,
+): readonly GraphRowMarker[] {
+  if (!filtered) return rows as readonly GraphRowMarker[]
+  return rows.map((row): GraphRowMarker => {
+    if (!row.nodeContinues) return row
+    const parent = row.commit.parents[0]
+    if (parent !== undefined && !loadedHashes.has(parent)) {
+      return { ...row, endOpen: true }
+    }
+    return row
+  })
+}

@@ -24,7 +24,7 @@ import type {
 } from '../host/types.ts'
 import type { GraphCommit, GitRef } from '../host/types.ts'
 import type { GitQueryOutcome } from './controller.ts'
-import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph.ts'
+import { buildGraph, graphWidth, markFilterEnds, GRAPH_COLORS, type GraphRow, type GraphRowMarker } from './git-graph.ts'
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
 import { buildSideBySide, capSideBySideRows, foldContext, isBinaryDiff, summarizeChanges, type SideBySideRow, type SideCell } from './side-by-side.ts'
@@ -737,6 +737,13 @@ function HistoryTab({
   /** 由提交序列计算图行与车道宽（每次加载后重算）。 */
   const graphRows = useMemo(() => buildGraph(commits), [commits])
   const graphCols = useMemo(() => graphWidth(graphRows), [graphRows])
+  /** 过滤（搜索/作者/日期）生效时，结果集不含部分父节点——延续线永久悬垂，标为端头。 */
+  const hasContentFilter = filter.search !== '' || filter.author !== '' || filter.since !== ''
+  const loadedHashes = useMemo(() => new Set(commits.map((c) => c.hash)), [commits])
+  const graphMarked = useMemo(
+    () => markFilterEnds(graphRows, loadedHashes, hasContentFilter),
+    [graphRows, loadedHashes, hasContentFilter],
+  )
   /** 表格列模板：图 | 提交(refs+主题) | 哈希 | 作者 | 时间；行与表头共用。 */
   const gridTpl = `${graphCols * GRAPH_COL_W}px minmax(0,1fr) 64px 110px 110px`
   /** 右栏文件目录树（随选中提交的 stats 重算）。 */
@@ -927,7 +934,7 @@ function HistoryTab({
                 <span>{t('history.time')}</span>
               </div>
             )}
-            {graphRows.map((row) => (
+            {graphMarked.map((row) => (
               <CommitRow
                 key={row.commit.hash}
                 row={row}
@@ -1254,7 +1261,7 @@ function Splitter({ kind, onDrag }: { kind: 'col' | 'row'; onDrag: (delta: numbe
 const CommitRow = memo(function CommitRow({
   row, cols, gridTpl, isSelected, now, onSelect, t,
 }: {
-  row: GraphRow
+  row: GraphRowMarker
   cols: number
   gridTpl: string
   isSelected: boolean
@@ -1272,7 +1279,7 @@ const CommitRow = memo(function CommitRow({
       }}
       onClick={() => onSelect(row.commit)}
     >
-      <GraphStrip row={row} cols={cols} />
+      <GraphStrip row={row} cols={cols} endOpen={row.endOpen} />
       <span style={css.historySubjectCell}>
         <RefPills refs={row.commit.refs} />
         <span style={css.commitSubjectLine} title={row.commit.subject}>{row.commit.subject}</span>
@@ -1422,7 +1429,7 @@ function RefPills({ refs }: { refs: readonly GitRef[] }): JSX.Element | null {
  * 分裂与 merge 回归为贝塞尔曲线（节点→行底）。
  * 宽度 = 全图车道数，超宽时由列表容器横向滚动（不再截断坍塌）。
  */
-function GraphStrip({ row, cols }: { row: GraphRow; cols: number }): JSX.Element {
+function GraphStrip({ row, cols, endOpen }: { row: GraphRow; cols: number; endOpen?: boolean }): JSX.Element {
   const w = Math.max(cols, 1) * GRAPH_COL_W
   const h = css.HISTORY_ROW_H
   const x = (col: number): number => col * GRAPH_COL_W + GRAPH_COL_W / 2
@@ -1436,9 +1443,15 @@ function GraphStrip({ row, cols }: { row: GraphRow; cols: number }): JSX.Element
       {row.nodeFromTop && (
         <line x1={x(row.column)} y1={0} x2={x(row.column)} y2={cy} stroke={color(row.column)} strokeWidth={1.5} />
       )}
-      {row.nodeContinues && (
+      {row.nodeContinues && (endOpen === true ? (
+        <>
+          {/* 悬垂端头：父提交不在已加载集合（被过滤/边界），虚线 + 端止横杠，诚实提示上游未载入。 */}
+          <line x1={x(row.column)} y1={cy} x2={x(row.column)} y2={h - 5} stroke={color(row.column)} strokeWidth={1.5} strokeDasharray="3 3" />
+          <line x1={x(row.column) - 4} y1={h - 5} x2={x(row.column) + 4} y2={h - 5} stroke={color(row.column)} strokeWidth={1.5} />
+        </>
+      ) : (
         <line x1={x(row.column)} y1={cy} x2={x(row.column)} y2={h} stroke={color(row.column)} strokeWidth={1.5} />
-      )}
+      ))}
       {row.edges.map((edge, i) => (
         <path
           key={`e-${i}`}
