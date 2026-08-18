@@ -83,3 +83,68 @@ export function buildSideBySide(unified: string): readonly SideBySideRow[] {
 export function capSideBySideRows(rows: readonly SideBySideRow[], max: number): readonly SideBySideRow[] {
   return rows.length > max ? rows.slice(0, max) : rows
 }
+
+/** 判定一行为上下文行（两侧皆 context）。 */
+function isContextRow(row: SideBySideRow): boolean {
+  return row.left.kind === 'context' && row.right.kind === 'context'
+}
+
+/** 折叠块：连续上下文行超阈值时折叠为单个可展开标记，保留原行供展开。 */
+export interface DiffFoldBlock {
+  readonly kind: 'fold'
+  readonly count: number
+  readonly rows: readonly SideBySideRow[]
+}
+
+/** 普通行块。 */
+export interface DiffRowBlock {
+  readonly kind: 'row'
+  readonly row: SideBySideRow
+}
+
+/** 差异渲染块：普通行或折叠块（按 kind 判别）。 */
+export type DiffBlock = DiffRowBlock | DiffFoldBlock
+
+/**
+ * 折叠连续上下文行：超 threshold 的连续 context 段折叠为单个 fold 块
+ * （保留原行供查看器展开）；不超过阈值则原样保留。threshold < 1 视为不折叠。
+ * 纯函数，可单测。
+ */
+export function foldContext(rows: readonly SideBySideRow[], threshold = 3): readonly DiffBlock[] {
+  if (threshold < 1) return rows.map((row) => ({ kind: 'row' as const, row }))
+  const blocks: DiffBlock[] = []
+  let i = 0
+  while (i < rows.length) {
+    if (!isContextRow(rows[i]!)) {
+      blocks.push({ kind: 'row', row: rows[i]! })
+      i += 1
+      continue
+    }
+    let j = i
+    while (j < rows.length && isContextRow(rows[j]!)) j += 1
+    const run = rows.slice(i, j)
+    if (run.length > threshold) {
+      blocks.push({ kind: 'fold', count: run.length, rows: run })
+    } else {
+      for (const row of run) blocks.push({ kind: 'row', row })
+    }
+    i = j
+  }
+  return blocks
+}
+
+/** 统计增删行数（左 del + 右 add）。纯函数。 */
+export function summarizeChanges(rows: readonly SideBySideRow[]): { readonly add: number; readonly del: number } {
+  let add = 0
+  let del = 0
+  for (const row of rows) {
+    if (row.left.kind === 'del') del += 1
+    if (row.right.kind === 'add') add += 1
+  }
+  return { add, del }
+}
+
+/** 判定二进制差异（git 输出 "Binary files … differ"，buildSideBySide 会跳过→空）。 */
+export function isBinaryDiff(unified: string): boolean {
+  return /^Binary files /m.test(unified)
+}

@@ -96,6 +96,9 @@ export const zh = {
   'diff.prev': '上一个更改',
   'diff.next': '下一个更改',
   'diff.truncated': '差异过大，仅显示前 {count} 行',
+  'diff.foldCollapsed': '… {n} 行未变更',
+  'diff.binary': '二进制文件，无法显示差异',
+  'changes.listTruncated': '仅显示前 {count} 个，共 {total} 个变更',
 } satisfies Record<string, string>
 
 export type GitKey = keyof typeof zh
@@ -196,4 +199,7 @@ export const en: Record<GitKey, string> = {
   'diff.prev': 'Previous change',
   'diff.next': 'Next change',
   'diff.truncated': 'Diff too large, showing first {count} lines',
+  'diff.foldCollapsed': '… {n} unchanged lines',
+  'diff.binary': 'Binary file — diff unavailable',
+  'changes.listTruncated': 'Showing first {count} of {total} changes',
 }

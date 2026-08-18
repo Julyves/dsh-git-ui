@@ -247,6 +247,8 @@ const globalCss = [
   '.dsh-git-ui__icon-btn:active { background: var(--dsw-alias-interactive-bg-active); }',
   '.dsh-git-ui__icon-btn:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   '.dsh-git-ui__icon-btn:disabled { opacity: 0.45; cursor: default; }',
+  '.dsh-git-ui__diff-fold:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }',
+  '.dsh-git-ui__diff-fold:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
 ].join('\n')
 
 /** Ensure the global interaction styles exist (idempotent; browser only). */
@@ -583,6 +585,7 @@ export const sbsNum: CSSProperties = {
   textAlign: 'right',
   color: 'var(--dsw-alias-label-tertiary)',
   userSelect: 'none',
+  borderRight: '1px solid var(--dsw-alias-border-l1)',
 }
 
 /**
@@ -630,15 +633,59 @@ export const diffBaseBadge: CSSProperties = {
   whiteSpace: 'nowrap',
 }
 
-/** 差异文件路径（可省略）。 */
-export const diffPath: CSSProperties = {
+/** 差异路径目录段（弱化、flex:1 优先省略，文件名尽量完整）。 */
+export const diffPathDir: CSSProperties = {
   flex: 1,
   minWidth: 0,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
   fontSize: 12,
-  color: 'var(--dsw-alias-label-secondary)',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+/** 差异路径文件名段（强调）。 */
+export const diffPathName: CSSProperties = {
+  flex: 'none',
+  fontSize: 12,
+  fontWeight: 500,
+  color: 'var(--dsw-alias-label-primary)',
+  whiteSpace: 'nowrap',
+}
+
+/** 差异变更摘要芯片（+n −m，等宽）。 */
+export const diffSummary: CSSProperties = {
+  flex: 'none',
+  display: 'inline-flex',
+  gap: 8,
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSize: 11,
+  lineHeight: '16px',
+}
+
+export const diffSummaryAdd: CSSProperties = {
+  color: 'var(--dsw-alias-state-success-primary)',
+}
+
+export const diffSummaryDel: CSSProperties = {
+  color: 'var(--dsw-alias-state-error-primary)',
+}
+
+/** 折叠条：可点击展开的「… N 行未变更」横条。 */
+export const diffFold: CSSProperties = {
+  display: 'block',
+  width: '100%',
+  border: 'none',
+  borderTop: '1px dashed var(--dsw-alias-border-l1)',
+  borderBottom: '1px dashed var(--dsw-alias-border-l1)',
+  background: 'var(--dsw-alias-bg-layer-1)',
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontSize: 11,
+  lineHeight: '20px',
+  padding: '2px 8px',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  textAlign: 'center',
 }
 
 /** 提交区快捷键提示（等宽弱化）。 */

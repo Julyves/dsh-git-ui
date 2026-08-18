@@ -14,7 +14,7 @@
  * in-panel banner. Discard/delete are destructive and require a second click
  * within 3s.
  */
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, JSX, MouseEvent as ReactMouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Button, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -27,7 +27,7 @@ import type { GitQueryOutcome } from './controller.ts'
 import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph.ts'
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
-import { buildSideBySide, capSideBySideRows, type SideCell } from './side-by-side.ts'
+import { buildSideBySide, capSideBySideRows, foldContext, isBinaryDiff, summarizeChanges, type SideBySideRow, type SideCell } from './side-by-side.ts'
 import { diffBaseOf, reconcileDiffSelection, stepDiffSelection, type DiffSelection } from './changes-diff.ts'
 import { BranchIcon, ChevronIcon, CloseIcon, CollapseAllIcon, DiffIcon, ExpandAllIcon, FileIcon, FolderIcon, NextIcon, PrevIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
@@ -287,6 +287,12 @@ function ChangesTab({
     if (next !== null) void showDiff(next.path, next.base)
   }
 
+  /** 差异增删摘要（由 diffText 派生；空/无对照时为 null）。 */
+  const diffSummary = useMemo(
+    () => (diffText === null || diffText === '' ? null : summarizeChanges(buildSideBySide(diffText))),
+    [diffText],
+  )
+
   return (
     <div style={css.changesLayout}>
       <div style={{ ...css.changesLeft, width: leftW }}>
@@ -375,7 +381,23 @@ function ChangesTab({
                 <span style={css.diffBaseBadge}>
                   {diffSel.base === 'staged' ? t('diff.baseStaged') : t('diff.baseWorktree')}
                 </span>
-                <span style={css.diffPath} title={diffSel.path}>{diffSel.path}</span>
+                {(() => {
+                  const slash = diffSel.path.lastIndexOf('/')
+                  const dir = slash === -1 ? '' : diffSel.path.slice(0, slash)
+                  const name = slash === -1 ? diffSel.path : diffSel.path.slice(slash + 1)
+                  return (
+                    <>
+                      {dir !== '' && <span style={css.diffPathDir} title={diffSel.path}>{dir}</span>}
+                      <span style={css.diffPathName}>{name}</span>
+                    </>
+                  )
+                })()}
+                {diffSummary !== null && (diffSummary.add > 0 || diffSummary.del > 0) && (
+                  <span style={css.diffSummary}>
+                    {diffSummary.add > 0 && <span style={css.diffSummaryAdd}>+{diffSummary.add}</span>}
+                    {diffSummary.del > 0 && <span style={css.diffSummaryDel}>−{diffSummary.del}</span>}
+                  </span>
+                )}
                 <button
                   type="button"
                   className="dsh-git-ui__icon-btn"
@@ -582,27 +604,53 @@ const MAX_DIFF_ROWS = 2000
 
 function DiffSideBySide({ text, t }: { text: string; t: (key: GitKey) => string }): JSX.Element {
   const rows = useMemo(() => buildSideBySide(text), [text])
+  const blocks = useMemo(() => foldContext(capSideBySideRows(rows, MAX_DIFF_ROWS)), [rows])
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set())
+  if (isBinaryDiff(text)) return <div style={css.emptyNote}>{t('diff.binary')}</div>
   if (rows.length === 0) return <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
-  const capped = capSideBySideRows(rows, MAX_DIFF_ROWS)
   const cellStyle = (cell: SideCell, right: boolean): CSSProperties => ({
     ...css.sbsCell,
     ...(right ? css.sbsCellRight : {}),
     ...(cell.kind === 'del' ? css.sbsDel : cell.kind === 'add' ? css.sbsAdd : cell.kind === 'empty' ? css.sbsEmpty : {}),
   })
+  const renderRow = (row: SideBySideRow, key: string): JSX.Element => (
+    <div key={key} style={css.sbsRow}>
+      <span style={cellStyle(row.left, false)}>
+        <span style={css.sbsNum}>{row.left.num ?? ''}</span>
+        {row.left.text}
+      </span>
+      <span style={cellStyle(row.right, true)}>
+        <span style={css.sbsNum}>{row.right.num ?? ''}</span>
+        {row.right.text}
+      </span>
+    </div>
+  )
+  const toggleFold = (index: number): void => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  }
   return (
     <div style={css.sbsContainer}>
-      {capped.map((row, i) => (
-        <div key={i} style={css.sbsRow}>
-          <span style={cellStyle(row.left, false)}>
-            <span style={css.sbsNum}>{row.left.num ?? ''}</span>
-            {row.left.text}
-          </span>
-          <span style={cellStyle(row.right, true)}>
-            <span style={css.sbsNum}>{row.right.num ?? ''}</span>
-            {row.right.text}
-          </span>
-        </div>
-      ))}
+      {blocks.map((block, i) => block.kind === 'fold'
+        ? (expanded.has(i)
+          ? <Fragment key={i}>{block.rows.map((r, j) => renderRow(r, `${i}-${j}`))}</Fragment>
+          : (
+            <button
+              key={i}
+              type="button"
+              className="dsh-git-ui__diff-fold"
+              style={css.diffFold}
+              onClick={() => toggleFold(i)}
+              aria-expanded={false}
+            >
+              {t('diff.foldCollapsed').replace('{n}', String(block.count))}
+            </button>
+          ))
+        : renderRow(block.row, String(i)))}
       {rows.length > MAX_DIFF_ROWS && (
         <div style={css.emptyNote}>{t('diff.truncated').replace('{count}', String(MAX_DIFF_ROWS))}</div>
       )}
