@@ -61,28 +61,30 @@ describe('buildGraph', () => {
     expect(rows[2]).toMatchObject({ nodeFromTop: true, nodeContinues: false, verticals: [] })
   })
 
-  it('opens a lane on merge and closes it with a back-edge at the merge-back', () => {
+  it('keeps two parallel rails through a merge and joins them at the base', () => {
     const rows = buildGraph(MERGE_SEQUENCE)
-    // merge 行:节点列 0,分裂曲线 0→1(着子分支色),车道 1 开始等待 feat-1。
+    // merge 行:节点列 0,分裂曲线 0→1,车道 1 开始等待 feat-1。
     expect(rows[0]).toMatchObject({ column: 0, nodeFromTop: false, nodeContinues: true })
-    expect(rows[0]!.edges).toEqual([{ from: 0, to: 1, kind: 'split' }])
-    // 残桩回归:本行新开的车道不画贯穿竖线(分裂曲线是该线唯一部分)。
+    expect(rows[0]!.edges).toEqual([{ from: 0, to: 1 }])
+    // 残桩消除:本行新开的车道不画贯穿竖线(分裂曲线是该线唯一部分)。
     expect(rows[0]!.verticals).toEqual([])
     // main 行:车道 1 竖线贯穿,节点在 0 延续等待 init。
     expect(rows[1]).toMatchObject({ column: 0, nodeFromTop: true, nodeContinues: true, verticals: [1] })
-    // feat 行:节点在 1,首父 init 已被车道 0 等待 → 回归曲线 1→0(着源车道色),本车道关闭。
-    expect(rows[2]).toMatchObject({ column: 1, nodeFromTop: true, nodeContinues: false, verticals: [0] })
-    expect(rows[2]!.edges).toEqual([{ from: 1, to: 0, kind: 'return' }])
-    // init 行:车道 0 承载节点后关闭,无残留竖线(车道不泄漏)。
-    expect(rows[3]).toMatchObject({ column: 0, nodeFromTop: true, nodeContinues: false, verticals: [] })
+    // feat 行:节点在 1,继续等待 init(不再提前回归),车道 0 竖线贯穿。
+    expect(rows[2]).toMatchObject({ column: 1, nodeFromTop: true, nodeContinues: true, verticals: [0], joins: [] })
+    expect(rows[2]!.edges).toEqual([])
+    // init 行:车道 0 承载节点,车道 1 经水平连接线汇入(joins=[1])后关闭,无残留竖线。
+    expect(rows[3]).toMatchObject({ column: 0, nodeFromTop: true, nodeContinues: false, verticals: [], joins: [1] })
   })
 
   it('handles a branch split (two children of one root)', () => {
     const rows = buildGraph([commit('B', ['root']), commit('A', ['root']), commit('root', [])])
     expect(rows.map((r) => r.column)).toEqual([0, 1, 0])
-    // A 的首父 root 已被车道 0 等待 → 回归曲线 1→0。
-    expect(rows[1]!.edges).toEqual([{ from: 1, to: 0, kind: 'return' }])
-    expect(rows[2]).toMatchObject({ column: 0, verticals: [] })
+    // A 的首父 root 已被车道 0 等待 → A 车道继续等 root(不回归),本行车道 0 竖线贯穿。
+    expect(rows[1]).toMatchObject({ column: 1, nodeFromTop: false, nodeContinues: true, verticals: [0] })
+    expect(rows[1]!.edges).toEqual([])
+    // root 行:车道 0 承载节点,车道 1 汇入(joins=[1])。
+    expect(rows[2]).toMatchObject({ column: 0, nodeFromTop: true, nodeContinues: false, verticals: [], joins: [1] })
   })
 
   it('recycles a freed lane for a later branch tip', () => {
@@ -102,18 +104,38 @@ describe('buildGraph', () => {
     expect(rows[4]).toMatchObject({ column: 0, nodeContinues: false, verticals: [1] })
   })
 
-  it('converges two child lanes into one parent via a back-edge (merge base)', () => {
+  it('converges two child lanes at the shared parent (merge base)', () => {
     const rows = buildGraph([
       commit('ch1', ['base']),
       commit('ch2', ['base']),
       commit('base', []),
     ])
-    // ch1 开车道 0 等待 base；ch2 新开车道 1，首父 base 已被车道 0 等待 → 回归曲线 1→0。
+    // ch1 开车道 0 等待 base；ch2 新开车道 1 也等待 base(不回归)。
     expect(rows[0]).toMatchObject({ column: 0, nodeContinues: true })
-    expect(rows[1]).toMatchObject({ column: 1, nodeFromTop: false, nodeContinues: false })
-    expect(rows[1]!.edges).toEqual([{ from: 1, to: 0, kind: 'return' }])
-    // base 行：车道 0 承载节点后关闭，车道 1 已关闭，无残留竖线。
-    expect(rows[2]).toMatchObject({ column: 0, nodeFromTop: true, nodeContinues: false, verticals: [] })
+    expect(rows[1]).toMatchObject({ column: 1, nodeFromTop: false, nodeContinues: true, verticals: [0] })
+    expect(rows[1]!.edges).toEqual([])
+    // base 行:车道 0 承载节点,车道 1 汇入(joins=[1]),无残留竖线。
+    expect(rows[2]).toMatchObject({ column: 0, nodeFromTop: true, nodeContinues: false, verticals: [], joins: [1] })
+  })
+
+  it('anchors a fork at the fork commit (no early return above the parent)', () => {
+    // 用户场景:main 上 c44 处迁出 dev。两种顺序(main 先 / dev 先)均应在 c44 行汇合。
+    const orders: readonly (readonly GraphCommit[])[] = [
+      [commit('m2', ['m1']), commit('m1', ['c44']), commit('d2', ['d1']), commit('d1', ['c44']), commit('c44', ['base']), commit('base', [])],
+      [commit('m2', ['m1']), commit('d2', ['d1']), commit('d1', ['c44']), commit('m1', ['c44']), commit('c44', ['base']), commit('base', [])],
+    ]
+    for (const seq of orders) {
+      const rows = buildGraph(seq)
+      // 父为 c44 的子女行都不再提前回归:直线延续到 c44(修复原「上方一行拐弯偏移」)。
+      for (const r of rows) {
+        if (r.commit.parents[0] === 'c44') expect(r.nodeContinues).toBe(true)
+      }
+      // c44 行:首车道承载节点,另一车道经 joins 汇入(无残留贯穿竖线)——发散点锚定 c44。
+      const c44 = rows.find((r) => r.commit.hash === 'c44')!
+      expect(c44.nodeFromTop).toBe(true)
+      expect(c44.joins.length).toBe(1)
+      expect(c44.verticals).toEqual([])
+    }
   })
 
   it('keeps a lane open at the pagination boundary (parent not yet loaded)', () => {
@@ -189,12 +211,13 @@ describe('markFilterEnds', () => {
     expect(marked[1]!.endOpen).toBeUndefined()
   })
 
-  it('leaves rows that do not continue (closed/return/root) unmarked even under filters', () => {
+  it('marks any continuation whose parent is missing, never a closed/root row', () => {
     const rows = buildGraph(MERGE_SEQUENCE)
-    // feat 行为回归行（nodeContinues=false，首父 init 缺失也不延续）；init 为根。
-    // 集合缺 init：merge 行延续 main-1（在场）不标；main 行延续 init（缺失）标；feat/init 非延续不标。
+    // 新算法下 feat 行为延续行(nodeContinues=true)，其父 init 缺失 → 过滤下标 endOpen。
+    // 集合缺 init：merge 行延续 main-1（在场）不标；main 行延续 init（缺失）标；feat 延续 init（缺失）标。
     const marked = markFilterEnds(rows, new Set(['merge', 'main-1', 'feat-1']), true)
-    expect(marked[2]!.endOpen).toBeUndefined()
+    expect(marked[2]!.endOpen).toBe(true)
+    // init 为根(nodeContinues=false) → 恒不标。
     expect(marked[3]!.endOpen).toBeUndefined()
   })
 })

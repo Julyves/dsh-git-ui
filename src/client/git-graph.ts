@@ -3,17 +3,18 @@
  *
  * 输入为 `git log --all` 拓扑序（新→旧）的 `GraphCommit[]`。本模块维护一组
  * “车道”（lane）：每条车道等待下一个应出现的提交（waiting-for）。提交到达时：
- *   - 等待该提交的车道承载节点；
- *   - 首父继承当前车道（直线延续）、移交给已等待它的车道（merge 回归，车道
- *     以曲线收尾关闭），或开辟新车道；
+ *   - 等待该提交的所有车道中，首个承载节点，其余（`joins`）在本行经水平连接线
+ *     汇入节点——**多子汇向同一父的汇聚锚定在父节点行**（IDEA 式分叉/汇聚，
+ *     不再提前回归，修复原「return 曲线在父节点上方一行拐弯」的视觉偏移）；
+ *   - 首父继承当前车道（直线延续）；
  *   - 第二及更多父提交复用已等待它的车道，否则开辟新车道，均产生分裂曲线；
  *   - 释放的车道按索引回收，列数贴近历史真实并发度，永不单调增长。
  *
- * 不变量：同一哈希至多被一条车道等待（首父/附加父路径均先查找复用），
- * 因此“多个子提交汇向同一父提交”的收敛天然由回归曲线表达，无需额外机制。
+ * 一个哈希可同时被多条车道等待（分叉的多个子提交各占一条）；该提交出现时
+ * 全部收敛：节点落在首条车道，其余车道画「竖线→水平连接→节点」。
  *
  * 渲染契约（与行样式共用单一事实来源）：行高固定、条带占满整行，
- * 竖线在行间自然衔接；分裂/回归用贝塞尔曲线。
+ * 竖线在行间自然衔接；分裂用贝塞尔曲线，汇聚用水平连接线。
  *
  * 不依赖 React，可纯单元测试。
  */
@@ -26,23 +27,20 @@ export interface GraphRow {
   readonly column: number
   /** 贯穿整行（0→行高）的竖线车道：处理本行前后均活跃的车道。 */
   readonly verticals: readonly number[]
+  /** 自上方来、本行汇入节点后关闭的车道：画竖线到节点高度 + 水平连接线入节点。 */
+  readonly joins: readonly number[]
   /** 节点车道在本行之前已存在：自行顶到节点画半段竖线。 */
   readonly nodeFromTop: boolean
   /** 节点车道在本行之后延续：自节点到行底画半段竖线。 */
   readonly nodeContinues: boolean
-  /** 自节点向下的曲线（分裂 / merge 回归），终点在行底的目标车道。 */
+  /** 自节点向下的分裂曲线（merge 的第二父 fan-out），终点在行底的目标车道。 */
   readonly edges: readonly GraphEdge[]
 }
 
-/** 一条非竖直连接。 */
+/** 一条分裂曲线（merge 节点 → 第二父车道，着目标车道色）。 */
 export interface GraphEdge {
   readonly from: number
   readonly to: number
-  /**
-   * split = merge 提交开辟子分支车道：曲线属于子分支线路，着目标车道色；
-   * return = 首父移交已有车道（分支回归）：曲线属于源分支线路，着源车道色。
-   */
-  readonly kind: 'split' | 'return'
 }
 
 /**
@@ -66,29 +64,24 @@ function freeLane(lanes: (string | null)[], opened: Set<number>): number {
 /** 处理单个提交：更新车道并产出该行几何（buildGraph 与增量 builder 共用同一循环体）。 */
 function processCommit(commit: GraphCommit, lanes: (string | null)[]): GraphRow {
   const opened = new Set<number>()
-  // 1. 节点列：等待该提交的车道；否则开辟新车道（分支尖端）。
-  //    （同一哈希至多一条车道等待，见模块不变量。）
-  const waitingLane = lanes.indexOf(commit.hash)
-  const column = waitingLane === -1 ? freeLane(lanes, opened) : waitingLane
-  const nodeFromTop = waitingLane !== -1
+  // 1. 节点列：等待该提交的所有车道（分叉多子各占一条）中首个；否则新开车道（分支尖端）。
+  //    其余等待车道记入 `joins`——本行经「竖线→水平连接线→节点」汇入（锚定父节点行）。
+  const waiting: number[] = []
+  lanes.forEach((waitingHash, index) => {
+    if (waitingHash === commit.hash) waiting.push(index)
+  })
+  const column = waiting.length > 0 ? waiting[0]! : freeLane(lanes, opened)
+  const nodeFromTop = waiting.length > 0
+  const joins = waiting.slice(1)
+  for (const index of waiting) lanes[index] = null
 
-  // 2. 首父：原地延续 / 移交已有车道（回归曲线，本车道关闭）/ 根提交关闭。
+  // 2. 首父：本车道直线延续（新模型不提前回归——汇聚由父节点行的 joins 表达）。
   const edges: GraphEdge[] = []
   const firstParent = commit.parents[0]
   let nodeContinues = false
-  if (firstParent === undefined) {
-    lanes[column] = null
-  } else {
-    const parentLane = lanes.indexOf(firstParent)
-    if (parentLane === -1) {
-      // 首父尚未出现：本车道继续等待它（直线延续）。
-      lanes[column] = firstParent
-      nodeContinues = true
-    } else {
-      // 首父已被其他车道等待：本车道以回归曲线收尾关闭（着源车道色）。
-      edges.push({ from: column, to: parentLane, kind: 'return' })
-      lanes[column] = null
-    }
+  if (firstParent !== undefined) {
+    lanes[column] = firstParent
+    nodeContinues = true
   }
 
   // 3. 第二及更多父提交：复用已等待它的车道，否则开辟新车道；均记分裂曲线。
@@ -99,18 +92,19 @@ function processCommit(commit: GraphCommit, lanes: (string | null)[]): GraphRow 
       target = freeLane(lanes, opened)
       lanes[target] = parentHash
     }
-    edges.push({ from: column, to: target, kind: 'split' })
+    edges.push({ from: column, to: target })
   }
 
-  // 4. 贯穿竖线：处理后仍在等待的车道；
-  //    节点列与本行新开车道除外（后者仅由分裂曲线表达，消除合并行残桩）。
+  // 4. 贯穿竖线：处理后仍在等待的车道；节点列、本行新开、本行汇入(joins)的车道除外。
+  const excluded = new Set<number>(joins)
+  excluded.add(column)
   const verticals: number[] = []
   lanes.forEach((waitingHash, index) => {
-    if (waitingHash === null || index === column || opened.has(index)) return
+    if (waitingHash === null || excluded.has(index) || opened.has(index)) return
     verticals.push(index)
   })
 
-  return { commit, column, verticals, nodeFromTop, nodeContinues, edges }
+  return { commit, column, verticals, joins, nodeFromTop, nodeContinues, edges }
 }
 
 /**
@@ -158,6 +152,7 @@ export function graphWidth(rows: readonly GraphRow[]): number {
   for (const row of rows) {
     consider(row.column)
     for (const col of row.verticals) consider(col)
+    for (const join of row.joins) consider(join)
     for (const edge of row.edges) consider(edge.to)
   }
   return width

@@ -1464,6 +1464,13 @@ function GraphStrip({ row, cols, endOpen }: { row: GraphRow; cols: number; endOp
       {row.nodeFromTop && (
         <line x1={x(row.column)} y1={0} x2={x(row.column)} y2={cy} stroke={color(row.column)} strokeWidth={1.5} strokeLinecap="round" />
       )}
+      {row.joins.map((join) => (
+        <g key={`j-${join}`}>
+          {/* 汇聚车道：自上方竖线到节点高度，再水平连接线汇入节点（锚定父节点行）。 */}
+          <line x1={x(join)} y1={0} x2={x(join)} y2={cy} stroke={color(join)} strokeWidth={1.5} strokeLinecap="round" />
+          <line x1={x(join)} y1={cy} x2={x(row.column)} y2={cy} stroke={color(join)} strokeWidth={1.5} strokeLinecap="round" />
+        </g>
+      ))}
       {row.nodeContinues && (endOpen === true ? (
         <>
           {/* 悬垂端头：父提交不在已加载集合（被过滤/边界），虚线 + 端止横杠，诚实提示上游未载入。 */}
@@ -1478,7 +1485,7 @@ function GraphStrip({ row, cols, endOpen }: { row: GraphRow; cols: number; endOp
           key={`e-${i}`}
           d={`M ${x(edge.from)} ${cy} C ${x(edge.from)} ${(cy + h) / 2}, ${x(edge.to)} ${(cy + h) / 2}, ${x(edge.to)} ${h}`}
           fill="none"
-          stroke={color(edge.kind === 'split' ? edge.to : edge.from)}
+          stroke={color(edge.to)}
           strokeWidth={1.5}
           strokeLinecap="round"
           strokeLinejoin="round"
