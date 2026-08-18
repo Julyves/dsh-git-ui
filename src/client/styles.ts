@@ -585,14 +585,21 @@ export const sbsNum: CSSProperties = {
   userSelect: 'none',
 }
 
+/**
+ * 差异行配色（IDEA 式：低饱和淡晕背景 + 始终可读的文字）。
+ * 旧实现用 state-*-secondary 饱和填充作背景、state-*-primary 作文字色，
+ * 同色系背景覆盖同色系文字，明暗主题下均低对比且与页面风格冲突。
+ * 现以 color-mix 由语义令牌派生 ~12% 淡晕（主题自适应；旧引擎降级为透明，
+ * 文字仍可读），文字统一 label-primary。
+ */
 export const sbsDel: CSSProperties = {
-  background: 'var(--dsw-alias-state-error-secondary)',
-  color: 'var(--dsw-alias-state-error-primary)',
+  background: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent)',
+  color: 'var(--dsw-alias-label-primary)',
 }
 
 export const sbsAdd: CSSProperties = {
-  background: 'var(--dsw-alias-state-success-secondary)',
-  color: 'var(--dsw-alias-state-success-primary)',
+  background: 'color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent)',
+  color: 'var(--dsw-alias-label-primary)',
 }
 
 export const sbsEmpty: CSSProperties = {
