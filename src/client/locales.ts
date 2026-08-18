@@ -86,6 +86,11 @@ export const zh = {
   'time.daysAgo': '{n} 天前',
   'time.today': '今天',
   'time.yesterday': '昨天',
+  'changes.groupStaged': '已暂存更改',
+  'changes.groupUnstaged': '更改',
+  'changes.groupUnversioned': '未版本控制的文件',
+  'changes.actionDiff': '对照查看',
+  'changes.selectAll': '全选',
 } satisfies Record<string, string>
 
 export type GitKey = keyof typeof zh
@@ -176,4 +181,9 @@ export const en: Record<GitKey, string> = {
   'time.daysAgo': '{n}d ago',
   'time.today': 'Today',
   'time.yesterday': 'Yesterday',
+  'changes.groupStaged': 'Staged Changes',
+  'changes.groupUnstaged': 'Changes',
+  'changes.groupUnversioned': 'Unversioned Files',
+  'changes.actionDiff': 'Show diff',
+  'changes.selectAll': 'Select all',
 }

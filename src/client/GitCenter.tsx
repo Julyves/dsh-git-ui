@@ -28,8 +28,8 @@ import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
 import { buildSideBySide, type SideCell } from './side-by-side.ts'
-import { reconcileDiffSelection, type DiffSelection } from './changes-diff.ts'
-import { BranchIcon, ChevronIcon, CollapseAllIcon, ExpandAllIcon, FileIcon, FolderIcon, StarIcon, TagIcon } from './icons.tsx'
+import { diffBaseOf, reconcileDiffSelection, type DiffSelection } from './changes-diff.ts'
+import { BranchIcon, ChevronIcon, CollapseAllIcon, DiffIcon, ExpandAllIcon, FileIcon, FolderIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
 
@@ -149,6 +149,20 @@ export function GitCenter({
 
 // ── Changes tab ───────────────────────────────────────────────────────────
 
+/** Changes 分组键（IDEA 式三段：已暂存更改 / 更改 / 未版本控制的文件）。 */
+type ChangeGroupKey = 'staged' | 'unstaged' | 'untracked'
+
+interface ChangeGroup {
+  readonly key: ChangeGroupKey
+  readonly labelKey: GitKey
+  readonly items: readonly GitChange[]
+}
+
+/** 组内按路径字母序（IDEA 行为）。 */
+function byPath(a: GitChange, b: GitChange): number {
+  return a.path.localeCompare(b.path)
+}
+
 function ChangesTab({
   snapshot, busy, execute, query, t,
 }: {
@@ -161,6 +175,8 @@ function ChangesTab({
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [message, setMessage] = useState('')
   const [armed, setArmed] = useState<string | 'all' | null>(null)
+  /** 折叠的分组键。 */
+  const [closedGroups, setClosedGroups] = useState<ReadonlySet<ChangeGroupKey>>(new Set())
   /** 当前对照查看的文件（base 取决于暂存态）。 */
   const [diffSel, setDiffSel] = useState<DiffSelection | null>(null)
   const [diffText, setDiffText] = useState<string | null>(null)
@@ -173,17 +189,42 @@ function ChangesTab({
     return () => clearTimeout(timer)
   }, [armed])
 
-  const tracked = useMemo(() => snapshot.changes.filter((c) => c.status !== 'untracked'), [snapshot])
-  const untracked = useMemo(() => snapshot.changes.filter((c) => c.status === 'untracked'), [snapshot])
-  const staged = useMemo(() => tracked.filter((c) => c.staged), [tracked])
-  const unstaged = useMemo(() => tracked.filter((c) => !c.staged), [tracked])
-  const hasTrackedChanges = staged.length + unstaged.length > 0
+  // IDEA 式三段分组：混合态（MM）双条目天然分列两组；组内路径字母序。
+  const stagedItems = useMemo(() => snapshot.changes.filter((c) => c.staged).sort(byPath), [snapshot])
+  const unstagedItems = useMemo(() => snapshot.changes.filter((c) => !c.staged && c.status !== 'untracked').sort(byPath), [snapshot])
+  const untrackedItems = useMemo(() => snapshot.changes.filter((c) => c.status === 'untracked').sort(byPath), [snapshot])
+  const groups: readonly ChangeGroup[] = [
+    { key: 'staged' as const, labelKey: 'changes.groupStaged' as const, items: stagedItems },
+    { key: 'unstaged' as const, labelKey: 'changes.groupUnstaged' as const, items: unstagedItems },
+    { key: 'untracked' as const, labelKey: 'changes.groupUnversioned' as const, items: untrackedItems },
+  ].filter((g) => g.items.length > 0)
 
   const toggle = (path: string): void => {
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(path)) next.delete(path)
       else next.add(path)
+      return next
+    })
+  }
+
+  /** 组级全选 / 全消选（半选态由视图按 some/all 推导）。 */
+  const selectGroup = (items: readonly GitChange[], check: boolean): void => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      for (const c of items) {
+        if (check) next.add(c.path)
+        else next.delete(c.path)
+      }
+      return next
+    })
+  }
+
+  const toggleGroupClosed = (key: ChangeGroupKey): void => {
+    setClosedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }
@@ -239,15 +280,15 @@ function ChangesTab({
     <div style={css.changesLayout}>
       <div style={css.changesLeft}>
         <div style={css.toolRow}>
-          <Button size="sm" disabled={busy || (unstaged.length === 0 && untracked.length === 0)} onClick={() => void execute({ kind: 'stage-all' }, t('center.done'))}>
+          <Button size="sm" disabled={busy || (unstagedItems.length === 0 && untrackedItems.length === 0)} onClick={() => void execute({ kind: 'stage-all' }, t('center.done'))}>
             {t('center.stageAll')}
           </Button>
-          <Button size="sm" disabled={busy || staged.length === 0} onClick={() => void execute({ kind: 'unstage-all' }, t('center.done'))}>
+          <Button size="sm" disabled={busy || stagedItems.length === 0} onClick={() => void execute({ kind: 'unstage-all' }, t('center.done'))}>
             {t('center.unstageAll')}
           </Button>
           <Button
             size="sm"
-            disabled={busy || !hasTrackedChanges}
+            disabled={busy || stagedItems.length + unstagedItems.length === 0}
             onClick={() => {
               if (armed === 'all') {
                 void execute({ kind: 'discard-all' }, t('center.done'))
@@ -262,36 +303,33 @@ function ChangesTab({
         <div style={css.changesList}>
           {snapshot.changes.length === 0
             ? <div style={css.emptyNote}>{t('center.empty')}</div>
-            : (
-              <>
-                <div style={css.groupTitle}>{t('center.changes')}</div>
-                {tracked.map((change) => (
+            : groups.map((group) => (
+              <div key={group.key}>
+                <ChangeGroupHeader
+                  label={t(group.labelKey)}
+                  count={group.items.length}
+                  closed={closedGroups.has(group.key)}
+                  allChecked={group.items.length > 0 && group.items.every((c) => selected.has(c.path))}
+                  someChecked={group.items.some((c) => selected.has(c.path))}
+                  onToggleClosed={() => toggleGroupClosed(group.key)}
+                  onSelectAll={(check) => selectGroup(group.items, check)}
+                  t={t}
+                />
+                {!closedGroups.has(group.key) && group.items.map((change) => (
                   <ChangeRow
                     key={change.path}
                     change={change}
                     checked={selected.has(change.path)}
                     busy={busy}
                     armed={armed}
+                    diffActive={diffSel !== null && diffSel.path === change.path && diffSel.base === diffBaseOf(change)}
                     rowActions={rowActions}
                     onShowDiff={(p, b) => void showDiff(p, b)}
                     t={t}
                   />
                 ))}
-                {untracked.length > 0 && <div style={css.groupTitle}>{t('center.untrackedFiles')}</div>}
-                {untracked.map((change) => (
-                  <ChangeRow
-                    key={change.path}
-                    change={change}
-                    checked={selected.has(change.path)}
-                    busy={busy}
-                    armed={armed}
-                    rowActions={rowActions}
-                    onShowDiff={(p, b) => void showDiff(p, b)}
-                    t={t}
-                  />
-                ))}
-              </>
-            )}
+              </div>
+            ))}
         </div>
         <div style={css.commitBox}>
           <textarea
@@ -334,14 +372,54 @@ function ChangesTab({
   )
 }
 
-/** 变更行：复选 + 状态芯片 + 文件名(状态着色) + 目录弱化 + 操作按钮；点击文件名开对照。 */
+/**
+ * IDEA 式分组头：粘性吸顶——组级全选（含半选态）+ 折叠箭头 + 名称 + 计数。
+ * 复选框与折叠按钮为独立控件，均可键盘操作。
+ */
+function ChangeGroupHeader({
+  label, count, closed, allChecked, someChecked, onToggleClosed, onSelectAll, t,
+}: {
+  label: string
+  count: number
+  closed: boolean
+  allChecked: boolean
+  someChecked: boolean
+  onToggleClosed: () => void
+  onSelectAll: (check: boolean) => void
+  t: (key: GitKey) => string
+}): JSX.Element {
+  return (
+    <div style={css.groupHeader}>
+      <input
+        type="checkbox"
+        style={css.changeCheckbox}
+        checked={allChecked}
+        ref={(el) => { if (el !== null) el.indeterminate = someChecked && !allChecked }}
+        onChange={(e) => onSelectAll(e.target.checked)}
+        aria-label={`${label} ${t('changes.selectAll')}`}
+      />
+      <button type="button" style={css.groupHeaderToggle} onClick={onToggleClosed} aria-expanded={!closed}>
+        <ChevronIcon open={!closed} />
+        <span>{label}</span>
+        <span style={css.groupHeaderCount}>{count}</span>
+      </button>
+    </div>
+  )
+}
+
+/**
+ * IDEA 式变更行：复选框 + 文件图标 + 状态着色文件名 + 弱化目录 + 行尾状态字母
+ * + 悬停操作（对照 / 暂存|取消暂存 / 丢弃）。操作图标仅在悬停或键盘聚焦时显现，
+ * 定宽槽位常驻占位，杜绝显现时的布局跳动；点击文件名打开对照（基线由条目暂存侧决定）。
+ */
 function ChangeRow({
-  change, checked, busy, armed, rowActions, onShowDiff, t,
+  change, checked, busy, armed, diffActive, rowActions, onShowDiff, t,
 }: {
   change: GitChange
   checked: boolean
   busy: boolean
   armed: string | 'all' | null
+  diffActive: boolean
   rowActions: {
     onToggle: (path: string) => void
     onStage: (path: string) => void
@@ -355,8 +433,11 @@ function ChangeRow({
   const slash = change.path.lastIndexOf('/')
   const name = slash === -1 ? change.path : change.path.slice(slash + 1)
   const dir = slash === -1 ? '' : change.path.slice(0, slash)
+  const base = diffBaseOf(change)
+  const armedHere = armed === change.path
+  const statusColor = css.statusTextColor[change.status] ?? 'var(--dsw-alias-label-primary)'
   return (
-    <div className="dsh-git-ui__row" style={css.centerRow}>
+    <div className="dsh-git-ui__row" style={diffActive ? { ...css.centerRow, ...css.centerRowActive } : css.centerRow}>
       <input
         type="checkbox"
         style={css.changeCheckbox}
@@ -365,31 +446,82 @@ function ChangeRow({
         onChange={() => rowActions.onToggle(change.path)}
         aria-label={change.path}
       />
-      <span style={{ ...css.changeChip, ...(css.chipStyles[change.status] ?? css.chipStyles.untracked) }} title={change.status}>
-        {CHIP_LETTERS[change.status] ?? '•'}
-      </span>
+      <span style={css.rowFileIcon} aria-hidden="true"><FileIcon /></span>
       <button
         type="button"
-        style={{
-          border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, fontFamily: 'inherit',
-          fontSize: 13, lineHeight: '20px', textAlign: 'left',
-          flex: 'none', maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          color: css.statusTextColor[change.status] ?? 'var(--dsw-alias-label-primary)',
-        }}
+        style={{ ...css.changeName, color: statusColor }}
         title={change.path}
-        onClick={() => onShowDiff(change.path, change.staged ? 'staged' : 'worktree')}
+        onClick={() => onShowDiff(change.path, base)}
       >
         {name}
       </button>
-      {dir !== '' && <span style={css.changeDir}>{dir}</span>}
-      {change.staged
-        ? <Button size="sm" disabled={busy} onClick={() => rowActions.onUnstage(change.path)}>{t('center.unstage')}</Button>
-        : <Button size="sm" disabled={busy} onClick={() => rowActions.onStage(change.path)}>{t('center.stage')}</Button>}
-      {!untracked && (
-        <Button size="sm" disabled={busy} onClick={() => rowActions.onDiscard(change.path)}>
-          {armed === change.path ? t('center.confirmDiscard') : t('center.discard')}
-        </Button>
-      )}
+      {dir !== '' ? <span style={css.changeDir}>{dir}</span> : <span style={{ flex: 1 }} />}
+      <span style={{ ...css.statusLetter, color: statusColor }} aria-hidden="true">
+        {CHIP_LETTERS[change.status] ?? '•'}
+      </span>
+      <span className="dsh-git-ui__row-actions" style={css.rowActions}>
+        <button
+          type="button"
+          className="dsh-git-ui__icon-btn"
+          style={css.rowIconButton}
+          title={t('changes.actionDiff')}
+          aria-label={t('changes.actionDiff')}
+          disabled={busy}
+          onClick={() => onShowDiff(change.path, base)}
+        >
+          <DiffIcon />
+        </button>
+        {untracked ? (
+          <button
+            type="button"
+            className="dsh-git-ui__icon-btn"
+            style={css.rowIconButton}
+            title={t('center.stage')}
+            aria-label={t('center.stage')}
+            disabled={busy}
+            onClick={() => rowActions.onStage(change.path)}
+          >
+            <StageIcon />
+          </button>
+        ) : change.staged ? (
+          <button
+            type="button"
+            className="dsh-git-ui__icon-btn"
+            style={css.rowIconButton}
+            title={t('center.unstage')}
+            aria-label={t('center.unstage')}
+            disabled={busy}
+            onClick={() => rowActions.onUnstage(change.path)}
+          >
+            <UnstageIcon />
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="dsh-git-ui__icon-btn"
+              style={css.rowIconButton}
+              title={t('center.stage')}
+              aria-label={t('center.stage')}
+              disabled={busy}
+              onClick={() => rowActions.onStage(change.path)}
+            >
+              <StageIcon />
+            </button>
+            <button
+              type="button"
+              className="dsh-git-ui__icon-btn"
+              style={armedHere ? { ...css.rowIconButton, color: 'var(--dsw-alias-state-error-primary)' } : css.rowIconButton}
+              title={armedHere ? t('center.confirmDiscard') : t('center.discard')}
+              aria-label={armedHere ? t('center.confirmDiscard') : t('center.discard')}
+              disabled={busy}
+              onClick={() => rowActions.onDiscard(change.path)}
+            >
+              <RollbackIcon />
+            </button>
+          </>
+        )}
+      </span>
     </div>
   )
 }

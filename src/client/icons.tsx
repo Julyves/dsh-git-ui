@@ -118,3 +118,49 @@ export function TagIcon(): JSX.Element {
   )
 }
 
+// ── Changes 行悬停操作图标（IDEA 式：对照/暂存/取消暂存/回滚）────────────
+
+/** 对照查看图标：并排双栏窗格。 */
+export function DiffIcon(): JSX.Element {
+  return (
+    <svg width={14} height={14} viewBox="0 0 14 14" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <rect x={1.5} y={2.5} width={11} height={9} rx={1.2} fill="none" stroke="currentColor" strokeWidth={1.2} />
+      <path d="M7 2.5 v9" stroke="currentColor" strokeWidth={1.2} />
+    </svg>
+  )
+}
+
+/** 暂存图标（加号：加入暂存区）。 */
+export function StageIcon(): JSX.Element {
+  return (
+    <svg width={14} height={14} viewBox="0 0 14 14" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <path d="M7 3 v8 M3 7 h8" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** 取消暂存图标（减号：移出暂存区）。 */
+export function UnstageIcon(): JSX.Element {
+  return (
+    <svg width={14} height={14} viewBox="0 0 14 14" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <path d="M3 7 h8" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** 回滚（丢弃）图标：撤销箭头。 */
+export function RollbackIcon(): JSX.Element {
+  return (
+    <svg width={14} height={14} viewBox="0 0 14 14" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <path
+        d="M5.5 3 L3 5.5 L5.5 8 M3.4 5.5 h5.1 a3 3 0 0 1 0 6 h-2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+

@@ -239,6 +239,14 @@ const globalCss = [
   '.dsh-git-ui__tab::after { content: ""; position: absolute; right: 0; bottom: 1px; left: 0; height: 2px; border-radius: 2px; background: transparent; }',
   '.dsh-git-ui__tab--active::after { background: var(--dsw-alias-state-business-primary); }',
   '.dsh-git-ui__branch-input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  // IDEA 式悬停操作：行尾图标默认隐藏，悬停/键盘聚焦显现（元素常驻，无布局跳动）。
+  '.dsh-git-ui__row-actions { opacity: 0; transition: opacity var(--ds-transition-duration-fast) linear; }',
+  '.dsh-git-ui__row:hover .dsh-git-ui__row-actions, .dsh-git-ui__row:focus-within .dsh-git-ui__row-actions { opacity: 1; }',
+  // 行操作图标按钮的交互态。
+  '.dsh-git-ui__icon-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }',
+  '.dsh-git-ui__icon-btn:active { background: var(--dsw-alias-interactive-bg-active); }',
+  '.dsh-git-ui__icon-btn:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__icon-btn:disabled { opacity: 0.45; cursor: default; }',
 ].join('\n')
 
 /** Ensure the global interaction styles exist (idempotent; browser only). */
@@ -305,9 +313,118 @@ export const groupTitle: CSSProperties = {
 export const centerRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 8,
-  padding: '2px 8px',
-  borderRadius: 8,
+  gap: 6,
+  height: 28,
+  flexShrink: 0,
+  padding: '0 8px',
+  borderRadius: 6,
+}
+
+/** 差异对照激活行：淡底标识当前查看的文件（IDEA 选中行语义）。 */
+export const centerRowActive: CSSProperties = {
+  background: 'var(--dsw-alias-interactive-bg-hover)',
+}
+
+/** 行尾操作槽：定宽右对齐（常驻占位，图标显隐由全局 CSS 控制，杜绝悬停布局跳动）。 */
+export const rowActions: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  gap: 2,
+  flex: 'none',
+  width: 78,
+}
+
+/** 行操作图标按钮（24px 方形、透明底；交互态见全局 CSS）。 */
+export const rowIconButton: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flex: 'none',
+  width: 24,
+  height: 24,
+  border: 'none',
+  background: 'transparent',
+  borderRadius: 6,
+  cursor: 'pointer',
+  padding: 0,
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
+/** 文件名前的轻量文件图标槽。 */
+export const rowFileIcon: CSSProperties = {
+  flex: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+/** 文件名按钮（状态着色由行内注入）。 */
+export const changeName: CSSProperties = {
+  border: 'none',
+  background: 'transparent',
+  cursor: 'pointer',
+  padding: 0,
+  fontFamily: 'inherit',
+  fontSize: 13,
+  lineHeight: '20px',
+  textAlign: 'left',
+  flex: 'none',
+  maxWidth: '55%',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+}
+
+/** 行尾状态字母：无底色，IDEA 式单色字符。 */
+export const statusLetter: CSSProperties = {
+  flex: 'none',
+  width: 14,
+  textAlign: 'center',
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSize: 11,
+  fontWeight: 600,
+}
+
+/** IDEA 式分组头：粘性吸顶，全选复选 + 折叠箭头 + 名称 + 计数。 */
+export const groupHeader: CSSProperties = {
+  position: 'sticky',
+  top: 0,
+  zIndex: 1,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  height: 30,
+  flexShrink: 0,
+  padding: '0 8px',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+}
+
+/** 分组头折叠按钮（箭头 + 名称 + 计数一体可点）。 */
+export const groupHeaderToggle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  flex: 1,
+  minWidth: 0,
+  border: 'none',
+  background: 'transparent',
+  cursor: 'pointer',
+  padding: 0,
+  fontFamily: 'inherit',
+  fontSize: 12,
+  lineHeight: '20px',
+  fontWeight: 600,
+  textAlign: 'left',
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
+/** 分组头计数（弱化）。 */
+export const groupHeaderCount: CSSProperties = {
+  fontWeight: 400,
+  fontSize: 11,
+  color: 'var(--dsw-alias-label-tertiary)',
 }
 
 export const changeCheckbox: CSSProperties = {
@@ -415,7 +532,7 @@ export const changesList: CSSProperties = {
   overflowY: 'auto',
   display: 'flex',
   flexDirection: 'column',
-  gap: 1,
+  gap: 0,
 }
 
 export const changesRight: CSSProperties = {
@@ -622,12 +739,12 @@ export const treeFolderIcon: CSSProperties = {
   color: 'var(--dsw-alias-label-tertiary)',
 }
 
-/** 右栏文件名按变更状态着色（IDEA 式：增绿/改蓝/删红/重命名琥珀）。 */
+/** 右栏文件名按变更状态着色（IDEA 式：增绿/改蓝/删红/重命名蓝）。 */
 export const statusTextColor: Record<string, string> = {
   added: 'var(--dsw-alias-state-success-primary)',
   untracked: 'var(--dsw-alias-state-success-primary)',
   modified: 'var(--dsw-alias-state-business-primary)',
-  renamed: 'var(--dsw-alias-state-warn-primary)',
+  renamed: 'var(--dsw-alias-state-business-primary)',
   deleted: 'var(--dsw-alias-state-error-primary)',
   conflicted: 'var(--dsw-alias-state-error-primary)',
   typechange: 'var(--dsw-alias-state-warn-primary)',
