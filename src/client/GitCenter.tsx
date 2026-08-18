@@ -320,33 +320,44 @@ function ChangesTab({
         <div style={css.changesList}>
           {snapshot.changes.length === 0
             ? <div style={css.emptyNote}>{t('center.empty')}</div>
-            : groups.map((group) => (
-              <div key={group.key}>
-                <ChangeGroupHeader
-                  label={t(group.labelKey)}
-                  count={group.items.length}
-                  closed={closedGroups.has(group.key)}
-                  allChecked={group.items.length > 0 && group.items.every((c) => selected.has(c.path))}
-                  someChecked={group.items.some((c) => selected.has(c.path))}
-                  onToggleClosed={() => toggleGroupClosed(group.key)}
-                  onSelectAll={(check) => selectGroup(group.items, check)}
-                  t={t}
-                />
-                {!closedGroups.has(group.key) && group.items.map((change) => (
-                  <ChangeRow
-                    key={change.path}
-                    change={change}
-                    checked={selected.has(change.path)}
-                    busy={busy}
-                    armed={armed}
-                    diffActive={diffSel !== null && diffSel.path === change.path && diffSel.base === diffBaseOf(change)}
-                    rowActions={rowActions}
-                    onShowDiff={(p, b) => void showDiff(p, b)}
-                    t={t}
-                  />
+            : (
+              <>
+                {groups.map((group) => (
+                  <div key={group.key}>
+                    <ChangeGroupHeader
+                      label={t(group.labelKey)}
+                      count={group.items.length}
+                      closed={closedGroups.has(group.key)}
+                      allChecked={group.items.length > 0 && group.items.every((c) => selected.has(c.path))}
+                      someChecked={group.items.some((c) => selected.has(c.path))}
+                      onToggleClosed={() => toggleGroupClosed(group.key)}
+                      onSelectAll={(check) => selectGroup(group.items, check)}
+                      t={t}
+                    />
+                    {!closedGroups.has(group.key) && group.items.map((change) => (
+                      <ChangeRow
+                        key={change.path}
+                        change={change}
+                        checked={selected.has(change.path)}
+                        busy={busy}
+                        armed={armed}
+                        diffActive={diffSel !== null && diffSel.path === change.path && diffSel.base === diffBaseOf(change)}
+                        rowActions={rowActions}
+                        onShowDiff={(p, b) => void showDiff(p, b)}
+                        t={t}
+                      />
+                    ))}
+                  </div>
                 ))}
-              </div>
-            ))}
+                {snapshot.truncated && (
+                  <div style={css.emptyNote}>
+                    {t('changes.listTruncated')
+                      .replace('{count}', String(snapshot.changes.length))
+                      .replace('{total}', String(snapshot.staged + snapshot.modified + snapshot.untracked))}
+                  </div>
+                )}
+              </>
+            )}
         </div>
         <div style={css.commitBox}>
           <textarea

@@ -352,7 +352,11 @@ export const rowFileIcon: CSSProperties = {
   color: 'var(--dsw-alias-label-tertiary)',
 }
 
-/** 文件名按钮（状态着色由行内注入）。 */
+/**
+ * 文件名按钮（状态着色由行内注入）。
+ * flex:'0 1 auto' + minWidth:0 + 封顶 65%：按需收缩、可省略；目录优先省略、
+ * 文件名尽量完整（旧 maxWidth:55% 相对整行宽，短名也过度占位、挤压目录）。
+ */
 export const changeName: CSSProperties = {
   border: 'none',
   background: 'transparent',
@@ -362,8 +366,9 @@ export const changeName: CSSProperties = {
   fontSize: 13,
   lineHeight: '20px',
   textAlign: 'left',
-  flex: 'none',
-  maxWidth: '55%',
+  flex: '0 1 auto',
+  minWidth: 0,
+  maxWidth: '65%',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
@@ -537,7 +542,7 @@ export const changesRight: CSSProperties = {
   paddingLeft: 12,
 }
 
-/** 变更行目录部分（弱化显示）。 */
+/** 变更行目录部分（弱化显示，与文件名同阶 12px，IDEA 同尺寸弱化）。 */
 export const changeDir: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -545,7 +550,7 @@ export const changeDir: CSSProperties = {
   flex: 1,
   minWidth: 0,
   color: 'var(--dsw-alias-label-tertiary)',
-  fontSize: 11,
+  fontSize: 12,
 }
 
 // ── 并排差异对照 ───────────────────────────────────────────────────────

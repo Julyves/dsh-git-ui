@@ -10,5 +10,5 @@
       config:
         timeoutMs: 5000
         maxStatusBytes: 4194304
-        maxChanges: 100
+        maxChanges: 500
         defaultRefreshIntervalMs: 30000
