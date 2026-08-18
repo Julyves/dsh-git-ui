@@ -24,3 +24,10 @@ coverage/
 # Debug captures
 *.har
 .wiki/
+
+# AI Agent
+AGENT.md
+.claude/
+.agent/
+.mimocode/
+.codegraph/
