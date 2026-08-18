@@ -91,6 +91,11 @@ export const zh = {
   'changes.groupUnversioned': '未版本控制的文件',
   'changes.actionDiff': '对照查看',
   'changes.selectAll': '全选',
+  'diff.baseStaged': '暂存区',
+  'diff.baseWorktree': '工作区',
+  'diff.prev': '上一个更改',
+  'diff.next': '下一个更改',
+  'diff.truncated': '差异过大，仅显示前 {count} 行',
 } satisfies Record<string, string>
 
 export type GitKey = keyof typeof zh
@@ -186,4 +191,9 @@ export const en: Record<GitKey, string> = {
   'changes.groupUnversioned': 'Unversioned Files',
   'changes.actionDiff': 'Show diff',
   'changes.selectAll': 'Select all',
+  'diff.baseStaged': 'Staged',
+  'diff.baseWorktree': 'Worktree',
+  'diff.prev': 'Previous change',
+  'diff.next': 'Next change',
+  'diff.truncated': 'Diff too large, showing first {count} lines',
 }

@@ -164,3 +164,30 @@ export function RollbackIcon(): JSX.Element {
   )
 }
 
+/** 上一个（左箭头）。 */
+export function PrevIcon(): JSX.Element {
+  return (
+    <svg width={14} height={14} viewBox="0 0 14 14" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <path d="M8.5 3 L4.5 7 L8.5 11" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** 下一个（右箭头）。 */
+export function NextIcon(): JSX.Element {
+  return (
+    <svg width={14} height={14} viewBox="0 0 14 14" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <path d="M5.5 3 L9.5 7 L5.5 11" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** 关闭（叉号）。 */
+export function CloseIcon(): JSX.Element {
+  return (
+    <svg width={14} height={14} viewBox="0 0 14 14" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <path d="M3.5 3.5 L10.5 10.5 M10.5 3.5 L3.5 10.5" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
+    </svg>
+  )
+}
+

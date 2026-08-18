@@ -29,7 +29,7 @@ import { buildFileTree, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
 import { buildSideBySide, type SideCell } from './side-by-side.ts'
 import { diffBaseOf, reconcileDiffSelection, type DiffSelection } from './changes-diff.ts'
-import { BranchIcon, ChevronIcon, CollapseAllIcon, DiffIcon, ExpandAllIcon, FileIcon, FolderIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
+import { BranchIcon, ChevronIcon, CloseIcon, CollapseAllIcon, DiffIcon, ExpandAllIcon, FileIcon, FolderIcon, NextIcon, PrevIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
 
@@ -177,6 +177,8 @@ function ChangesTab({
   const [armed, setArmed] = useState<string | 'all' | null>(null)
   /** 折叠的分组键。 */
   const [closedGroups, setClosedGroups] = useState<ReadonlySet<ChangeGroupKey>>(new Set())
+  /** 左栏宽度（IDEA 式自由拖拽）。 */
+  const [leftW, setLeftW] = useState(360)
   /** 当前对照查看的文件（base 取决于暂存态）。 */
   const [diffSel, setDiffSel] = useState<DiffSelection | null>(null)
   const [diffText, setDiffText] = useState<string | null>(null)
@@ -276,9 +278,26 @@ function ChangesTab({
     },
   }
 
+  /** 差异前后导航序列：三段分组顺序（已暂存 → 更改 → 未版本控制）。 */
+  const navEntries = useMemo(() => groups.flatMap((g) => g.items), [groups])
+
+  /** 上一个/下一个更改（循环遍历）；未打开对照时定位第一条。 */
+  const navigateDiff = (delta: number): void => {
+    if (navEntries.length === 0) return
+    if (diffSel === null) {
+      const first = navEntries[0]!
+      void showDiff(first.path, diffBaseOf(first))
+      return
+    }
+    const found = navEntries.findIndex((c) => c.path === diffSel.path && diffBaseOf(c) === diffSel.base)
+    const index = found === -1 ? 0 : found
+    const next = navEntries[(index + delta + navEntries.length) % navEntries.length]!
+    void showDiff(next.path, diffBaseOf(next))
+  }
+
   return (
     <div style={css.changesLayout}>
-      <div style={css.changesLeft}>
+      <div style={{ ...css.changesLeft, width: leftW }}>
         <div style={css.toolRow}>
           <Button size="sm" disabled={busy || (unstagedItems.length === 0 && untrackedItems.length === 0)} onClick={() => void execute({ kind: 'stage-all' }, t('center.done'))}>
             {t('center.stageAll')}
@@ -347,20 +366,56 @@ function ChangesTab({
             <span style={css.commitHint}>
               {selected.size > 0 ? t('center.commitSelected').replace('{count}', String(selected.size)) : t('center.commitHint')}
             </span>
+            <span style={css.commitKbd} aria-hidden="true">⌘/Ctrl + ↵</span>
             <Button variant="primary" size="sm" disabled={busy || message.trim() === ''} onClick={commit}>
               {busy ? t('center.busy') : t('center.commit')}
             </Button>
           </div>
         </div>
       </div>
+      <Splitter kind="col" onDrag={(dx) => setLeftW((w) => clampNum(w + dx, 280, 520))} />
       <div style={css.changesRight}>
         {diffSel === null
           ? <div style={css.rightEmptyZone}>{t('center.selectFileDiff')}</div>
           : (
             <>
-              <div style={css.toolRow}>
-                <span style={css.commitHint} title={diffSel.path}>{diffSel.path}</span>
-                <Button size="sm" aria-label={t('center.close')} onClick={() => { diffSeq.current += 1; setDiffSel(null); setDiffText(null) }}>✕</Button>
+              <div style={css.diffToolbar}>
+                <span style={css.diffBaseBadge}>
+                  {diffSel.base === 'staged' ? t('diff.baseStaged') : t('diff.baseWorktree')}
+                </span>
+                <span style={css.diffPath} title={diffSel.path}>{diffSel.path}</span>
+                <button
+                  type="button"
+                  className="dsh-git-ui__icon-btn"
+                  style={css.rowIconButton}
+                  title={t('diff.prev')}
+                  aria-label={t('diff.prev')}
+                  disabled={busy || navEntries.length === 0}
+                  onClick={() => navigateDiff(-1)}
+                >
+                  <PrevIcon />
+                </button>
+                <button
+                  type="button"
+                  className="dsh-git-ui__icon-btn"
+                  style={css.rowIconButton}
+                  title={t('diff.next')}
+                  aria-label={t('diff.next')}
+                  disabled={busy || navEntries.length === 0}
+                  onClick={() => navigateDiff(1)}
+                >
+                  <NextIcon />
+                </button>
+                <button
+                  type="button"
+                  className="dsh-git-ui__icon-btn"
+                  style={css.rowIconButton}
+                  title={t('center.close')}
+                  aria-label={t('center.close')}
+                  onClick={() => { diffSeq.current += 1; setDiffSel(null); setDiffText(null) }}
+                >
+                  <CloseIcon />
+                </button>
               </div>
               {diffLoading
                 ? <div style={css.emptyNote}>{t('center.loading')}</div>
@@ -526,10 +581,14 @@ function ChangeRow({
   )
 }
 
-/** 并排差异对照查看器（IDEA 式：左变更前/右变更后，行号 + 状态着色）。 */
+/** 并排差异对照查看器（IDEA 式：左变更前/右变更后，行号 + 状态着色）。
+ * 超大差异仅渲染前 MAX_DIFF_ROWS 行，防止万行级 diff 卡死渲染。 */
+const MAX_DIFF_ROWS = 2000
+
 function DiffSideBySide({ text, t }: { text: string; t: (key: GitKey) => string }): JSX.Element {
   const rows = useMemo(() => buildSideBySide(text), [text])
   if (rows.length === 0) return <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
+  const capped = rows.length > MAX_DIFF_ROWS ? rows.slice(0, MAX_DIFF_ROWS) : rows
   const cellStyle = (cell: SideCell, right: boolean): CSSProperties => ({
     ...css.sbsCell,
     ...(right ? css.sbsCellRight : {}),
@@ -537,7 +596,7 @@ function DiffSideBySide({ text, t }: { text: string; t: (key: GitKey) => string 
   })
   return (
     <div style={css.sbsContainer}>
-      {rows.map((row, i) => (
+      {capped.map((row, i) => (
         <div key={i} style={css.sbsRow}>
           <span style={cellStyle(row.left, false)}>
             <span style={css.sbsNum}>{row.left.num ?? ''}</span>
@@ -549,6 +608,9 @@ function DiffSideBySide({ text, t }: { text: string; t: (key: GitKey) => string 
           </span>
         </div>
       ))}
+      {rows.length > MAX_DIFF_ROWS && (
+        <div style={css.emptyNote}>{t('diff.truncated').replace('{count}', String(MAX_DIFF_ROWS))}</div>
+      )}
     </div>
   )
 }

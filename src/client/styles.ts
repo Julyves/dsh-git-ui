@@ -519,7 +519,6 @@ export const changesLayout: CSSProperties = {
 
 export const changesLeft: CSSProperties = {
   flex: 'none',
-  width: 340,
   minWidth: 0,
   display: 'flex',
   flexDirection: 'column',
@@ -607,6 +606,49 @@ export const sbsAdd: CSSProperties = {
 
 export const sbsEmpty: CSSProperties = {
   background: 'var(--dsw-alias-bg-layer-1)',
+}
+
+// ── 差异工具栏（IDEA 式：基线徽标 + 路径 + 前后导航 + 关闭）──────────────
+
+/** 差异面板工具栏。 */
+export const diffToolbar: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
+  flex: 'none',
+  height: 32,
+}
+
+/** 差异基线徽标（暂存区 / 工作区）。 */
+export const diffBaseBadge: CSSProperties = {
+  flex: 'none',
+  padding: '1px 6px',
+  borderRadius: 6,
+  border: '1px solid var(--dsw-alias-border-l1)',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  color: 'var(--dsw-alias-label-secondary)',
+  fontSize: 11,
+  lineHeight: '16px',
+  whiteSpace: 'nowrap',
+}
+
+/** 差异文件路径（可省略）。 */
+export const diffPath: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontSize: 12,
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
+/** 提交区快捷键提示（等宽弱化）。 */
+export const commitKbd: CSSProperties = {
+  flex: 'none',
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSize: 11,
+  color: 'var(--dsw-alias-label-tertiary)',
 }
 
 // ── Git center tabs (system tab spec: 13/16/500, 2px indicator) ───────────
