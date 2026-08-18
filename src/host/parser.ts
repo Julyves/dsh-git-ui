@@ -75,11 +75,9 @@ export function parseStatusHeader(line: string): StatusHeader {
   return { branch: branch === '' ? null : branch, unborn: false, ahead, behind }
 }
 
-/** Map one porcelain XY pair to a change status. */
-function changeStatus(x: string, y: string): GitChangeStatus {
-  if (x === '?' && y === '?') return 'untracked'
-  if (x === 'U' || y === 'U' || (x !== ' ' && y !== ' ')) return 'conflicted'
-  switch (x) {
+/** 单列状态码 → 变更状态映射（真实冲突由 isConflicted 单独判定）。 */
+function singleStatus(code: string): GitChangeStatus {
+  switch (code) {
     case 'A': return 'added'
     case 'M': return 'modified'
     case 'D': return 'deleted'
@@ -91,10 +89,24 @@ function changeStatus(x: string, y: string): GitChangeStatus {
 }
 
 /**
+ * 真实合并冲突：任一侧为 U（UU/AU/UD/UA/DU），或双方同添/同删（AA/DD）。
+ * 注意 MM/AM/MD 等「已暂存 + 工作区再改」是合法混合态而非冲突
+ * （旧规则「双列均非空即冲突」会把 MM 误报为冲突）。
+ */
+function isConflicted(x: string, y: string): boolean {
+  return x === 'U' || y === 'U' || (x === 'A' && y === 'A') || (x === 'D' && y === 'D')
+}
+
+/**
  * Parse the full `git status --porcelain=v1 -z --branch` output.
  * -z format: every entry (header and each `XY path`) is NUL-terminated; a
  * rename/copy entry emits `R  <new>\0<old>\0` so the following item is the
  * source path and must be consumed without becoming a change itself.
+ *
+ * 混合状态拆分（IDEA 式）：X、Y 均非空的合法对（MM/AM/MD/RM…）拆为
+ * 「已暂存侧 + 未暂存侧」两条 GitChange——UI 据此把同一文件分别列入
+ * 「已暂存更改」与「更改」两组，两侧可独立操作、差异基线唯一。
+ * 真实冲突（isConflicted）保持单条 conflicted 条目。
  */
 export function parseStatusOutput(output: string, maxChanges: number): ParsedStatus {
   const raw = output.split(NUL)
@@ -108,6 +120,15 @@ export function parseStatusOutput(output: string, maxChanges: number): ParsedSta
   const changes: GitChange[] = []
   let truncated = false
 
+  /** 收录一条变更条目；超出上限仅置截断标记（计数不受影响）。 */
+  const pushChange = (path: string, status: GitChangeStatus, isStaged: boolean): void => {
+    if (changes.length < maxChanges) {
+      changes.push({ path, status, staged: isStaged })
+    } else {
+      truncated = true
+    }
+  }
+
   for (let index = 1; index < segments.length; index += 1) {
     const entry = segments[index] ?? ''
     const x = entry[0] ?? ' '
@@ -120,14 +141,23 @@ export function parseStatusOutput(output: string, maxChanges: number): ParsedSta
     }
     if (x === '?' && y === '?') {
       untracked += 1
-    } else {
-      if (x !== ' ' && x !== '?') staged += 1
-      if (y !== ' ' && y !== '?') modified += 1
+      pushChange(path, 'untracked', false)
+      continue
     }
-    if (changes.length < maxChanges) {
-      changes.push({ path, status: changeStatus(x, y), staged: x !== ' ' && x !== '?' })
+    // 计数仍按 X/Y 两列分别累计；拆双条目不改变总数。
+    if (x !== ' ' && x !== '?') staged += 1
+    if (y !== ' ' && y !== '?') modified += 1
+
+    if (isConflicted(x, y)) {
+      // 冲突文件按单条展示（IDEA 冲突条目形态），归入已暂存组。
+      pushChange(path, 'conflicted', true)
+    } else if (x !== ' ' && y !== ' ') {
+      // 混合态：已暂存侧状态取 X，未暂存侧状态取 Y。
+      pushChange(path, singleStatus(x), true)
+      pushChange(path, singleStatus(y), false)
     } else {
-      truncated = true
+      const isStaged = x !== ' '
+      pushChange(path, singleStatus(isStaged ? x : y), isStaged)
     }
   }
 

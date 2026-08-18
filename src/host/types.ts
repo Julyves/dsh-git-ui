@@ -76,6 +76,12 @@ export interface GitRef {
   readonly head: boolean
 }
 
+/**
+ * 一条变更文件条目。混合状态（porcelain XY 双列均非空，如 MM/AM）会被
+ * 拆为两条：`staged: true` 一侧（状态取 X 列）与 `staged: false` 一侧
+ * （状态取 Y 列），UI 据此分列「已暂存更改 / 更改」两组（IDEA 式）。
+ * 真实冲突（UU/AA/DD 等）保持单条 `conflicted`。
+ */
 export interface GitChange {
   readonly path: string
   readonly status: GitChangeStatus

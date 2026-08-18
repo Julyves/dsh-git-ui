@@ -21,15 +21,15 @@ import type { GitAction, GitActionResult, GitActionRequest } from './types.ts'
 function buildArgv(action: GitAction, root: string): { readonly argv: readonly (readonly string[])[] } | { readonly error: string } {
   switch (action.kind) {
     case 'stage':
-      return withPaths(['git', 'add', '--'], action.paths, root)
+      return withPaths([['git', 'add', '--']], action.paths, root)
     case 'stage-all':
       return { argv: [['git', 'add', '-A']] }
     case 'unstage':
-      return withPaths(['git', 'restore', '--staged', '--'], action.paths, root)
+      return withPaths([['git', 'restore', '--staged', '--']], action.paths, root)
     case 'unstage-all':
       return { argv: [['git', 'restore', '--staged', '--', '.']] }
     case 'discard':
-      return withPaths(['git', 'restore', '--'], action.paths, root)
+      return withPaths([['git', 'restore', '--']], action.paths, root)
     case 'discard-all':
       // Reset the index to HEAD first, then the work tree to the index — the
       // IDE-style "roll back everything tracked" semantics.
@@ -40,10 +40,12 @@ function buildArgv(action: GitAction, root: string): { readonly argv: readonly (
       if (action.paths === undefined || action.paths.length === 0) {
         return { argv: [['git', 'commit', '-m', message]] }
       }
-      // git commit -- <paths> stages those paths from the work tree and
-      // commits only them (index state of other paths is ignored) — the
-      // IDE-style "commit selected files" semantics.
-      return withPaths(['git', 'commit', '-m', message, '--'], action.paths, root)
+      // 两步序列（IDE 式「提交所选文件」语义，含未跟踪文件）：
+      // 1. `git add -- <paths>` 先把所选路径纳入索引——裸的
+      //    `git commit -- <未跟踪路径>` 会报 pathspec 错误，先行暂存使其可匹配；
+      // 2. `git commit -m <msg> -- <paths>` 按路径限定提交这些路径的工作区内容，
+      //    其余已暂存文件不受影响。对已跟踪路径与单命令完全等价（已实测验证）。
+      return withPaths([['git', 'add', '--'], ['git', 'commit', '-m', message, '--']], action.paths, root)
     }
     case 'branch-create': {
       // Name validity is validated by runAction (invalid-name), not here.
@@ -68,13 +70,16 @@ export function isValidBranchName(name: string): boolean {
   return /^[A-Za-z0-9._/-]+$/.test(name)
 }
 
-/** Append validated repo-relative paths behind `--`. */
-function withPaths(prefix: readonly string[], paths: readonly string[], root: string): { readonly argv: readonly (readonly string[])[] } | { readonly error: string } {
+/**
+ * 校验仓库相对路径后追加到 `--` 之后；`prefixes` 可给出多条命令序列，
+ * 校验后的路径逐一附加到每条序列（commit 所选路径即两步序列）。
+ */
+function withPaths(prefixes: readonly (readonly string[])[], paths: readonly string[], root: string): { readonly argv: readonly (readonly string[])[] } | { readonly error: string } {
   if (paths.length === 0) return { error: 'no paths given' }
   for (const path of paths) {
     if (!isSafePath(path, root)) return { error: `unsafe path: ${path}` }
   }
-  return { argv: [[...prefix, ...paths]] }
+  return { argv: prefixes.map((prefix) => [...prefix, ...paths]) }
 }
 
 /**

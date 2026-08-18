@@ -144,6 +144,35 @@ describe('runAction — commit', () => {
     expect(result.snapshot.changes.map((c) => c.path).sort()).toEqual(['new.txt', 'untracked.txt'])
   })
 
+  it('commits a selection that includes untracked files and keeps other staged files', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    await makeDirty(dir)
+    git(dir, 'add', 'new.txt')
+    // 未跟踪文件裸路径无法被 commit pathspec 匹配（旧实现此处必失败）；
+    // 两步序列后仅所选路径入提交，无关已暂存文件保留。
+    const result = await runAction(depsFor(dir), CONFIG, request('s1', { kind: 'commit', message: 'mixed selection', paths: ['readme.txt', 'untracked.txt'] }))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.snapshot.lastCommit?.subject).toBe('mixed selection')
+    expect(result.snapshot).toMatchObject({ staged: 1, modified: 0, untracked: 0 })
+    expect(result.snapshot.changes.map((c) => c.path)).toEqual(['new.txt'])
+  })
+
+  it('commits a mixed-state file selection with work tree content', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    await writeFile(join(dir, 'readme.txt'), 'staged line\n')
+    git(dir, 'add', 'readme.txt')
+    await writeFile(join(dir, 'readme.txt'), 'staged line\nworktree line\n')
+    const result = await runAction(depsFor(dir), CONFIG, request('s1', { kind: 'commit', message: 'mm commit', paths: ['readme.txt'] }))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.snapshot).toMatchObject({ staged: 0, modified: 0, dirty: false })
+    // 路径限定提交取工作区内容（已暂存 + 未暂存两侧一并入提交）。
+    expect(git(dir, 'show', 'HEAD:readme.txt')).toBe('staged line\nworktree line\n')
+  })
+
   it('rejects an empty message with git-error', async () => {
     const dir = await tempDir()
     await gitInit(dir)

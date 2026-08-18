@@ -232,6 +232,22 @@ describe('snapshotForSession — real repositories', () => {
     ])
   })
 
+  it('splits mixed-state files into staged and unstaged entries', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    await writeFile(join(dir, 'readme.txt'), 'staged line\n')
+    git(dir, 'add', 'readme.txt')
+    await writeFile(join(dir, 'readme.txt'), 'staged line\nworktree line\n')
+    const result = await snapshotForSession(depsFor(dir), CONFIG, 's1')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toMatchObject({ dirty: true, staged: 1, modified: 1 })
+    expect(result.value.changes).toEqual([
+      { path: 'readme.txt', status: 'modified', staged: true },
+      { path: 'readme.txt', status: 'modified', staged: false },
+    ])
+  })
+
   it('captures ahead counts against a bare remote', async () => {
     const dir = await tempDir()
     await gitInit(dir)

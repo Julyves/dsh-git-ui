@@ -78,6 +78,39 @@ describe('parseStatusOutput', () => {
     expect(parsed.changes).toEqual([{ path: 'c.txt', status: 'conflicted', staged: true }])
   })
 
+  it('keeps genuine conflict pairs (AA/DD) as single conflicted entries', () => {
+    const parsed = parseStatusOutput('## main\u0000AA c.txt\u0000DD d.txt\u0000', 100)
+    expect(parsed.changes).toEqual([
+      { path: 'c.txt', status: 'conflicted', staged: true },
+      { path: 'd.txt', status: 'conflicted', staged: true },
+    ])
+  })
+
+  it('splits mixed XY states into staged and unstaged entries (IDEA-style)', () => {
+    const parsed = parseStatusOutput('## main\u0000MM a.txt\u0000AM b.txt\u0000', 100)
+    expect(parsed).toMatchObject({ staged: 2, modified: 2 })
+    expect(parsed.changes).toEqual([
+      { path: 'a.txt', status: 'modified', staged: true },
+      { path: 'a.txt', status: 'modified', staged: false },
+      { path: 'b.txt', status: 'added', staged: true },
+      { path: 'b.txt', status: 'modified', staged: false },
+    ])
+  })
+
+  it('reads the status of an unstaged-only entry from the Y column', () => {
+    const parsed = parseStatusOutput('## main\u0000 D gone.txt\u0000', 100)
+    expect(parsed.changes).toEqual([{ path: 'gone.txt', status: 'deleted', staged: false }])
+  })
+
+  it('caps dual entries of one mixed file together', () => {
+    const parsed = parseStatusOutput('## main\u0000MM a.txt\u0000 M b.txt\u0000', 2)
+    expect(parsed).toMatchObject({ staged: 1, modified: 2, truncated: true })
+    expect(parsed.changes).toEqual([
+      { path: 'a.txt', status: 'modified', staged: true },
+      { path: 'a.txt', status: 'modified', staged: false },
+    ])
+  })
+
   it('caps the change list but keeps full counts', () => {
     const parsed = parseStatusOutput('## main\u0000 M a\u0000 M b\u0000 M c\u0000', 2)
     expect(parsed).toMatchObject({ modified: 3, truncated: true })
