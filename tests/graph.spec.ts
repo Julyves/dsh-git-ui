@@ -3,7 +3,7 @@
  * 用例覆盖:线性延续、分裂、merge 回归、车道回收复用、收敛、图宽度。
  */
 import { describe, expect, it } from 'vitest'
-import { buildGraph, graphWidth, markFilterEnds, GRAPH_COLORS } from '../src/client/git-graph.ts'
+import { buildGraph, createGraphBuilder, graphWidth, markFilterEnds, GRAPH_COLORS } from '../src/client/git-graph.ts'
 import type { GraphCommit } from '../src/host/types.ts'
 
 /** 构造简单提交链(新→旧,与 git log 输出序一致)。 */
@@ -131,6 +131,33 @@ describe('graphWidth', () => {
   it('counts every lane touched by nodes, verticals and edges', () => {
     expect(graphWidth(buildGraph(MERGE_SEQUENCE))).toBe(2)
     expect(graphWidth(buildGraph(chain(['a'])))).toBe(1)
+  })
+})
+
+describe('createGraphBuilder', () => {
+  it('matches the one-shot buildGraph when fed in parts', () => {
+    const oneShot = buildGraph(MERGE_SEQUENCE)
+    const builder = createGraphBuilder()
+    const p1 = builder.append(MERGE_SEQUENCE.slice(0, 2))
+    const p2 = builder.append(MERGE_SEQUENCE.slice(2))
+    expect([...p1, ...p2]).toEqual(oneShot)
+    expect(builder.count).toBe(MERGE_SEQUENCE.length)
+  })
+
+  it('does not mutate previously returned rows when appending more', () => {
+    const builder = createGraphBuilder()
+    const p1 = builder.append(MERGE_SEQUENCE.slice(0, 2))
+    const before = [...p1]
+    builder.append(MERGE_SEQUENCE.slice(2))
+    expect(p1).toEqual(before)
+  })
+
+  it('continues the lane simulation across append boundaries', () => {
+    const builder = createGraphBuilder()
+    builder.append([commit('a', ['b'])])
+    builder.append([commit('b', ['c'])]) // b 的首父 c 未出现 → 车道延续
+    const rows = builder.append([commit('c', [])])
+    expect(rows[0]).toMatchObject({ column: 0, nodeFromTop: true, nodeContinues: false })
   })
 })
 

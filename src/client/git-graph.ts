@@ -55,72 +55,98 @@ export const GRAPH_COLORS: readonly string[] = [
   '#0EA5E9', '#A855F7', '#22C55E', '#F43F5E',
 ]
 
-/** 车道生命周期算法：为提交序列分配列并产出渲染几何。 */
-export function buildGraph(commits: readonly GraphCommit[]): readonly GraphRow[] {
-  const rows: GraphRow[] = []
-  /** lanes[i] = 该车道等待的提交哈希；null = 空闲（可回收）。 */
-  const lanes: (string | null)[] = []
-  /** 本行新开的车道：不画贯穿竖线（分裂曲线是该线在本行的唯一部分，消除残桩）。 */
-  let opened: Set<number> = new Set()
+/** 回收第一个空闲车道索引；无空闲则扩容。 */
+function freeLane(lanes: (string | null)[], opened: Set<number>): number {
+  const index = lanes.indexOf(null)
+  const lane = index === -1 ? (lanes.push(null), lanes.length - 1) : index
+  opened.add(lane)
+  return lane
+}
 
-  /** 回收第一个空闲车道索引；无空闲则扩容。 */
-  const freeLane = (): number => {
-    const index = lanes.indexOf(null)
-    const lane = index === -1 ? (lanes.push(null), lanes.length - 1) : index
-    opened.add(lane)
-    return lane
-  }
+/** 处理单个提交：更新车道并产出该行几何（buildGraph 与增量 builder 共用同一循环体）。 */
+function processCommit(commit: GraphCommit, lanes: (string | null)[]): GraphRow {
+  const opened = new Set<number>()
+  // 1. 节点列：等待该提交的车道；否则开辟新车道（分支尖端）。
+  //    （同一哈希至多一条车道等待，见模块不变量。）
+  const waitingLane = lanes.indexOf(commit.hash)
+  const column = waitingLane === -1 ? freeLane(lanes, opened) : waitingLane
+  const nodeFromTop = waitingLane !== -1
 
-  for (const commit of commits) {
-    opened = new Set()
-    // 1. 节点列：等待该提交的车道；否则开辟新车道（分支尖端）。
-    //    （同一哈希至多一条车道等待，见模块不变量。）
-    const waitingLane = lanes.indexOf(commit.hash)
-    const column = waitingLane === -1 ? freeLane() : waitingLane
-    const nodeFromTop = waitingLane !== -1
-
-    // 2. 首父：原地延续 / 移交已有车道（回归曲线，本车道关闭）/ 根提交关闭。
-    const edges: GraphEdge[] = []
-    const firstParent = commit.parents[0]
-    let nodeContinues = false
-    if (firstParent === undefined) {
-      lanes[column] = null
+  // 2. 首父：原地延续 / 移交已有车道（回归曲线，本车道关闭）/ 根提交关闭。
+  const edges: GraphEdge[] = []
+  const firstParent = commit.parents[0]
+  let nodeContinues = false
+  if (firstParent === undefined) {
+    lanes[column] = null
+  } else {
+    const parentLane = lanes.indexOf(firstParent)
+    if (parentLane === -1) {
+      // 首父尚未出现：本车道继续等待它（直线延续）。
+      lanes[column] = firstParent
+      nodeContinues = true
     } else {
-      const parentLane = lanes.indexOf(firstParent)
-      if (parentLane === -1) {
-        // 首父尚未出现：本车道继续等待它（直线延续）。
-        lanes[column] = firstParent
-        nodeContinues = true
-      } else {
-        // 首父已被其他车道等待：本车道以回归曲线收尾关闭（着源车道色）。
-        edges.push({ from: column, to: parentLane, kind: 'return' })
-        lanes[column] = null
-      }
+      // 首父已被其他车道等待：本车道以回归曲线收尾关闭（着源车道色）。
+      edges.push({ from: column, to: parentLane, kind: 'return' })
+      lanes[column] = null
     }
-
-    // 3. 第二及更多父提交：复用已等待它的车道，否则开辟新车道；均记分裂曲线。
-    for (let p = 1; p < commit.parents.length; p += 1) {
-      const parentHash = commit.parents[p]!
-      let target = lanes.indexOf(parentHash)
-      if (target === -1) {
-        target = freeLane()
-        lanes[target] = parentHash
-      }
-      edges.push({ from: column, to: target, kind: 'split' })
-    }
-
-    // 4. 贯穿竖线：处理后仍在等待的车道；
-    //    节点列与本行新开车道除外（后者仅由分裂曲线表达，消除合并行残桩）。
-    const verticals: number[] = []
-    lanes.forEach((waitingHash, index) => {
-      if (waitingHash === null || index === column || opened.has(index)) return
-      verticals.push(index)
-    })
-
-    rows.push({ commit, column, verticals, nodeFromTop, nodeContinues, edges })
   }
 
-  return rows
+  // 3. 第二及更多父提交：复用已等待它的车道，否则开辟新车道；均记分裂曲线。
+  for (let p = 1; p < commit.parents.length; p += 1) {
+    const parentHash = commit.parents[p]!
+    let target = lanes.indexOf(parentHash)
+    if (target === -1) {
+      target = freeLane(lanes, opened)
+      lanes[target] = parentHash
+    }
+    edges.push({ from: column, to: target, kind: 'split' })
+  }
+
+  // 4. 贯穿竖线：处理后仍在等待的车道；
+  //    节点列与本行新开车道除外（后者仅由分裂曲线表达，消除合并行残桩）。
+  const verticals: number[] = []
+  lanes.forEach((waitingHash, index) => {
+    if (waitingHash === null || index === column || opened.has(index)) return
+    verticals.push(index)
+  })
+
+  return { commit, column, verticals, nodeFromTop, nodeContinues, edges }
+}
+
+/**
+ * 增量图构建器：持有车道末态，`append` 只处理新增提交并返回新增行。
+ * 既有行对象保持同一引用——配合 CommitRow 的 React.memo，避免逐批追加时全表重渲染，
+ * 也免除每次滚动对全部已加载提交的 O(n·车道) 全量重算。
+ * 集合被整体替换（过滤切换/缓存恢复）时请新建 builder 并从零 `append`。
+ */
+export interface GraphBuilder {
+  /** 已处理提交总数。 */
+  readonly count: number
+  /** 追加一批新提交（不得重复传入已处理过的提交），返回这批新增的行。 */
+  append(commits: readonly GraphCommit[]): readonly GraphRow[]
+}
+
+export function createGraphBuilder(): GraphBuilder {
+  const lanes: (string | null)[] = []
+  let count = 0
+  return {
+    get count() {
+      return count
+    },
+    append(commits) {
+      const rows: GraphRow[] = []
+      for (const commit of commits) {
+        rows.push(processCommit(commit, lanes))
+        count += 1
+      }
+      return rows
+    },
+  }
+}
+
+/** 一次性图构建：等价于 `createGraphBuilder().append(commits)`。 */
+export function buildGraph(commits: readonly GraphCommit[]): readonly GraphRow[] {
+  return createGraphBuilder().append(commits)
 }
 
 /** 图宽度（车道数）：所有行涉及的最大列号 + 1；空图为 0。循环求值，避免大数组展开。 */

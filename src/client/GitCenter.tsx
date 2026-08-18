@@ -24,7 +24,7 @@ import type {
 } from '../host/types.ts'
 import type { GraphCommit, GitRef } from '../host/types.ts'
 import type { GitQueryOutcome } from './controller.ts'
-import { buildGraph, graphWidth, markFilterEnds, GRAPH_COLORS, type GraphRow, type GraphRowMarker } from './git-graph.ts'
+import { createGraphBuilder, graphWidth, markFilterEnds, GRAPH_COLORS, type GraphRow, type GraphRowMarker } from './git-graph.ts'
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
 import { buildSideBySide, capSideBySideRows, foldContext, isBinaryDiff, summarizeChanges, type SideBySideRow, type SideCell } from './side-by-side.ts'
@@ -734,8 +734,28 @@ function HistoryTab({
     }
   }
 
-  /** 由提交序列计算图行与车道宽（每次加载后重算）。 */
-  const graphRows = useMemo(() => buildGraph(commits), [commits])
+  /**
+   * 增量图构建：提交集合只增时仅模拟新增段并追加行，既有行对象引用保持不变
+   * （CommitRow memo 命中，避免逐批追加触发全表重渲染）；集合整体替换
+   * （过滤切换/缓存恢复）时新建 builder 从头构建。
+   */
+  const builderRef = useRef(createGraphBuilder())
+  const prevCommitsRef = useRef<readonly GraphCommit[]>([])
+  const [graphRows, setGraphRows] = useState<readonly GraphRow[]>([])
+  useEffect(() => {
+    const prev = prevCommitsRef.current
+    const isExtension = prev.length <= commits.length && prev.every((c, i) => c.hash === commits[i]?.hash)
+    if (!isExtension) {
+      builderRef.current = createGraphBuilder()
+      setGraphRows(builderRef.current.append(commits))
+    } else if (commits.length > prev.length) {
+      const newRows = builderRef.current.append(commits.slice(prev.length))
+      if (newRows.length > 0) setGraphRows((existing) => [...existing, ...newRows])
+    }
+    prevCommitsRef.current = commits
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅随提交集合变化喂入 builder
+  }, [commits])
+
   const graphCols = useMemo(() => graphWidth(graphRows), [graphRows])
   /** 过滤（搜索/作者/日期）生效时，结果集不含部分父节点——延续线永久悬垂，标为端头。 */
   const hasContentFilter = filter.search !== '' || filter.author !== '' || filter.since !== ''
