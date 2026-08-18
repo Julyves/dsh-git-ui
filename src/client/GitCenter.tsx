@@ -764,8 +764,9 @@ function HistoryTab({
     () => markFilterEnds(graphRows, loadedHashes, hasContentFilter),
     [graphRows, loadedHashes, hasContentFilter],
   )
-  /** 表格列模板：图 | 提交(refs+主题) | 哈希 | 作者 | 时间；行与表头共用。 */
-  const gridTpl = `${graphCols * GRAPH_COL_W}px minmax(0,1fr) 64px 110px 110px`
+  /** 表格列模板：图 | 提交(refs+主题) | 哈希 | 作者 | 时间；行与表头共用。
+   * 主题列 minmax(96px,1fr) 保证宽图/加载回流时内容不被压缩到不可读。 */
+  const gridTpl = `${graphCols * GRAPH_COL_W}px minmax(96px,1fr) 72px 110px 110px`
   /** 右栏文件目录树（随选中提交的 stats 重算）。 */
   const fileTree = useMemo(() => (detail === null ? [] : buildFileTree(detail.stats)), [detail])
 
