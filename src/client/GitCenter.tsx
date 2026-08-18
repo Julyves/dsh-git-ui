@@ -674,10 +674,16 @@ function DiffSideBySide({ text, t }: { text: string; t: (key: GitKey) => string 
 
 // ── Graph constants ──────────────────────────────────────────────────────
 
-/** 每车道像素宽：收紧以贴近 IDE 密度（旧值 28 过宽）。 */
+/** 每车道理想像素宽（收紧贴近 IDE 密度；超宽图时按 GRAPH_MAX_TRACK_W 压缩）。 */
 const GRAPH_COL_W = 16
+/** 图轨道最大像素宽：超宽分支图压缩车道宽以适配，防线条挤压右侧提交信息。 */
+const GRAPH_MAX_TRACK_W = 192
+/** 车道宽下限（再宽也不小于此，避免线条/节点重叠到不可读）。 */
+const GRAPH_LANE_MIN_W = 8
 /** 节点圆半径。 */
 const GRAPH_NODE_R = 4
+/** 节点圆半径下限（车道压缩时同步缩小）。 */
+const GRAPH_NODE_MIN_R = 2
 
 // ── History tab ───────────────────────────────────────────────────────────
 
@@ -757,6 +763,12 @@ function HistoryTab({
   }, [commits])
 
   const graphCols = useMemo(() => graphWidth(graphRows), [graphRows])
+  /** 自适应车道宽：图宽超过 GRAPH_MAX_TRACK_W 时压缩车道，保全部车道可见、轨道有界、不挤压主题列。 */
+  const laneW = useMemo(() => {
+    if (graphCols === 0) return GRAPH_COL_W
+    return Math.max(GRAPH_LANE_MIN_W, Math.min(GRAPH_COL_W, GRAPH_MAX_TRACK_W / graphCols))
+  }, [graphCols])
+  const graphTrack = Math.ceil(graphCols * laneW)
   /** 过滤（搜索/作者/日期）生效时，结果集不含部分父节点——延续线永久悬垂，标为端头。 */
   const hasContentFilter = filter.search !== '' || filter.author !== '' || filter.since !== ''
   const loadedHashes = useMemo(() => new Set(commits.map((c) => c.hash)), [commits])
@@ -766,7 +778,7 @@ function HistoryTab({
   )
   /** 表格列模板：图 | 提交(refs+主题) | 哈希 | 作者 | 时间；行与表头共用。
    * 主题列 minmax(96px,1fr) 保证宽图/加载回流时内容不被压缩到不可读。 */
-  const gridTpl = `${graphCols * GRAPH_COL_W}px minmax(96px,1fr) 72px 110px 110px`
+  const gridTpl = `${graphTrack}px minmax(96px,1fr) 72px 110px 110px`
   /** 右栏文件目录树（随选中提交的 stats 重算）。 */
   const fileTree = useMemo(() => (detail === null ? [] : buildFileTree(detail.stats)), [detail])
 
@@ -960,6 +972,7 @@ function HistoryTab({
                 key={row.commit.hash}
                 row={row}
                 cols={graphCols}
+                laneW={laneW}
                 gridTpl={gridTpl}
                 isSelected={selected?.hash === row.commit.hash}
                 now={now}
@@ -1280,10 +1293,11 @@ function Splitter({ kind, onDrag }: { kind: 'col' | 'row'; onDrag: (delta: numbe
 
 /** 提交行：memo 化保证千条级加载下过滤/选中变更仅重渲染受影响行。 */
 const CommitRow = memo(function CommitRow({
-  row, cols, gridTpl, isSelected, now, onSelect, t,
+  row, cols, laneW, gridTpl, isSelected, now, onSelect, t,
 }: {
   row: GraphRowMarker
   cols: number
+  laneW: number
   gridTpl: string
   isSelected: boolean
   now: number
@@ -1300,7 +1314,7 @@ const CommitRow = memo(function CommitRow({
       }}
       onClick={() => onSelect(row.commit)}
     >
-      <GraphStrip row={row} cols={cols} endOpen={row.endOpen} />
+      <GraphStrip row={row} cols={cols} laneW={laneW} endOpen={row.endOpen} />
       <span style={css.historySubjectCell}>
         <RefPills refs={row.commit.refs} />
         <span style={css.commitSubjectLine} title={row.commit.subject}>{row.commit.subject}</span>
@@ -1447,14 +1461,16 @@ function RefPills({ refs }: { refs: readonly GitRef[] }): JSX.Element | null {
 /**
  * 一行的分支图：条带高度 = HISTORY_ROW_H（与行高同一常量），行间线条连续。
  * 竖线贯穿活跃车道；节点车道按 nodeFromTop / nodeContinues 画上下半段；
- * 分裂与 merge 回归为贝塞尔曲线（节点→行底）。
- * 宽度 = 全图车道数，超宽时由列表容器横向滚动（不再截断坍塌）。
+ * 分叉经 joins 水平连接汇入节点；merge 分裂为贝塞尔曲线（节点→行底）。
+ * 宽度 = 全图车道数 × laneW（自适应车道宽，超宽图压缩以适配有界轨道、
+ * 不挤压右侧提交信息）。
  */
-function GraphStrip({ row, cols, endOpen }: { row: GraphRow; cols: number; endOpen?: boolean }): JSX.Element {
-  const w = Math.max(cols, 1) * GRAPH_COL_W
+function GraphStrip({ row, cols, laneW, endOpen }: { row: GraphRow; cols: number; laneW: number; endOpen?: boolean }): JSX.Element {
+  const w = Math.max(cols, 1) * laneW
   const h = css.HISTORY_ROW_H
-  const x = (col: number): number => col * GRAPH_COL_W + GRAPH_COL_W / 2
+  const x = (col: number): number => col * laneW + laneW / 2
   const cy = h / 2
+  const nodeR = Math.max(GRAPH_NODE_MIN_R, Math.min(GRAPH_NODE_R, laneW / 3))
   const color = (col: number): string => GRAPH_COLORS[col % GRAPH_COLORS.length]!
   return (
     <svg width={w} height={h} style={{ display: 'block', flexShrink: 0 }} aria-hidden="true">
@@ -1494,7 +1510,7 @@ function GraphStrip({ row, cols, endOpen }: { row: GraphRow; cols: number; endOp
       <circle
         cx={x(row.column)}
         cy={cy}
-        r={GRAPH_NODE_R}
+        r={nodeR}
         fill={color(row.column)}
         stroke="var(--dsw-alias-bg-layer-2)"
         strokeWidth={1.5}
