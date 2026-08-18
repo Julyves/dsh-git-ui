@@ -1459,19 +1459,19 @@ function GraphStrip({ row, cols, endOpen }: { row: GraphRow; cols: number; endOp
   return (
     <svg width={w} height={h} style={{ display: 'block', flexShrink: 0 }} aria-hidden="true">
       {row.verticals.map((col) => (
-        <line key={`v-${col}`} x1={x(col)} y1={0} x2={x(col)} y2={h} stroke={color(col)} strokeWidth={1.5} />
+        <line key={`v-${col}`} x1={x(col)} y1={0} x2={x(col)} y2={h} stroke={color(col)} strokeWidth={1.5} strokeLinecap="round" />
       ))}
       {row.nodeFromTop && (
-        <line x1={x(row.column)} y1={0} x2={x(row.column)} y2={cy} stroke={color(row.column)} strokeWidth={1.5} />
+        <line x1={x(row.column)} y1={0} x2={x(row.column)} y2={cy} stroke={color(row.column)} strokeWidth={1.5} strokeLinecap="round" />
       )}
       {row.nodeContinues && (endOpen === true ? (
         <>
           {/* 悬垂端头：父提交不在已加载集合（被过滤/边界），虚线 + 端止横杠，诚实提示上游未载入。 */}
-          <line x1={x(row.column)} y1={cy} x2={x(row.column)} y2={h - 5} stroke={color(row.column)} strokeWidth={1.5} strokeDasharray="3 3" />
-          <line x1={x(row.column) - 4} y1={h - 5} x2={x(row.column) + 4} y2={h - 5} stroke={color(row.column)} strokeWidth={1.5} />
+          <line x1={x(row.column)} y1={cy} x2={x(row.column)} y2={h - 5} stroke={color(row.column)} strokeWidth={1.5} strokeDasharray="3 3" strokeLinecap="round" />
+          <line x1={x(row.column) - 4} y1={h - 5} x2={x(row.column) + 4} y2={h - 5} stroke={color(row.column)} strokeWidth={1.5} strokeLinecap="round" />
         </>
       ) : (
-        <line x1={x(row.column)} y1={cy} x2={x(row.column)} y2={h} stroke={color(row.column)} strokeWidth={1.5} />
+        <line x1={x(row.column)} y1={cy} x2={x(row.column)} y2={h} stroke={color(row.column)} strokeWidth={1.5} strokeLinecap="round" />
       ))}
       {row.edges.map((edge, i) => (
         <path
@@ -1480,6 +1480,8 @@ function GraphStrip({ row, cols, endOpen }: { row: GraphRow; cols: number; endOp
           fill="none"
           stroke={color(edge.kind === 'split' ? edge.to : edge.from)}
           strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
       ))}
       <circle
