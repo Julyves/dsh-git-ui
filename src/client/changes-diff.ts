@@ -40,3 +40,24 @@ export function reconcileDiffSelection(
   if (sameBase !== undefined) return { path: selection.path, base: selection.base }
   return { path: selection.path, base: diffBaseOf(entries[0]!) }
 }
+
+/**
+ * 上一个/下一个更改的循环导航：`entries` 为导航序列（分组顺序），
+ * `current` 为空时定位第一条；当前项不在序列中时按首项计；
+ * `delta` 取 ±1（模长度循环，首尾相接）。空序列返回 null。
+ */
+export function stepDiffSelection(
+  entries: readonly ChangeLike[],
+  current: DiffSelection | null,
+  delta: number,
+): DiffSelection | null {
+  if (entries.length === 0) return null
+  if (current === null) {
+    const first = entries[0]!
+    return { path: first.path, base: diffBaseOf(first) }
+  }
+  const found = entries.findIndex((c) => c.path === current.path && diffBaseOf(c) === current.base)
+  const index = found === -1 ? 0 : found
+  const next = entries[(index + delta + entries.length) % entries.length]!
+  return { path: next.path, base: diffBaseOf(next) }
+}

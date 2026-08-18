@@ -2,7 +2,7 @@
  * 左右对照构建测试：上下文对齐、删增配对、空位补齐、行号起算、全增文件。
  */
 import { describe, expect, it } from 'vitest'
-import { buildSideBySide } from '../../src/client/side-by-side.ts'
+import { buildSideBySide, capSideBySideRows } from '../../src/client/side-by-side.ts'
 
 describe('buildSideBySide', () => {
   it('returns an empty list for empty input', () => {
@@ -67,5 +67,29 @@ describe('buildSideBySide', () => {
     ].join('\n'))
     expect(rows[0]).toMatchObject({ left: { num: 10 }, right: { num: 10 } })
     expect(rows[1]).toMatchObject({ left: { num: 20 }, right: { num: 20 } })
+  })
+})
+
+describe('capSideBySideRows', () => {
+  const rows = buildSideBySide('@@ -1,1 +1,1 @@\n a\n-b\n+c\n')
+
+  it('returns the rows unchanged when within the cap', () => {
+    expect(capSideBySideRows(rows, rows.length)).toBe(rows)
+    expect(capSideBySideRows(rows, rows.length + 10)).toBe(rows)
+  })
+
+  it('truncates to the first max rows when over the cap', () => {
+    const capped = capSideBySideRows(rows, 1)
+    expect(capped).toHaveLength(1)
+    expect(capped[0]).toEqual(rows[0])
+  })
+
+  it('handles a large diff without losing the head', () => {
+    const lines: string[] = ['@@ -1,5000 +1,5000 @@']
+    for (let i = 0; i < 5000; i += 1) lines.push(` line ${i}`)
+    const big = buildSideBySide(lines.join('\n'))
+    const capped = capSideBySideRows(big, 2000)
+    expect(capped).toHaveLength(2000)
+    expect(capped[0]).toMatchObject({ left: { num: 1 }, right: { num: 1 } })
   })
 })

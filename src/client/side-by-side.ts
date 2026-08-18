@@ -78,3 +78,8 @@ export function buildSideBySide(unified: string): readonly SideBySideRow[] {
   flush()
   return rows
 }
+
+/** 渲染截断：超大差异仅保留前 max 行（防万行级 diff 卡死渲染）。 */
+export function capSideBySideRows(rows: readonly SideBySideRow[], max: number): readonly SideBySideRow[] {
+  return rows.length > max ? rows.slice(0, max) : rows
+}

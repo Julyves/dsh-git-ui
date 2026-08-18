@@ -27,8 +27,8 @@ import type { GitQueryOutcome } from './controller.ts'
 import { buildGraph, graphWidth, GRAPH_COLORS, type GraphRow } from './git-graph.ts'
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
-import { buildSideBySide, type SideCell } from './side-by-side.ts'
-import { diffBaseOf, reconcileDiffSelection, type DiffSelection } from './changes-diff.ts'
+import { buildSideBySide, capSideBySideRows, type SideCell } from './side-by-side.ts'
+import { diffBaseOf, reconcileDiffSelection, stepDiffSelection, type DiffSelection } from './changes-diff.ts'
 import { BranchIcon, ChevronIcon, CloseIcon, CollapseAllIcon, DiffIcon, ExpandAllIcon, FileIcon, FolderIcon, NextIcon, PrevIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
@@ -283,16 +283,8 @@ function ChangesTab({
 
   /** 上一个/下一个更改（循环遍历）；未打开对照时定位第一条。 */
   const navigateDiff = (delta: number): void => {
-    if (navEntries.length === 0) return
-    if (diffSel === null) {
-      const first = navEntries[0]!
-      void showDiff(first.path, diffBaseOf(first))
-      return
-    }
-    const found = navEntries.findIndex((c) => c.path === diffSel.path && diffBaseOf(c) === diffSel.base)
-    const index = found === -1 ? 0 : found
-    const next = navEntries[(index + delta + navEntries.length) % navEntries.length]!
-    void showDiff(next.path, diffBaseOf(next))
+    const next = stepDiffSelection(navEntries, diffSel, delta)
+    if (next !== null) void showDiff(next.path, next.base)
   }
 
   return (
@@ -466,6 +458,9 @@ function ChangeGroupHeader({
  * IDEA 式变更行：复选框 + 文件图标 + 状态着色文件名 + 弱化目录 + 行尾状态字母
  * + 悬停操作（对照 / 暂存|取消暂存 / 丢弃）。操作图标仅在悬停或键盘聚焦时显现，
  * 定宽槽位常驻占位，杜绝显现时的布局跳动；点击文件名打开对照（基线由条目暂存侧决定）。
+ *
+ * 选择按路径归并：混合态双条目共享同一复选框状态——提交以路径为限，
+ * 勾选任一侧即整文件入提交，联动为有意设计（与 aria-label 仅标注路径一致）。
  */
 function ChangeRow({
   change, checked, busy, armed, diffActive, rowActions, onShowDiff, t,
@@ -588,7 +583,7 @@ const MAX_DIFF_ROWS = 2000
 function DiffSideBySide({ text, t }: { text: string; t: (key: GitKey) => string }): JSX.Element {
   const rows = useMemo(() => buildSideBySide(text), [text])
   if (rows.length === 0) return <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
-  const capped = rows.length > MAX_DIFF_ROWS ? rows.slice(0, MAX_DIFF_ROWS) : rows
+  const capped = capSideBySideRows(rows, MAX_DIFF_ROWS)
   const cellStyle = (cell: SideCell, right: boolean): CSSProperties => ({
     ...css.sbsCell,
     ...(right ? css.sbsCellRight : {}),

@@ -301,15 +301,6 @@ export const centerBody: CSSProperties = {
   gap: 10,
 }
 
-export const groupTitle: CSSProperties = {
-  margin: '8px 0 4px',
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--dsw-alias-label-secondary)',
-  textTransform: 'uppercase',
-  letterSpacing: 0.4,
-}
-
 export const centerRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',

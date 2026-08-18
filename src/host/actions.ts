@@ -132,8 +132,9 @@ export async function runAction(
   const built = buildArgv(request.action, root)
   if ('error' in built) return { ok: false, error: { code: 'invalid-path', message: built.error } }
 
-  // Run the command sequence; a failure stops the rest (the first commands
-  // may already have taken effect — they are all idempotent restores).
+  // Run the command sequence; a failure stops the rest. 先行命令可能已生效：
+  // restore 类命令幂等可重入；两步提交若 add 成功后 commit 失败，所选路径
+  // 留在暂存区（IDE 行为相同，下次重试即可成功）。
   let lastStdout = ''
   for (const argv of built.argv) {
     const outcome = await runCommand(deps.run, argv, root, `action ${request.action.kind}`, deps.signal)

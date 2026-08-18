@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { realpath, stat } from 'node:fs/promises'
 import { createGitRunner } from '../src/host/git.ts'
@@ -7,7 +7,7 @@ import { runAction } from '../src/host/actions.ts'
 import { normalizeConfig, type SnapshotDeps } from '../src/host/core.ts'
 import type { GitRunResult } from '../src/host/git.ts'
 import type { GitActionRequest } from '../src/host/types.ts'
-import { git, gitInit, makeTempDir, realSubprocess } from './helpers.ts'
+import { git, gitInit, gitStatus, makeTempDir, realSubprocess } from './helpers.ts'
 
 const temps: string[] = []
 async function tempDir(): Promise<string> {
@@ -171,6 +171,21 @@ describe('runAction — commit', () => {
     expect(result.snapshot).toMatchObject({ staged: 0, modified: 0, dirty: false })
     // 路径限定提交取工作区内容（已暂存 + 未暂存两侧一并入提交）。
     expect(git(dir, 'show', 'HEAD:readme.txt')).toBe('staged line\nworktree line\n')
+  })
+
+  it('keeps selected paths staged when the commit step fails after add', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    await makeDirty(dir)
+    // 阻断式 pre-commit 钩子：add 已生效，commit 被拒——所选路径应留在暂存区。
+    await writeFile(join(dir, '.git', 'hooks', 'pre-commit'), '#!/bin/sh\nexit 1\n')
+    await chmod(join(dir, '.git', 'hooks', 'pre-commit'), 0o755)
+    const result = await runAction(depsFor(dir), CONFIG, request('s1', { kind: 'commit', message: 'blocked', paths: ['readme.txt', 'untracked.txt'] }))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.code).toBe('git-error')
+    const status = gitStatus(dir, 'status', '--porcelain=v1')
+    expect(status.stdout).toContain('M  readme.txt')
+    expect(status.stdout).toContain('A  untracked.txt')
   })
 
   it('rejects an empty message with git-error', async () => {
