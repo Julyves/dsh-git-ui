@@ -276,7 +276,7 @@ function GitPopupBody({
       {s.recentCommits.length === 0
         ? <div style={css.emptyNote}>{t('popup.emptyCommits')}</div>
         : s.recentCommits.map((commit) => (
-          <div key={commit.hash} style={css.commitRow}>
+          <div key={commit.hash} className="dsh-git-ui__row" style={css.commitRow}>
             <span style={css.commitHash}>{commit.shortHash}</span>
             <span style={css.commitSubject} title={commit.subject}>{commit.subject}</span>
             <span style={css.commitMeta}>{commit.author} · {timeAgo(commit.dateIso, now, t)}</span>

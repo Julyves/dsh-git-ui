@@ -13,13 +13,14 @@
  */
 import type { CSSProperties } from 'react'
 
-/** Pill: compact branch chip, right-aligned in the session header. */
+/** Pill: compact branch chip, right-aligned in the session header.
+ * macOS 式发丝描边（inset 无布局位移）：层 2 淡底 + l2 极细边，比纯底色更挺括。 */
 export const pill: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: 6,
   height: 24,
-  padding: '0 8px',
+  padding: '0 9px',
   border: 0,
   borderRadius: 12,
   font: 'inherit',
@@ -29,6 +30,7 @@ export const pill: CSSProperties = {
   cursor: 'pointer',
   color: 'var(--dsw-alias-label-secondary)',
   background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
 }
 
 /** Dimmed pill for degraded states (no repo / unavailable). */
@@ -60,7 +62,7 @@ export const popup: CSSProperties = {
   width: 340,
   maxHeight: 420,
   overflowY: 'auto',
-  padding: '10px 12px',
+  padding: '12px 14px',
   fontSize: 12,
   lineHeight: '18px',
   background: 'var(--dsw-alias-bg-layer-3)',
@@ -74,7 +76,7 @@ export const popupTitle: CSSProperties = {
   margin: 0,
   fontSize: 13,
   fontWeight: 600,
-  marginBottom: 6,
+  marginBottom: 8,
 }
 
 export const rootLine: CSSProperties = {
@@ -82,26 +84,29 @@ export const rootLine: CSSProperties = {
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
   color: 'var(--dsw-alias-label-tertiary)',
-  marginBottom: 8,
+  marginBottom: 10,
 }
 
 export const countGrid: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(5, 1fr)',
   gap: 6,
-  marginBottom: 8,
+  marginBottom: 10,
 }
 
+/** 计数格：层 2 淡底 + l2 发丝描边，与 pill 同一描边语言。 */
 export const countCell: CSSProperties = {
   textAlign: 'center',
-  padding: '4px 2px',
+  padding: '6px 2px 5px',
   borderRadius: 8,
   background: 'var(--dsw-alias-bg-layer-2)',
+  border: '1px solid var(--dsw-alias-border-l2)',
 }
 
 export const countValue: CSSProperties = {
   fontWeight: 600,
-  fontSize: 14,
+  fontSize: 15,
+  lineHeight: '20px',
   color: 'var(--dsw-alias-label-primary)',
 }
 
@@ -110,24 +115,26 @@ export const countLabel: CSSProperties = {
   color: 'var(--dsw-alias-label-tertiary)',
 }
 
+/** 分组小标题：macOS 式 11px semibold 弱化色（弃用全大写+字距的报表风）。 */
 export const sectionTitle: CSSProperties = {
-  margin: '8px 0 4px',
+  margin: '12px 0 4px',
   fontSize: 11,
   fontWeight: 600,
-  color: 'var(--dsw-alias-label-secondary)',
-  textTransform: 'uppercase',
-  letterSpacing: 0.4,
+  color: 'var(--dsw-alias-label-tertiary)',
 }
 
 export const commitRow: CSSProperties = {
   display: 'flex',
-  gap: 6,
+  gap: 8,
   alignItems: 'baseline',
-  padding: '2px 0',
+  padding: '3px 6px',
+  margin: '0 -6px',
+  borderRadius: 6,
 }
 
 export const commitHash: CSSProperties = {
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  flex: 'none',
+  fontFamily: 'var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace)',
   fontSize: 11,
   color: 'var(--dsw-alias-label-secondary)',
 }
@@ -148,18 +155,20 @@ export const commitMeta: CSSProperties = {
 
 export const changeRow: CSSProperties = {
   display: 'flex',
-  gap: 6,
+  gap: 8,
   alignItems: 'center',
-  padding: '1px 0',
+  padding: '2px 0',
   borderRadius: 6,
 }
 
+/** 状态字符徽标：紧凑方块芯片，小一号字 + 加粗，视觉重心更稳。 */
 export const changeChip: CSSProperties = {
-  width: 20,
+  width: 18,
   textAlign: 'center',
-  borderRadius: 4,
-  fontSize: 11,
-  fontWeight: 600,
+  borderRadius: 5,
+  fontSize: 10,
+  lineHeight: '14px',
+  fontWeight: 700,
   flexShrink: 0,
 }
 
@@ -182,12 +191,15 @@ export const changePath: CSSProperties = {
   color: 'var(--dsw-alias-label-primary)',
 }
 
+/** 底栏：发丝分隔线把操作区与内容轻轻分开（macOS 工具栏语义）。 */
 export const footerRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
   gap: 8,
-  marginTop: 10,
+  marginTop: 12,
+  paddingTop: 10,
+  borderTop: '1px solid var(--dsw-alias-border-l2)',
 }
 
 export const checkedAt: CSSProperties = {
@@ -219,12 +231,15 @@ export const emptyNote: CSSProperties = {
 const GLOBAL_CSS_ID = 'dsh-git-ui/styles'
 
 const globalCss = [
+  // Elevated 面滚动条重绑（宿主 scrollbar.css 契约：浮起表面须用 l2 滑块对，
+  // 否则滑块底色与 layer-3 面同色而隐形）——popup / Git 中心 Modal / 自绘下拉。
+  '.dsh-git-ui__pop, .dsh-git-ui__center, .dsh-git-ui__select-menu { --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2); --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2); }',
   '.dsh-git-ui__pill:hover { background: var(--dsw-alias-interactive-bg-hover); }',
   '.dsh-git-ui__pill:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   '.dsh-git-ui__row { border-radius: 6px; }',
   '.dsh-git-ui__row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
-  // 交互状态：平台动令过渡 + 按压态 + 键盘焦点可见性。
-  '.dsh-git-ui__commit-row, .dsh-git-ui__row { transition: background var(--ds-transition-duration-fast) linear; }',
+  // 交互状态：平台动令过渡（mac 式缓动）+ 按压态 + 键盘焦点可见性。
+  '.dsh-git-ui__commit-row, .dsh-git-ui__row { transition: background var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   '.dsh-git-ui__commit-row:active, .dsh-git-ui__row:active { background: var(--dsw-alias-interactive-bg-active); }',
   '.dsh-git-ui__row:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   '.dsh-git-ui__splitter:hover { background: var(--dsw-alias-interactive-bg-hover); }',
@@ -235,12 +250,22 @@ const globalCss = [
   // Git center dialog: widen the platform Modal card (headless mode).
   '.dsh-git-ui__center { width: min(1200px, 100vw); height: min(760px, calc(100vh - 48px)); }',
   '.dsh-git-ui__commit-input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  // 输入框 hover 反馈：边框由 l2 加深至 l1（聚焦环由 focus-visible 承担）。
+  '.dsh-git-ui__branch-input, .dsh-git-ui__commit-input { transition: border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+  '.dsh-git-ui__branch-input:hover, .dsh-git-ui__commit-input:hover { border-color: var(--dsw-alias-border-l1); }',
   // System tab underline: 2px bar below the active tab.
-  '.dsh-git-ui__tab::after { content: ""; position: absolute; right: 0; bottom: 1px; left: 0; height: 2px; border-radius: 2px; background: transparent; }',
+  '.dsh-git-ui__tab { transition: color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+  '.dsh-git-ui__tab:hover { color: var(--dsw-alias-label-primary); }',
+  '.dsh-git-ui__tab:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; border-radius: 4px; }',
+  '.dsh-git-ui__tab::after { content: ""; position: absolute; right: 0; bottom: 1px; left: 0; height: 2px; border-radius: 2px; background: transparent; transition: background var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   '.dsh-git-ui__tab--active::after { background: var(--dsw-alias-state-business-primary); }',
   '.dsh-git-ui__branch-input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  // 工具栏下拉按钮：hover 淡底 + 缓动（与图标按钮同一交互语言）。
+  '.dsh-git-ui__toolbar-select { transition: background var(--ds-transition-duration-fast) var(--ds-ease-in-out), border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+  '.dsh-git-ui__toolbar-select:hover { background: var(--dsw-alias-interactive-bg-hover); border-color: var(--dsw-alias-border-l1); }',
+  '.dsh-git-ui__toolbar-select:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   // IDEA 式悬停操作：行尾图标默认隐藏，悬停/键盘聚焦显现（元素常驻，无布局跳动）。
-  '.dsh-git-ui__row-actions { opacity: 0; transition: opacity var(--ds-transition-duration-fast) linear; }',
+  '.dsh-git-ui__row-actions { opacity: 0; transition: opacity var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   '.dsh-git-ui__row:hover .dsh-git-ui__row-actions, .dsh-git-ui__row:focus-within .dsh-git-ui__row-actions { opacity: 1; }',
   // 行操作图标按钮的交互态。
   '.dsh-git-ui__icon-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }',
@@ -277,16 +302,16 @@ export const centerHeader: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 10,
-  padding: '18px 20px 12px',
-  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+  padding: '16px 20px 12px',
+  borderBottom: '1px solid var(--dsw-alias-border-l2)',
   flex: 'none',
 }
 
 export const centerTitle: CSSProperties = {
   margin: 0,
-  fontSize: 16,
-  lineHeight: '24px',
-  fontWeight: 500,
+  fontSize: 15,
+  lineHeight: '22px',
+  fontWeight: 600,
   flex: 1,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -297,7 +322,7 @@ export const centerTitle: CSSProperties = {
 export const centerBody: CSSProperties = {
   flex: 1,
   overflowY: 'auto',
-  padding: '10px 20px',
+  padding: '12px 20px',
   display: 'flex',
   flexDirection: 'column',
   gap: 10,
@@ -379,12 +404,13 @@ export const statusLetter: CSSProperties = {
   flex: 'none',
   width: 14,
   textAlign: 'center',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontFamily: 'var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace)',
   fontSize: 11,
   fontWeight: 600,
 }
 
-/** IDEA 式分组头：粘性吸顶，全选复选 + 折叠箭头 + 名称 + 计数。 */
+/** IDEA 式分组头：粘性吸顶，全选复选 + 折叠箭头 + 名称 + 计数。
+ * 发丝级底部分隔（l2）让吸顶头与滚动内容轻轻分离，不产生重边框。 */
 export const groupHeader: CSSProperties = {
   position: 'sticky',
   top: 0,
@@ -396,7 +422,7 @@ export const groupHeader: CSSProperties = {
   flexShrink: 0,
   padding: '0 8px',
   background: 'var(--dsw-alias-bg-layer-2)',
-  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+  borderBottom: '1px solid var(--dsw-alias-border-l2)',
 }
 
 /** 分组头折叠按钮（箭头 + 名称 + 计数一体可点）。 */
@@ -439,7 +465,7 @@ export const toolRow: CSSProperties = {
 }
 
 export const commitBox: CSSProperties = {
-  borderTop: '1px solid var(--dsw-alias-border-l1)',
+  borderTop: '1px solid var(--dsw-alias-border-l2)',
   padding: '12px 20px 16px',
   display: 'flex',
   flexDirection: 'column',
@@ -454,11 +480,11 @@ export const commitInput: CSSProperties = {
   boxSizing: 'border-box',
   minHeight: 64,
   resize: 'vertical',
-  border: '1px solid var(--dsw-alias-border-l1)',
+  border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: 8,
   padding: '6px 10px',
-  fontSize: 14,
-  lineHeight: '22px',
+  fontSize: 13,
+  lineHeight: '20px',
   fontFamily: 'inherit',
   background: 'var(--dsw-alias-bg-layer-2)',
   color: 'var(--dsw-alias-label-primary)',
@@ -538,7 +564,7 @@ export const changesRight: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 6,
-  borderLeft: '1px solid var(--dsw-alias-border-l1)',
+  borderLeft: '1px solid var(--dsw-alias-border-l2)',
   paddingLeft: 12,
 }
 
@@ -559,10 +585,10 @@ export const sbsContainer: CSSProperties = {
   flex: 1,
   minHeight: 0,
   overflow: 'auto',
-  border: '1px solid var(--dsw-alias-border-l1)',
+  border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: 8,
   background: 'var(--dsw-alias-bg-layer-2)',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontFamily: 'var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace)',
   fontSize: 11,
   lineHeight: '18px',
 }
@@ -574,23 +600,26 @@ export const sbsRow: CSSProperties = {
 
 export const sbsCell: CSSProperties = {
   display: 'flex',
-  gap: 8,
+  gap: 6,
   padding: '0 8px',
   whiteSpace: 'pre',
   minWidth: 0,
 }
 
 export const sbsCellRight: CSSProperties = {
-  borderLeft: '1px solid var(--dsw-alias-border-l1)',
+  borderLeft: '1px solid var(--dsw-alias-border-l2)',
 }
 
+/** 行号槽：定宽右对齐 + 右侧发丝线，数字与代码间留 8px 呼吸。 */
 export const sbsNum: CSSProperties = {
   flex: 'none',
-  width: 32,
+  width: 36,
   textAlign: 'right',
+  paddingRight: 8,
+  marginRight: 2,
   color: 'var(--dsw-alias-label-tertiary)',
   userSelect: 'none',
-  borderRight: '1px solid var(--dsw-alias-border-l1)',
+  borderRight: '1px solid var(--dsw-alias-border-l2)',
 }
 
 /**
@@ -620,21 +649,23 @@ export const sbsEmpty: CSSProperties = {
 export const diffToolbar: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 4,
+  gap: 6,
   flex: 'none',
   height: 32,
+  padding: '0 2px',
 }
 
-/** 差异基线徽标（暂存区 / 工作区）。 */
+/** 差异基线徽标（暂存区 / 工作区）：pill 同族的发丝描边小胶囊。 */
 export const diffBaseBadge: CSSProperties = {
   flex: 'none',
-  padding: '1px 6px',
-  borderRadius: 6,
-  border: '1px solid var(--dsw-alias-border-l1)',
+  padding: '2px 8px',
+  borderRadius: 10,
+  border: '1px solid var(--dsw-alias-border-l2)',
   background: 'var(--dsw-alias-bg-layer-2)',
   color: 'var(--dsw-alias-label-secondary)',
   fontSize: 11,
-  lineHeight: '16px',
+  lineHeight: '14px',
+  fontWeight: 500,
   whiteSpace: 'nowrap',
 }
 
@@ -663,8 +694,9 @@ export const diffSummary: CSSProperties = {
   flex: 'none',
   display: 'inline-flex',
   gap: 8,
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontFamily: 'var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace)',
   fontSize: 11,
+  fontWeight: 600,
   lineHeight: '16px',
 }
 
@@ -676,13 +708,13 @@ export const diffSummaryDel: CSSProperties = {
   color: 'var(--dsw-alias-state-error-primary)',
 }
 
-/** 折叠条：可点击展开的「… N 行未变更」横条。 */
+/** 折叠条：可点击展开的「… N 行未变更」横条（发丝实线上下缘，层 1 淡底）。 */
 export const diffFold: CSSProperties = {
   display: 'block',
   width: '100%',
   border: 'none',
-  borderTop: '1px dashed var(--dsw-alias-border-l1)',
-  borderBottom: '1px dashed var(--dsw-alias-border-l1)',
+  borderTop: '1px solid var(--dsw-alias-border-l2)',
+  borderBottom: '1px solid var(--dsw-alias-border-l2)',
   background: 'var(--dsw-alias-bg-layer-1)',
   color: 'var(--dsw-alias-label-tertiary)',
   fontSize: 11,
@@ -696,7 +728,7 @@ export const diffFold: CSSProperties = {
 /** 提交区快捷键提示（等宽弱化）。 */
 export const commitKbd: CSSProperties = {
   flex: 'none',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontFamily: 'var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace)',
   fontSize: 11,
   color: 'var(--dsw-alias-label-tertiary)',
 }
@@ -707,7 +739,7 @@ export const tabs: CSSProperties = {
   display: 'flex',
   gap: 24,
   padding: '0 20px',
-  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+  borderBottom: '1px solid var(--dsw-alias-border-l2)',
   flex: 'none',
 }
 
@@ -789,7 +821,7 @@ export const treeRow: CSSProperties = {
   alignItems: 'center',
   gap: 6,
   width: '100%',
-  padding: '3px 8px',
+  padding: '4px 8px',
   border: 'none',
   background: 'transparent',
   borderRadius: 6,
@@ -842,10 +874,10 @@ export const statusTextColor: Record<string, string> = {
   typechange: 'var(--dsw-alias-state-warn-primary)',
 }
 
-/** 嵌套层引导线（IDEA 式目录树竖线）。 */
+/** 嵌套层引导线（IDEA 式目录树竖线）：发丝级 l2，暗态下不喧宾夺主。 */
 export const treeChildren: CSSProperties = {
   marginLeft: 12,
-  borderLeft: '1px solid var(--dsw-alias-border-l1)',
+  borderLeft: '1px solid var(--dsw-alias-border-l2)',
 }
 
 export const treeName: CSSProperties = {
@@ -869,13 +901,13 @@ export const historyToolbar: CSSProperties = {
   flex: 'none',
   height: 40,
   padding: '0 8px',
-  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+  borderBottom: '1px solid var(--dsw-alias-border-l2)',
 }
 
 export const toolbarSearch: CSSProperties = {
   flex: 1,
   minWidth: 80,
-  border: '1px solid var(--dsw-alias-border-l1)',
+  border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: 8,
   padding: '4px 10px',
   fontSize: 12,
@@ -891,7 +923,7 @@ export const toolbarSelect: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: 6,
-  border: '1px solid var(--dsw-alias-border-l1)',
+  border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: 8,
   padding: '4px 8px',
   fontSize: 12,
@@ -966,7 +998,7 @@ export const paneHead: CSSProperties = {
   gap: 6,
   height: 40,
   padding: '0 8px',
-  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+  borderBottom: '1px solid var(--dsw-alias-border-l2)',
 }
 
 /** 左右侧栏外壳（淡底；分隔线按侧内联）。 */
@@ -982,7 +1014,7 @@ export const paneSide: CSSProperties = {
 export const treeSearch: CSSProperties = {
   flex: 1,
   minWidth: 0,
-  border: '1px solid var(--dsw-alias-border-l1)',
+  border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: 8,
   padding: '3px 8px',
   fontSize: 12,
@@ -1081,7 +1113,8 @@ export const historyRowSelected: CSSProperties = {
   background: 'var(--dsw-alias-interactive-bg-active)',
 }
 
-/** 表头：粘性置顶，与行共用列模板（跨行对齐的表格契约）。 */
+/** 表头：粘性置顶，与行共用列模板（跨行对齐的表格契约）。
+ * macOS 表头规范：11px semibold 弱化色（原 400 字重过轻，列名立不住）。 */
 export const historyHead: CSSProperties = {
   position: 'sticky',
   top: 0,
@@ -1096,8 +1129,9 @@ export const historyHead: CSSProperties = {
   flexShrink: 0,
   padding: 0,
   background: 'var(--dsw-alias-bg-layer-2)',
-  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+  borderBottom: '1px solid var(--dsw-alias-border-l2)',
   fontSize: 11,
+  fontWeight: 600,
   lineHeight: '16px',
   color: 'var(--dsw-alias-label-tertiary)',
 }
@@ -1125,7 +1159,7 @@ export const historyHash: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontFamily: 'var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace)',
   fontSize: 11,
   color: 'var(--dsw-alias-label-secondary)',
 }
@@ -1153,11 +1187,12 @@ export const refPill: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  padding: '0 6px',
-  borderRadius: 8,
+  padding: '1px 7px',
+  borderRadius: 9,
   border: '1px solid',
   fontSize: 10,
-  lineHeight: '14px',
+  fontWeight: 500,
+  lineHeight: '13px',
 }
 
 /** 当前分支（HEAD ->）：描边式胶囊（与列表标签胶囊同族，避免绿底绿字低对比）。 */
@@ -1220,9 +1255,9 @@ export const rightMsg: CSSProperties = {
 /** 提交正文（等宽保留换行）。 */
 export const msgBody: CSSProperties = {
   margin: 0,
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontFamily: 'var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace)',
   fontSize: 11,
-  lineHeight: '16px',
+  lineHeight: '17px',
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
   color: 'var(--dsw-alias-label-secondary)',
@@ -1244,15 +1279,15 @@ export const rightEmptyZone: CSSProperties = {
 export const rightEmptyZoneBottom: CSSProperties = {
   flex: 'none',
   height: '34%',
-  borderTop: '1px solid var(--dsw-alias-border-l1)',
+  borderTop: '1px solid var(--dsw-alias-border-l2)',
 }
 
 export const commitDetailHeader: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 4,
-  padding: '2px 0 8px',
-  borderBottom: '1px solid var(--dsw-alias-border-l1)',
+  padding: '2px 0 10px',
+  borderBottom: '1px solid var(--dsw-alias-border-l2)',
 }
 
 export const commitDetailSubject: CSSProperties = {
@@ -1260,6 +1295,7 @@ export const commitDetailSubject: CSSProperties = {
   lineHeight: '22px',
   fontWeight: 600,
   color: 'var(--dsw-alias-label-primary)',
+  wordBreak: 'break-word',
 }
 
 export const commitDetailMeta: CSSProperties = {
@@ -1281,7 +1317,7 @@ export const branchManageRow: CSSProperties = {
 export const branchNameInput: CSSProperties = {
   flex: 1,
   minWidth: 120,
-  border: '1px solid var(--dsw-alias-border-l1)',
+  border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: 8,
   padding: '5px 10px',
   fontSize: 13,
@@ -1292,7 +1328,7 @@ export const branchNameInput: CSSProperties = {
 }
 
 export const branchSelect: CSSProperties = {
-  border: '1px solid var(--dsw-alias-border-l1)',
+  border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: 8,
   padding: '5px 8px',
   fontSize: 13,

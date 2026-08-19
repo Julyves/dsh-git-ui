@@ -950,7 +950,7 @@ function HistoryTab({
             style={{
               ...css.historyList,
               opacity: loading && commits.length > 0 ? 0.55 : 1,
-              transition: 'opacity var(--ds-transition-duration) linear',
+              transition: 'opacity var(--ds-transition-duration) var(--ds-ease-in-out)',
             }}
             ref={listRef}
             onScroll={onScroll}
@@ -1377,6 +1377,7 @@ function SelectMenu({
       <button
         ref={btnRef}
         type="button"
+        className="dsh-git-ui__toolbar-select"
         style={css.toolbarSelect}
         aria-label={ariaLabel}
         aria-haspopup="listbox"
@@ -1389,7 +1390,7 @@ function SelectMenu({
           style={{
             display: 'inline-flex',
             flex: 'none',
-            transition: 'transform var(--ds-transition-duration-fast) linear',
+            transition: 'transform var(--ds-transition-duration-fast) var(--ds-ease-in-out)',
             transform: open ? 'rotate(180deg)' : 'none',
           }}
         >
@@ -1403,6 +1404,7 @@ function SelectMenu({
           ref={menuRef}
           role="listbox"
           aria-label={ariaLabel}
+          className="dsh-git-ui__select-menu"
           style={{ ...css.selectMenu, top: pos.top, left: pos.left, minWidth: pos.width }}
         >
           {options.map((o) => (
