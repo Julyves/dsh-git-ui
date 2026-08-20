@@ -23,6 +23,7 @@ import type { GitAction, GitActionResult, GitBranch, GitQueryRequest } from '../
 import type { GitKey } from './locales.ts'
 import { SelectMenu } from './select-menu.tsx'
 import { splitChangePath } from './file-tree.ts'
+import { shouldClosePopup } from './popup-close.ts'
 import * as css from './styles.ts'
 
 // Inject the plugin's interaction styles once (idempotent, browser-only).
@@ -455,10 +456,7 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
     if (!open) return
     const close = (): void => { setOpen(false); setPos(null) }
     const onDown = (e: MouseEvent): void => {
-      const target = e.target as Node
-      if (wrapRef.current?.contains(target) ?? false) return
-      if (popRef.current?.contains(target) ?? false) return
-      close()
+      if (shouldClosePopup(e.target, wrapRef.current, popRef.current)) close()
     }
     const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') close() }
     document.addEventListener('mousedown', onDown)

@@ -691,8 +691,8 @@ function HistoryTab({
     remote: readonly GitBranch[]
     tags: readonly GitBranch[]
   } | null>(null)
-  /** 左树折叠的分组。 */
-  const [closedSections, setClosedSections] = useState<ReadonlySet<string>>(new Set())
+  /** 左树折叠的分组：标签默认收起（仓库可能标签很多，一屏铺满不美观），点击展开。 */
+  const [closedSections, setClosedSections] = useState<ReadonlySet<string>>(new Set(['tags']))
   /** 文件树折叠的目录路径集合。 */
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
   /** 三栏可拖拽尺寸：左宽/右宽/右栏上区比例。 */
