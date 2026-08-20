@@ -15,7 +15,7 @@ export function ChevronIcon({ open }: { readonly open: boolean }): JSX.Element {
         display: 'block',
         flex: 'none',
         transform: open ? 'rotate(90deg)' : 'none',
-        transition: 'transform var(--ds-transition-duration-fast) linear',
+        transition: 'transform var(--ds-transition-duration-fast) var(--ds-ease-in-out)',
       }}
       aria-hidden="true"
     >

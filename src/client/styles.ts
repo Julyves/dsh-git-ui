@@ -72,24 +72,55 @@ export const popup: CSSProperties = {
   boxShadow: 'var(--dsw-shadow-lv3)',
 }
 
-export const popupTitle: CSSProperties = {
-  margin: 0,
-  fontSize: 13,
-  fontWeight: 600,
-  marginBottom: 8,
+/** 上下文头部：分支 prominent + 徽标 + 根路径（回响 pill 的分支/脏/同步信息）。 */
+export const popupHeader: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+  paddingBottom: 10,
+  marginBottom: 10,
+  borderBottom: '1px solid var(--dsw-alias-border-l2)',
 }
 
-export const rootLine: CSSProperties = {
+export const popupHeaderMain: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  flexWrap: 'wrap',
+}
+
+/** 分支名：头部视觉重心（13px semibold primary）。 */
+export const popupHeaderBranch: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 600,
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+/** 头部徽标（脏状态 / 同步 / unborn）：次级弱化文本，不喧宾夺主。 */
+export const popupBadge: CSSProperties = {
+  fontSize: 11,
+  color: 'var(--dsw-alias-label-secondary)',
+  fontVariantNumeric: 'tabular-nums',
+}
+
+/** 根路径行：文件夹图标 + 弱化省略路径。 */
+export const popupHeaderRoot: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 5,
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+export const popupHeaderRootText: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  color: 'var(--dsw-alias-label-tertiary)',
-  marginBottom: 10,
+  fontSize: 11,
 }
 
 export const countGrid: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(5, 1fr)',
+  gridTemplateColumns: 'repeat(3, 1fr)',
   gap: 6,
   marginBottom: 10,
 }
@@ -117,16 +148,17 @@ export const countLabel: CSSProperties = {
 
 /** 分组小标题：macOS 式 11px semibold 弱化色（弃用全大写+字距的报表风）。 */
 export const sectionTitle: CSSProperties = {
-  margin: '12px 0 4px',
+  margin: '14px 0 6px',
   fontSize: 11,
   fontWeight: 600,
   color: 'var(--dsw-alias-label-tertiary)',
 }
 
+/** 提交行：两段式（主题全宽 / hash·作者·时间 次行），消除窄弹窗内主题截断。 */
 export const commitRow: CSSProperties = {
   display: 'flex',
-  gap: 8,
-  alignItems: 'baseline',
+  flexDirection: 'column',
+  gap: 1,
   padding: '3px 6px',
   margin: '0 -6px',
   borderRadius: 6,
@@ -139,12 +171,29 @@ export const commitHash: CSSProperties = {
   color: 'var(--dsw-alias-label-secondary)',
 }
 
-export const commitSubject: CSSProperties = {
+/** 主题行：全宽省略，popup 内不再被 hash/meta 挤压。 */
+export const commitSubjectPop: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  flex: 1,
   color: 'var(--dsw-alias-label-primary)',
+  fontSize: 12,
+}
+
+/** 次行元数据：hash · 作者 · 相对时间，弱化横排。 */
+export const commitMetaLine: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
+  fontSize: 11,
+  color: 'var(--dsw-alias-label-tertiary)',
+  whiteSpace: 'nowrap',
+}
+
+/** 元数据分隔点。 */
+export const commitDot: CSSProperties = {
+  color: 'var(--dsw-alias-label-tertiary)',
+  opacity: 0.6,
 }
 
 export const commitMeta: CSSProperties = {
@@ -183,12 +232,26 @@ export const chipStyles: Record<string, CSSProperties> = {
   typechange: { background: 'var(--dsw-alias-interactive-bg-hover)', color: 'var(--dsw-alias-state-warn-primary)' },
 }
 
-export const changePath: CSSProperties = {
+/** 变更文件名段：prominent，按需收缩（目录优先省略）。 */
+export const changeNamePop: CSSProperties = {
+  flex: '0 1 auto',
+  minWidth: 0,
+  maxWidth: '60%',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  flex: 1,
   color: 'var(--dsw-alias-label-primary)',
+}
+
+/** 变更目录段：弱化，flex:1 优先省略，文件名尽量完整。 */
+export const changeDirPop: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontSize: 11,
+  color: 'var(--dsw-alias-label-tertiary)',
 }
 
 /** 底栏：发丝分隔线把操作区与内容轻轻分开（macOS 工具栏语义）。 */
@@ -200,6 +263,21 @@ export const footerRow: CSSProperties = {
   marginTop: 12,
   paddingTop: 10,
   borderTop: '1px solid var(--dsw-alias-border-l2)',
+}
+
+/** 底栏操作组。 */
+export const footerActions: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+}
+
+/** 主操作（打开 Git 中心）：强调描边按钮，主题安全（不依赖未验证的 on-business 前景令牌）。 */
+export const footerPrimary: CSSProperties = {
+  background: 'var(--dsw-alias-bg-layer-2)',
+  border: '1px solid var(--dsw-alias-state-business-primary)',
+  color: 'var(--dsw-alias-state-business-primary)',
+  fontWeight: 600,
 }
 
 export const checkedAt: CSSProperties = {
@@ -234,46 +312,85 @@ const globalCss = [
   // Elevated 面滚动条重绑（宿主 scrollbar.css 契约：浮起表面须用 l2 滑块对，
   // 否则滑块底色与 layer-3 面同色而隐形）——popup / Git 中心 Modal / 自绘下拉。
   '.dsh-git-ui__pop, .dsh-git-ui__center, .dsh-git-ui__select-menu { --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2); --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2); }',
-  '.dsh-git-ui__pill:hover { background: var(--dsw-alias-interactive-bg-hover); }',
-  '.dsh-git-ui__pill:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+
+  // 浮层入场（emil「勿从 scale(0) 入场」「浮层 origin-aware」）：
+  // popup 默认下展 → top center；SelectMenu 始终按钮左下展 → top left。
+  // @starting-style 无 JS 入场；不支持的引擎降级为瞬现（无功能回归）。
+  '.dsh-git-ui__pop, .dsh-git-ui__select-menu { transition: opacity 150ms ease-out, transform 150ms ease-out; }',
+  '.dsh-git-ui__pop { transform-origin: top center; }',
+  '.dsh-git-ui__select-menu { transform-origin: top left; }',
+  '.dsh-git-ui__pop, .dsh-git-ui__select-menu { opacity: 1; transform: scale(1); @starting-style { opacity: 0; transform: scale(0.97); } }',
+
+  // ── 基础几何 + 过渡（含按压 transform，GPU 友好；禁用 transition: all）──────
   '.dsh-git-ui__row { border-radius: 6px; }',
-  '.dsh-git-ui__row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
-  // 交互状态：平台动令过渡（mac 式缓动）+ 按压态 + 键盘焦点可见性。
-  '.dsh-git-ui__commit-row, .dsh-git-ui__row { transition: background var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
-  '.dsh-git-ui__commit-row:active, .dsh-git-ui__row:active { background: var(--dsw-alias-interactive-bg-active); }',
-  '.dsh-git-ui__row:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
-  '.dsh-git-ui__splitter:hover { background: var(--dsw-alias-interactive-bg-hover); }',
-  '.dsh-git-ui__refresh:hover { color: var(--dsw-alias-state-business-primary); }',
-  '.dsh-git-ui__commit-row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
-  '.dsh-git-ui__commit-row:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
-  '.dsh-git-ui__refresh:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }',
-  // Git center dialog: widen the platform Modal card (headless mode).
-  '.dsh-git-ui__center { width: min(1200px, 100vw); height: min(760px, calc(100vh - 48px)); }',
-  '.dsh-git-ui__commit-input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  // 按压即时缩放：所有可按压元素 :active 时 scale(0.97)，松手回弹（emil「按钮必须可按压」）。
+  '.dsh-git-ui__pill { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+  '.dsh-git-ui__commit-row, .dsh-git-ui__row { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+  '.dsh-git-ui__refresh { transition: transform var(--ds-transition-duration-fast) ease-out, color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   // 输入框 hover 反馈：边框由 l2 加深至 l1（聚焦环由 focus-visible 承担）。
   '.dsh-git-ui__branch-input, .dsh-git-ui__commit-input { transition: border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
-  '.dsh-git-ui__branch-input:hover, .dsh-git-ui__commit-input:hover { border-color: var(--dsw-alias-border-l1); }',
   // System tab underline: 2px bar below the active tab.
-  '.dsh-git-ui__tab { transition: color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
-  '.dsh-git-ui__tab:hover { color: var(--dsw-alias-label-primary); }',
-  '.dsh-git-ui__tab:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; border-radius: 4px; }',
+  '.dsh-git-ui__tab { transition: transform var(--ds-transition-duration-fast) ease-out, color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   '.dsh-git-ui__tab::after { content: ""; position: absolute; right: 0; bottom: 1px; left: 0; height: 2px; border-radius: 2px; background: transparent; transition: background var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   '.dsh-git-ui__tab--active::after { background: var(--dsw-alias-state-business-primary); }',
-  '.dsh-git-ui__branch-input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   // 工具栏下拉按钮：hover 淡底 + 缓动（与图标按钮同一交互语言）。
-  '.dsh-git-ui__toolbar-select { transition: background var(--ds-transition-duration-fast) var(--ds-ease-in-out), border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
-  '.dsh-git-ui__toolbar-select:hover { background: var(--dsw-alias-interactive-bg-hover); border-color: var(--dsw-alias-border-l1); }',
-  '.dsh-git-ui__toolbar-select:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__toolbar-select { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   // IDEA 式悬停操作：行尾图标默认隐藏，悬停/键盘聚焦显现（元素常驻，无布局跳动）。
   '.dsh-git-ui__row-actions { opacity: 0; transition: opacity var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
-  '.dsh-git-ui__row:hover .dsh-git-ui__row-actions, .dsh-git-ui__row:focus-within .dsh-git-ui__row-actions { opacity: 1; }',
-  // 行操作图标按钮的交互态。
-  '.dsh-git-ui__icon-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }',
-  '.dsh-git-ui__icon-btn:active { background: var(--dsw-alias-interactive-bg-active); }',
-  '.dsh-git-ui__icon-btn:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__row:focus-within .dsh-git-ui__row-actions { opacity: 1; }',
+  // 行操作图标按钮的过渡。
+  '.dsh-git-ui__icon-btn { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   '.dsh-git-ui__icon-btn:disabled { opacity: 0.45; cursor: default; }',
-  '.dsh-git-ui__diff-fold:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }',
+  '.dsh-git-ui__diff-fold { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+  // 底栏主操作过渡（按压缩放 + hover 淡底）。
+  '.dsh-git-ui__footer-primary { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+
+  // ── 按压态（:active，触屏与指针均触发，不闸控）────────────────────────
+  // 仅叶子按钮缩放；.dsh-git-ui__row 是含 checkbox/按钮的容器行，:active 会向
+  // 祖先传播——按压其子按钮会令整行缩放（非预期），故行级仅用底色反馈（见下条）。
+  '.dsh-git-ui__pill:active, .dsh-git-ui__icon-btn:active, .dsh-git-ui__tab:active, .dsh-git-ui__refresh:active, .dsh-git-ui__toolbar-select:active, .dsh-git-ui__diff-fold:active, .dsh-git-ui__commit-row:active, .dsh-git-ui__footer-primary:active { transform: scale(0.97); }',
+  '.dsh-git-ui__commit-row:active, .dsh-git-ui__row:active { background: var(--dsw-alias-interactive-bg-active); }',
+  '.dsh-git-ui__icon-btn:active { background: var(--dsw-alias-interactive-bg-active); }',
+
+  // ── 键盘焦点（始终可见，不闸控）──────────────────────────────────────
+  '.dsh-git-ui__pill:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__row:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__commit-row:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__refresh:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }',
+  '.dsh-git-ui__commit-input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__branch-input:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__tab:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; border-radius: 4px; }',
+  '.dsh-git-ui__toolbar-select:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__icon-btn:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   '.dsh-git-ui__diff-fold:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__footer-primary:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+
+  // Git center dialog: widen the platform Modal card (headless mode).
+  '.dsh-git-ui__center { width: min(1200px, 100vw); height: min(760px, calc(100vh - 48px)); }',
+
+  // ── 悬停态（仅指针设备，触屏 tap 不误激活——emil/apple 闸控规则）──────
+  '@media (hover: hover) and (pointer: fine) {',
+  '  .dsh-git-ui__pill:hover { background: var(--dsw-alias-interactive-bg-hover); }',
+  '  .dsh-git-ui__row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
+  '  .dsh-git-ui__commit-row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
+  '  .dsh-git-ui__splitter:hover { background: var(--dsw-alias-interactive-bg-hover); }',
+  '  .dsh-git-ui__refresh:hover { color: var(--dsw-alias-state-business-primary); }',
+  '  .dsh-git-ui__branch-input:hover, .dsh-git-ui__commit-input:hover { border-color: var(--dsw-alias-border-l1); }',
+  '  .dsh-git-ui__tab:hover { color: var(--dsw-alias-label-primary); }',
+  '  .dsh-git-ui__toolbar-select:hover { background: var(--dsw-alias-interactive-bg-hover); border-color: var(--dsw-alias-border-l1); }',
+  '  .dsh-git-ui__icon-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }',
+  '  .dsh-git-ui__diff-fold:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }',
+  '  .dsh-git-ui__footer-primary:hover { background: var(--dsw-alias-interactive-bg-hover); }',
+  '  .dsh-git-ui__row:hover .dsh-git-ui__row-actions { opacity: 1; }',
+  '}',
+
+  // 触屏（无 hover）回退：行尾操作常驻显现，弥补 hover 闸控后触屏不可见的缺口。
+  '@media (hover: none) { .dsh-git-ui__row-actions { opacity: 1; } }',
+
+  // ── 减弱动效（保留辅助理解的透明度/颜色过渡，移除位移与缩放——apple 规则）──
+  '@media (prefers-reduced-motion: reduce) {',
+  '  .dsh-git-ui__pill, .dsh-git-ui__pop, .dsh-git-ui__select-menu, .dsh-git-ui__icon-btn, .dsh-git-ui__tab, .dsh-git-ui__commit-row, .dsh-git-ui__row, .dsh-git-ui__branch-input, .dsh-git-ui__commit-input, .dsh-git-ui__toolbar-select, .dsh-git-ui__diff-fold, .dsh-git-ui__refresh, .dsh-git-ui__footer-primary { transition: opacity 200ms ease, background 200ms ease, color 200ms ease, border-color 200ms ease !important; transform: none !important; }',
+  '}',
 ].join('\n')
 
 /** Ensure the global interaction styles exist (idempotent; browser only). */

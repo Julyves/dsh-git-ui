@@ -18,6 +18,7 @@ import { completedTurnCount, type TurnSignalSnapshot } from './turn-signal.ts'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { GitObservable, GitQueryOutcome, GitView } from './controller.ts'
 import { GitCenter } from './GitCenter.tsx'
+import { FolderIcon } from './icons.tsx'
 import type { GitAction, GitActionResult, GitBranch, GitQueryRequest } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
@@ -257,14 +258,25 @@ function GitPopupBody({
 }): JSX.Element {
   const now = Date.now()
   const s = view.snapshot
+  const branchLabel = s.branch === null ? `(${t('pill.detached')})` : s.branch
   return (
     <>
-      <h4 style={css.popupTitle}>{t('popup.title')}</h4>
-      <div style={css.rootLine} title={s.root}>{s.root}</div>
+      <header style={css.popupHeader}>
+        <div style={css.popupHeaderMain}>
+          <span style={s.dirty ? css.dotDirty : css.dot} aria-hidden="true" />
+          <span style={css.popupHeaderBranch}>{branchLabel}</span>
+          {s.unborn && <span style={css.popupBadge}>{t('pill.noCommits')}</span>}
+          {s.dirty && <span style={css.popupBadge}>{dirtyBadge(view)}</span>}
+          {(s.ahead > 0 || s.behind > 0) && <span style={css.popupBadge}>{aheadBehind(view)}</span>}
+        </div>
+        <div style={css.popupHeaderRoot} title={s.root}>
+          <FolderIcon />
+          <span style={css.popupHeaderRootText}>{s.root}</span>
+        </div>
+      </header>
       <div style={css.countGrid}>
         {([
           ['popup.staged', s.staged], ['popup.modified', s.modified], ['popup.untracked', s.untracked],
-          ['popup.ahead', s.ahead], ['popup.behind', s.behind],
         ] as const).map(([key, value]) => (
           <div key={key} style={css.countCell}>
             <div style={css.countValue}>{value}</div>
@@ -275,11 +287,16 @@ function GitPopupBody({
       <div style={css.sectionTitle}>{t('popup.recentCommits')}</div>
       {s.recentCommits.length === 0
         ? <div style={css.emptyNote}>{t('popup.emptyCommits')}</div>
-        : s.recentCommits.map((commit) => (
+        : s.recentCommits.slice(0, 3).map((commit) => (
           <div key={commit.hash} className="dsh-git-ui__row" style={css.commitRow}>
-            <span style={css.commitHash}>{commit.shortHash}</span>
-            <span style={css.commitSubject} title={commit.subject}>{commit.subject}</span>
-            <span style={css.commitMeta}>{commit.author} · {timeAgo(commit.dateIso, now, t)}</span>
+            <div style={css.commitSubjectPop} title={commit.subject}>{commit.subject}</div>
+            <div style={css.commitMetaLine}>
+              <span style={css.commitHash}>{commit.shortHash}</span>
+              <span style={css.commitDot}>·</span>
+              <span style={css.commitMeta}>{commit.author}</span>
+              <span style={css.commitDot}>·</span>
+              <span style={css.commitMeta}>{timeAgo(commit.dateIso, now, t)}</span>
+            </div>
           </div>
         ))}
       <div style={css.sectionTitle}>{t('popup.changes')}</div>
@@ -287,17 +304,23 @@ function GitPopupBody({
         ? <div style={css.emptyNote}>{t('popup.empty')}</div>
         : (
           <>
-            {s.changes.map((change) => (
-              <div key={change.path} style={css.changeRow}>
-                <span
-                  style={{ ...css.changeChip, ...(css.chipStyles[change.status] ?? css.chipStyles.untracked) }}
-                  title={change.status}
-                >
-                  {CHIP_LETTERS[change.status] ?? '•'}
-                </span>
-                <span style={css.changePath} title={change.path}>{change.path}</span>
-              </div>
-            ))}
+            {s.changes.map((change) => {
+              const slash = change.path.lastIndexOf('/')
+              const name = slash === -1 ? change.path : change.path.slice(slash + 1)
+              const dir = slash === -1 ? '' : change.path.slice(0, slash)
+              return (
+                <div key={change.path} style={css.changeRow}>
+                  <span
+                    style={{ ...css.changeChip, ...(css.chipStyles[change.status] ?? css.chipStyles.untracked) }}
+                    title={change.status}
+                  >
+                    {CHIP_LETTERS[change.status] ?? '•'}
+                  </span>
+                  <span style={css.changeNamePop} title={change.path}>{name}</span>
+                  {dir !== '' ? <span style={css.changeDirPop}>{dir}</span> : <span style={{ flex: 1 }} />}
+                </div>
+              )
+            })}
             {s.truncated && (
               <div style={css.emptyNote}>{t('popup.changesTruncated').replace('{count}', String(s.changes.length))}</div>
             )}
@@ -307,11 +330,11 @@ function GitPopupBody({
       <BranchQuickManage run={run} query={query} t={t} />
       <div style={css.footerRow}>
         <span style={css.checkedAt}>{t('popup.checkedAt').replace('{time}', new Date(s.checkedAt).toLocaleTimeString())}</span>
-        <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-          <button type="button" className="dsh-git-ui__refresh" style={css.refreshButton} onClick={openCenter}>
+        <span style={css.footerActions}>
+          <PopRefresher refresh={refresh} t={t} />
+          <button type="button" className="dsh-git-ui__footer-primary" style={{ ...css.refreshButton, ...css.footerPrimary, padding: '4px 10px' }} onClick={openCenter}>
             {t('center.open')}
           </button>
-          <PopRefresher refresh={refresh} t={t} />
         </span>
       </div>
     </>
