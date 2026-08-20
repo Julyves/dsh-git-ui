@@ -221,15 +221,19 @@ export const changeChip: CSSProperties = {
   flexShrink: 0,
 }
 
-/** 状态字符徽标配色：全语义 token，明暗主题自适应（取代旧硬编码 hex）。 */
+/**
+ * 状态字符徽标配色：color-mix 淡晕背景（~12%）+ label-primary 文字（始终高对比可读）。
+ * 取代旧 state-*-secondary 饱和填充 + state-*-primary 文字（同色系 bg+text 低对比，如 added 绿底绿字看不清）。
+ * 与差异视图 sbsDel/sbsAdd 同一配色语言。
+ */
 export const chipStyles: Record<string, CSSProperties> = {
-  added: { background: 'var(--dsw-alias-state-success-secondary)', color: 'var(--dsw-alias-state-success-primary)' },
-  modified: { background: 'var(--dsw-alias-interactive-bg-hover)', color: 'var(--dsw-alias-state-warn-primary)' },
-  deleted: { background: 'var(--dsw-alias-state-error-secondary)', color: 'var(--dsw-alias-state-error-primary)' },
-  renamed: { background: 'var(--dsw-alias-interactive-bg-hover)', color: 'var(--dsw-alias-state-business-primary)' },
+  added: { background: 'color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent)', color: 'var(--dsw-alias-label-primary)' },
+  modified: { background: 'color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent)', color: 'var(--dsw-alias-label-primary)' },
+  deleted: { background: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent)', color: 'var(--dsw-alias-label-primary)' },
+  renamed: { background: 'color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, transparent)', color: 'var(--dsw-alias-label-primary)' },
   untracked: { background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-secondary)' },
-  conflicted: { background: 'var(--dsw-alias-state-error-secondary)', color: 'var(--dsw-alias-state-error-primary)' },
-  typechange: { background: 'var(--dsw-alias-interactive-bg-hover)', color: 'var(--dsw-alias-state-warn-primary)' },
+  conflicted: { background: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 18%, transparent)', color: 'var(--dsw-alias-label-primary)' },
+  typechange: { background: 'color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent)', color: 'var(--dsw-alias-label-primary)' },
 }
 
 /** 变更文件名段：prominent，按需收缩（目录优先省略）。 */

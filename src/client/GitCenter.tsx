@@ -27,7 +27,7 @@ import type { GitQueryOutcome } from './controller.ts'
 import { createGraphBuilder, graphWidth, markFilterEnds, GRAPH_COLORS, type GraphRow, type GraphRowMarker } from './git-graph.ts'
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
-import { buildSideBySide, capSideBySideRows, foldContext, isBinaryDiff, summarizeChanges, type SideCell } from './side-by-side.ts'
+import { buildSideBySide, capSideBySideRows, isBinaryDiff, summarizeChanges, type SideCell } from './side-by-side.ts'
 import { diffBaseOf, reconcileDiffSelection, stepDiffSelection, type DiffSelection } from './changes-diff.ts'
 import { BranchIcon, ChevronIcon, CloseIcon, CollapseAllIcon, DiffIcon, ExpandAllIcon, FileIcon, FolderIcon, NextIcon, PrevIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
@@ -619,8 +619,7 @@ const MAX_DIFF_ROWS = 2000
 
 function DiffSideBySide({ text, t }: { text: string; t: (key: GitKey) => string }): JSX.Element {
   const rows = useMemo(() => buildSideBySide(text), [text])
-  const blocks = useMemo(() => foldContext(capSideBySideRows(rows, MAX_DIFF_ROWS)), [rows])
-  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set())
+  const capped = useMemo(() => capSideBySideRows(rows, MAX_DIFF_ROWS), [rows])
   if (isBinaryDiff(text)) return <div style={css.emptyNote}>{t('diff.binary')}</div>
   if (rows.length === 0) return <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
 
@@ -634,43 +633,10 @@ function DiffSideBySide({ text, t }: { text: string; t: (key: GitKey) => string 
     </div>
   )
 
-  const toggleFold = (index: number): void => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(index)) next.delete(index)
-      else next.add(index)
-      return next
-    })
-  }
-
-  // 双列独立横向滚动：每列各渲染一份行序列（fold 块在两列同位各一次，同步展开）。
-  // 内容只在本列内展示 → 根治长行左右重叠；sbsCell width:100% 填满 inner →
-  // 背景覆盖整行，根治滑动后同行后半段无配色。
+  // 全量平铺文档（不折叠上下文）：每列各渲染一份完整行序列。
+  // 双列独立横向滚动 + 容器统一纵向滚动（长文档可上下滚动浏览）。
   const renderColumn = (side: 'left' | 'right'): readonly JSX.Element[] =>
-    blocks.map((block, i) => {
-      if (block.kind === 'fold') {
-        if (expanded.has(i)) {
-          return (
-            <Fragment key={`f${i}`}>
-              {block.rows.map((r, j) => renderCell(side === 'left' ? r.left : r.right, `${i}-${j}`))}
-            </Fragment>
-          )
-        }
-        return (
-          <button
-            key={`f${i}`}
-            type="button"
-            className="dsh-git-ui__diff-fold"
-            style={css.diffFold}
-            onClick={() => toggleFold(i)}
-            aria-expanded={false}
-          >
-            {t('diff.foldCollapsed').replace('{n}', String(block.count))}
-          </button>
-        )
-      }
-      return renderCell(side === 'left' ? block.row.left : block.row.right, String(i))
-    })
+    capped.map((row, i) => renderCell(side === 'left' ? row.left : row.right, String(i)))
 
   return (
     <>

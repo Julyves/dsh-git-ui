@@ -59,6 +59,88 @@ export function FileIcon(): JSX.Element {
   )
 }
 
+// ── 文件类型分类图标（同一折角轮廓 + 内部符号区分）──────────────────────
+
+/** 代码文件图标（{ } 括号符号）。 */
+export function CodeFileIcon(): JSX.Element {
+  return (
+    <svg width={12} height={12} viewBox="0 0 12 12" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <path d="M3 1 h4 l2.5 2.5 V11 h-6.5 Z M7 1 v2.5 h2.5" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinejoin="round" />
+      <path d="M5 5.5 L4.2 7 L5 8.5 M7 5.5 L7.8 7 L7 8.5" fill="none" stroke="currentColor" strokeWidth={1} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** 配置文件图标（齿轮符号）。 */
+export function ConfigFileIcon(): JSX.Element {
+  return (
+    <svg width={12} height={12} viewBox="0 0 12 12" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <path d="M3 1 h4 l2.5 2.5 V11 h-6.5 Z M7 1 v2.5 h2.5" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinejoin="round" />
+      <circle cx={6} cy={7} r={1.4} fill="none" stroke="currentColor" strokeWidth={1} />
+      <path d="M6 5 V5.6 M6 8.4 V9 M4.6 7 H5.2 M6.8 7 H7.4" fill="none" stroke="currentColor" strokeWidth={1} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** 文档文件图标（文本行符号）。 */
+export function DocFileIcon(): JSX.Element {
+  return (
+    <svg width={12} height={12} viewBox="0 0 12 12" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <path d="M3 1 h4 l2.5 2.5 V11 h-6.5 Z M7 1 v2.5 h2.5" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinejoin="round" />
+      <path d="M4.5 5 H7.5 M4.5 6.5 H7.5 M4.5 8 H6.5" fill="none" stroke="currentColor" strokeWidth={1} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** 图片文件图标（山峰符号）。 */
+export function ImageFileIcon(): JSX.Element {
+  return (
+    <svg width={12} height={12} viewBox="0 0 12 12" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <path d="M3 1 h4 l2.5 2.5 V11 h-6.5 Z M7 1 v2.5 h2.5" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinejoin="round" />
+      <path d="M4 8.5 L5.5 6.5 L7 8.5 M6.5 8.5 L7.5 7 L8.5 8.5" fill="none" stroke="currentColor" strokeWidth={1} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+// ── 按扩展名/基名选择文件类型图标 ──────────────────────────────────────
+
+const CODE_EXTS = new Set([
+  'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'py', 'go', 'rs', 'rb', 'java', 'kt', 'kts',
+  'swift', 'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'hxx', 'cs', 'vb', 'php', 'vue', 'svelte',
+  'sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd', 'lua', 'r', 'scala', 'clj', 'ex', 'exs',
+  'erl', 'elm', 'dart', 'groovy', 'gradle', 'ml', 'fs', 'fsx', 'pl', 'pm', 'tcl',
+])
+const CONFIG_EXTS = new Set([
+  'json', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'env', 'lock', 'properties',
+  'editorconfig', 'gitignore', 'gitattributes', 'dockerignore', 'npmrc', 'prettierrc',
+  'eslintrc', 'babelrc', 'node-version', 'nvmrc',
+])
+const DOC_EXTS = new Set([
+  'md', 'mdx', 'txt', 'rst', 'pdf', 'doc', 'docx', 'rtf', 'adoc', 'org',
+])
+const IMAGE_EXTS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp', 'tiff', 'tif', 'avif',
+])
+const STYLESHEET_EXTS = new Set([
+  'css', 'scss', 'sass', 'less', 'styl',
+])
+
+/** 按文件路径选择类型图标（扩展名/基名分类），不匹配时回退通用文件图标。 */
+export function fileIconForPath(path: string): JSX.Element {
+  const baseName = path.slice(path.lastIndexOf('/') + 1).toUpperCase()
+  if (baseName === 'LICENSE' || baseName === 'README' || baseName === 'CHANGELOG' || baseName === 'AUTHORS') return <DocFileIcon />
+  if (baseName === 'MAKEFILE' || baseName === 'DOCKERFILE' || baseName === 'CMAKECACHE') return <CodeFileIcon />
+  const dot = path.lastIndexOf('.')
+  if (dot === -1) return <FileIcon />
+  const ext = path.slice(dot + 1).toLowerCase()
+  if (CODE_EXTS.has(ext)) return <CodeFileIcon />
+  if (CONFIG_EXTS.has(ext)) return <ConfigFileIcon />
+  if (DOC_EXTS.has(ext)) return <DocFileIcon />
+  if (IMAGE_EXTS.has(ext)) return <ImageFileIcon />
+  if (STYLESHEET_EXTS.has(ext)) return <CodeFileIcon />
+  return <FileIcon />
+}
+
 /** 分支图标（git branch）。 */
 export function BranchIcon(): JSX.Element {
   return (

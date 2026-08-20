@@ -18,7 +18,7 @@ import { completedTurnCount, type TurnSignalSnapshot } from './turn-signal.ts'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { GitObservable, GitQueryOutcome, GitView } from './controller.ts'
 import { GitCenter } from './GitCenter.tsx'
-import { FolderIcon } from './icons.tsx'
+import { fileIconForPath, FolderIcon } from './icons.tsx'
 import type { GitAction, GitActionResult, GitBranch, GitQueryRequest } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import { SelectMenu } from './select-menu.tsx'
@@ -310,6 +310,7 @@ function GitPopupBody({
                   >
                     {CHIP_LETTERS[change.status] ?? '•'}
                   </span>
+                  <span style={css.rowFileIcon} aria-hidden="true">{fileIconForPath(change.path)}</span>
                   <span style={css.changeNamePop} title={change.path}>{name}</span>
                   {dir !== '' ? <span style={css.changeDirPop}>{dir}</span> : <span style={{ flex: 1 }} />}
                 </div>
