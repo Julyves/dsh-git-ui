@@ -4,7 +4,7 @@
 [![npm license](https://img.shields.io/npm/l/dsh-git-ui.svg)](https://www.npmjs.com/package/dsh-git-ui)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-git-ui.svg)](https://www.npmjs.com/package/dsh-git-ui)
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）Web UI 插件：在会话界面中可视化展示当前工程的 Git 状态——分支、HEAD、脏状态计数（已暂存/已修改/未跟踪）、领先/落后、最近提交与变更文件。无需切换终端，扫一眼即得。
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）Web UI 插件：在会话界面中可视化展示 Git 状态——会话头部的 Pill 一眼呈现当前分支（或游离 HEAD）与脏状态计数（已暂存/已修改/未跟踪）及领先/落后。点击查看最近提交与变更文件，或打开 Git 中心进行完整管理。无需切换终端。
 
 > English version: [README.md](README.md)
 
@@ -14,34 +14,41 @@
 
 ## 功能特性
 
-- **会话头部分支 Pill**（右侧、每会话独立）：常态只显示分支，脏状态与领先/落后以徽标呈现：
+- **会话头部分支 Pill**（右侧、每会话独立）：状态点（干净为绿、脏为橙）+ 分支名 + 脏/领先落后徽标——点击展开详情面板：
 
-  <img src="docs/screenshots/pill.png" alt="会话头部分支 Pill" width="720">
+  <img src="docs/screenshots/01-pill面板内容展示.png" alt="会话头部分支 Pill 与展开的详情面板" width="720">
 
   | 状态 | Pill 显示 |
   |---|---|
-  | 干净 | `⎇ main` |
-  | 脏状态 | `⎇ main · +2 −1 ?3`（已暂存/已修改/未跟踪） |
-  | 领先/落后 | `⎇ main ↑1 ↓2` |
-  | 游离 HEAD | `⎇ (detached) · a1b2c3d` |
-  | unborn（无提交） | `⎇ main · 无提交` |
+  | 干净 | `● main` |
+  | 脏状态 | `● main · +2 −1 ?3` |
+  | 领先/落后 | `● main · ↑1 ↓2` |
+  | 游离 HEAD | `● (游离 HEAD) · a1b2c3d` |
+  | unborn（无提交） | `● main · 无提交` |
   | 非 git 仓库 | 弱化显示 `无 Git 仓库` |
   | git 不可用/出错 | 弱化显示 `Git 不可用`（tooltip 显示原因） |
 
-- **详情面板**（点击 pill 展开）：仓库根目录、计数格（已暂存/已修改/未跟踪/领先/落后）、最近提交（哈希·主题·作者·相对时间）、变更文件列表（状态 chip）、手动刷新按钮、上次检查时间：
+  `+N −N ?N` = 已暂存/已修改/未跟踪；`↑N ↓N` = 领先/落后。脏且领先落后时徽标合并（如 `● main · +2 −1 ?3 · ↑1 ↓2`）。
 
-  <img src="docs/screenshots/popup.png" alt="Git 状态详情面板" width="720">
+- **详情面板**（点击 pill 展开）：仓库根目录、状态计数（已暂存/已修改/未跟踪）+ 脏与领先落后徽标、最近提交（哈希·主题·作者·相对时间）、变更文件列表（状态 chip + 行内暂存/取消/丢弃操作）、分支内联切换、手动刷新按钮、上次检查时间：
 
-- **Git 中心**（从面板进入的管理面板）：IDE 式变更视图——单文件/全部暂存、取消暂存、丢弃，以及带提交信息的提交（勾选文件或全部已暂存）。每次操作即时刷新状态：
+  <img src="docs/screenshots/02-面板选择切换分支.png" alt="详情面板内的分支内联切换" width="720">
 
-  <img src="docs/screenshots/center.png" alt="Git 中心变更视图" width="720">
+- **Git 中心**（从面板进入的管理面板）：双标签——**变更**与**历史**。
+  - *变更*：IDE 式三段分组（已暂存/更改/未跟踪），单文件与全部暂存/取消暂存/丢弃（两步确认）、提交框（勾选文件或全部已暂存），以及选中文件的并排差异对照（前后导航）。
+  - *历史*：分页提交列表 + 分支图渲染，每条提交详情（主题·正文·变更文件树），按分支/标签/作者/日期/文本或哈希过滤，以及拉取远程按钮。
 
-- **数据自动保鲜，零操作**：进入会话自动拉取、静默轮询（间隔由主机下发，默认 30s，不重叠请求）、**agent 完成一个回合后立即刷新**（尽力而为——此时工作区最可能已变化）、断线重连 resync、面板内手动刷新。
-- **确定性降级**：非 git 目录、无 cwd、git 缺失、超时、巨型仓库等边界显示稳定降级态——不崩溃、不刷屏：
+  每次操作即时刷新状态：
 
-  <img src="docs/screenshots/dirty.png" alt="干净 / 脏状态 / 非 git 仓库对照" width="720">
+  <img src="docs/screenshots/03-Git中心统一阅览文件变更.png" alt="Git 中心——变更标签（分组文件变更）" width="720">
 
-- **纯只读 UI**：不给模型新增工具、不写会话事件，不改变 agent 的任何行为。
+  <img src="docs/screenshots/04-Git中心查看分支历史.png" alt="Git 中心——历史标签（提交列表与分支图）" width="720">
+
+  <img src="docs/screenshots/04-Git中心查看提交详情.png" alt="Git 中心——提交详情与变更文件树" width="720">
+
+- **数据自动保鲜，零操作**：进入会话自动加载状态快照、静默轮询（间隔由主机下发，默认 30s，不重叠请求）、**agent 完成一个回合后立即刷新**（尽力而为——此时工作区最可能已变化）、断线重连 resync、面板内手动刷新。
+- **确定性降级**：非 git 目录、无 cwd、git 缺失、超时、巨型仓库等边界显示稳定降级态——不崩溃、不刷屏。
+- **零 agent 影响**：不给模型新增工具、不写会话事件，从不改变 agent 行为。Git 中心的写操作（暂存/提交/分支/拉取）均由用户从 UI 主动发起，绝非 agent 驱动。
 
 ## 安装
 
@@ -76,7 +83,7 @@ dsh plugin --profile web remove dsh-git-ui
 
 1. 打开一个工作目录位于 git 仓库内的会话。
 2. 随时扫一眼头部 Pill——无需任何操作。
-3. 点击 Pill 查看仓库根目录、计数、最近提交与变更文件；点 `刷新` 立即重新检查。
+3. 点击 Pill 查看仓库根目录、计数、最近提交与变更文件；点 `刷新` 立即重新检查，或打开 Git 中心进行完整变更管理与历史浏览。
 
 每个会话显示**自己工作目录**的 Git 状态；非仓库会话显示弱化占位而非 Pill。
 
@@ -97,14 +104,14 @@ dsh plugin --profile web remove dsh-git-ui
 
 - Node.js `^22.19.0 || >=24.0.0`
 - dsh `>= 0.1.0-rc`（开发者预览版）
-- 主机可执行 `git`（插件通过子进程调用只读 git 命令）
+- 主机可执行 `git`（插件通过子进程调用 git 命令）
 
 ## 已知限制
 
-- 仅展示会话工作目录的 Git 状态（远程 URL、push 分支名暂未支持）。
+- 仅展示会话工作目录的 Git 状态。历史页的过滤树列出远程分支、领先/落后与手动拉取，但不暴露 push / pull / merge。
 - 轮询式刷新（默认 30s）；基于文件监听的事件推送为规划中的扩展。
-- 变更文件列表有上限（`maxChanges`）；status 输出超过内存上限（默认 4 MiB）时会从私有 spill 文件恢复完整输出，**计数保持精确**——仅当 spill 上限（64 MiB）也被突破时才回退为近似（`truncated: true`）。
-- 浏览器只传 `sessionId`，不传路径；主机解析权威 cwd 并仅执行只读 git 命令。
+- 变更文件列表有上限（`maxChanges`）；未跟踪目录内部文件逐个枚举。status 输出超过内存上限（默认 4 MiB）时会从私有 spill 文件恢复完整输出，**计数保持精确**——仅当 spill 上限（64 MiB）也被突破时才回退为近似（`truncated: true`）。
+- 浏览器只传 `sessionId`，不传路径；主机解析权威 cwd 并执行 git 命令（写操作用 `--` 路径分隔、拒绝绝对路径与 `..` 逃逸）。
 
 ## 开发
 
