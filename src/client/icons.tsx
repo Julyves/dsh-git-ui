@@ -279,3 +279,14 @@ export function CloseIcon(): JSX.Element {
   )
 }
 
+/** 告警三角（圆角填充 + 感叹号），用于告警横幅语义图标。 */
+export function AlertIcon(): JSX.Element {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <path d="M8 1.5 L14.5 13 L1.5 13 Z" fill="currentColor" opacity={0.15} stroke="currentColor" strokeWidth={1.2} strokeLinejoin="round" />
+      <path d="M8 6 V9.5" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
+      <circle cx={8} cy={11.3} r={0.8} fill="currentColor" />
+    </svg>
+  )
+}
+

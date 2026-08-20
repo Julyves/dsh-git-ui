@@ -18,7 +18,7 @@ import { completedTurnCount, type TurnSignalSnapshot } from './turn-signal.ts'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { GitObservable, GitQueryOutcome, GitView } from './controller.ts'
 import { GitCenter } from './GitCenter.tsx'
-import { fileIconForPath, FolderIcon, RollbackIcon, StageIcon, UnstageIcon } from './icons.tsx'
+import { fileIconForPath, FolderIcon, AlertIcon, CloseIcon, RollbackIcon, StageIcon, UnstageIcon } from './icons.tsx'
 import type { GitAction, GitActionResult, GitBranch, GitOperationErrorCode, GitQueryRequest } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import { SelectMenu } from './select-menu.tsx'
@@ -279,19 +279,22 @@ function GitPopupBody({
       </div>
       {note !== null && (
         <div style={css.popupNote} role="alert">
-          <span style={{ flex: 1, minWidth: 0 }} title={note.detail}>{note.text}</span>
+          <span style={css.popupNoteIcon} aria-hidden="true"><AlertIcon /></span>
+          <span style={css.popupNoteText} title={note.detail}>{note.text}</span>
           {note.action === 'open-center' && (
-            <Button size="sm" onClick={openCenter}>{t('error.handleChanges')}</Button>
+            <button type="button" className="dsh-git-ui__change-link" style={css.popupNoteAction} onClick={openCenter}>
+              {t('error.handleChanges')}
+            </button>
           )}
           <button
             type="button"
             className="dsh-git-ui__icon-btn"
-            style={css.rowIconButton}
+            style={css.popupNoteClose}
             title={t('center.close')}
             aria-label={t('center.close')}
             onClick={() => setNote(null)}
           >
-            ✕
+            <CloseIcon />
           </button>
         </div>
       )}

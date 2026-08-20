@@ -717,21 +717,69 @@ export const feedbackError: CSSProperties = {
   overflowY: 'auto',
 }
 
-/** popup 告警横幅：友好文案 + 行动按钮 + 关闭；原始信息在 title。
- * 淡红晕背景 + 高对比文字 + 左侧红色发丝边（语义标识），不再饱和填充压文字。 */
+/** popup 告警横幅（emil §cohesion：告警而非 panic）：
+ * 淡晕背景 + 高对比文字 + 左侧红色语义条 + 图标引导。
+ * 与 popup 同一圆角/间距体系，不是「错误弹窗」是「内嵌告警」。 */
 export const popupNote: CSSProperties = {
   display: 'flex',
-  alignItems: 'center',
-  gap: 10,
+  alignItems: 'flex-start',
+  gap: 8,
   margin: '8px 12px 0',
-  padding: '6px 8px',
+  padding: '8px 10px',
   borderRadius: 8,
   fontSize: 12,
   lineHeight: '18px',
-  background: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent)',
+  background: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent)',
   color: 'var(--dsw-alias-label-primary)',
   borderLeft: '3px solid var(--dsw-alias-state-error-primary)',
   wordBreak: 'break-word',
+}
+
+/** 告警图标槽：error-primary 色，与左侧条同色呼应。 */
+export const popupNoteIcon: CSSProperties = {
+  flex: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+  color: 'var(--dsw-alias-state-error-primary)',
+  marginTop: 1,
+}
+
+/** 告警文案段：flex 收缩 + 省略兜底。 */
+export const popupNoteText: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
+/** 告警行动按钮：error-primary 文字 + 无框（非 primary Button，内联轻量）。 */
+export const popupNoteAction: CSSProperties = {
+  flex: 'none',
+  border: 'none',
+  background: 'transparent',
+  padding: '2px 6px',
+  font: 'inherit',
+  fontSize: 12,
+  lineHeight: '18px',
+  cursor: 'pointer',
+  color: 'var(--dsw-alias-state-error-primary)',
+  whiteSpace: 'nowrap',
+}
+
+/** 告警关闭按钮：弱化，不影响告警内容阅读。 */
+export const popupNoteClose: CSSProperties = {
+  flex: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 20,
+  height: 20,
+  border: 'none',
+  background: 'transparent',
+  padding: 0,
+  cursor: 'pointer',
+  font: 'inherit',
+  color: 'var(--dsw-alias-label-tertiary)',
+  opacity: 0.7,
 }
 
 export const feedbackClose: CSSProperties = {
