@@ -126,8 +126,9 @@ const STYLESHEET_EXTS = new Set([
 ])
 
 /** 按文件路径选择类型图标（扩展名/基名分类），不匹配时回退通用文件图标。
- * 目录条目（尾斜杠，如 `.agent/`）先剥尾斜杠再分类；点目录（`.agent`）的
- * 首字符点不被误当扩展名分隔——分类集合不命中时仍回退通用文件图标。 */
+ * 目录条目（尾斜杠，如 `.agent/`）先剥尾斜杠再分类。纯点文件（`.agent` 的
+ * 点即首字符）无扩展名语义：不把 `agent` 当后缀匹配代码/文档/图片等集合，
+ * 仅白名单配置类 dotfile（`.gitignore`/`.npmrc` 等）给配置图标，其余通用文件图标。 */
 export function fileIconForPath(path: string): JSX.Element {
   const clean = path.endsWith('/') ? path.slice(0, -1) : path
   const baseName = clean.slice(clean.lastIndexOf('/') + 1).toUpperCase()
@@ -136,6 +137,8 @@ export function fileIconForPath(path: string): JSX.Element {
   const dot = clean.lastIndexOf('.')
   if (dot === -1) return <FileIcon />
   const ext = clean.slice(dot + 1).toLowerCase()
+  // 纯点文件：点即首字符（如 `.agent`）——不把首段当扩展名参与类型分类。
+  if (dot === 0) return CONFIG_EXTS.has(ext) ? <ConfigFileIcon /> : <FileIcon />
   if (CODE_EXTS.has(ext)) return <CodeFileIcon />
   if (CONFIG_EXTS.has(ext)) return <ConfigFileIcon />
   if (DOC_EXTS.has(ext)) return <DocFileIcon />

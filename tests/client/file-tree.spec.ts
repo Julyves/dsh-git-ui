@@ -76,4 +76,13 @@ describe('splitChangePath', () => {
   it('splits a nested directory entry', () => {
     expect(splitChangePath('sub/dir/')).toEqual({ name: 'dir', dir: 'sub', isDir: true })
   })
+
+  it('honors the authoritative isDir flag even without a trailing slash (deep fix)', () => {
+    // 根治：目录性由 host 解析字段权威标记（GitChange.isDirectory）驱动。
+    // 即使路径规范化剥掉了尾斜杠（'.agent' 而非 '.agent/'），目录性不丢失。
+    expect(splitChangePath('.agent', true)).toEqual({ name: '.agent', dir: '', isDir: true })
+    expect(splitChangePath('sub/dir', true)).toEqual({ name: 'dir', dir: 'sub', isDir: true })
+    // 显式 false 覆盖字符串派生（文件路径被误带尾斜杠的兜底：剥掉、按文件拆分）。
+    expect(splitChangePath('.agent/', false)).toEqual({ name: '.agent', dir: '', isDir: false })
+  })
 })

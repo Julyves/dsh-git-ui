@@ -86,6 +86,12 @@ export interface GitChange {
   readonly path: string
   readonly status: GitChangeStatus
   readonly staged: boolean
+  /**
+   * 目录条目（git status 对未跟踪目录输出 `dir/`，host 解析时权威标记）。
+   * 展示层必须以此字段判断目录而非字符串派生——任何路径规范化剥离尾斜杠
+   * 都不会丢失目录性（`.agent/` 曾被当文件展示的根因防护）。
+   */
+  readonly isDirectory: boolean
 }
 
 export type GitChangeStatus =

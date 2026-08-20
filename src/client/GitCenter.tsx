@@ -309,8 +309,9 @@ function ChangesTab({
     },
   }
 
-  /** 差异前后导航序列：三段分组顺序（已暂存 → 更改 → 未版本控制）。 */
-  const navEntries = useMemo(() => groups.flatMap((g) => g.items), [groups])
+  /** 差异前后导航序列：三段分组顺序（已暂存 → 更改 → 未版本控制），
+   * 排除目录条目（目录无 diff 语义，不应进入对照导航）。 */
+  const navEntries = useMemo(() => groups.flatMap((g) => g.items).filter((c) => !c.isDirectory), [groups])
 
   /** 上一个/下一个更改（循环遍历）；未打开对照时定位第一条。 */
   const navigateDiff = (delta: number): void => {
@@ -545,7 +546,7 @@ function ChangeRow({
   t: (key: GitKey) => string
 }): JSX.Element {
   const untracked = change.status === 'untracked'
-  const { name, dir, isDir } = splitChangePath(change.path)
+  const { name, dir, isDir } = splitChangePath(change.path, change.isDirectory)
   const base = diffBaseOf(change)
   const armedHere = armed === change.path
   const statusColor = css.statusTextColor[change.status] ?? 'var(--dsw-alias-label-primary)'
@@ -564,8 +565,9 @@ function ChangeRow({
       </span>
       <button
         type="button"
-        style={{ ...css.changeName, color: statusColor }}
-        title={change.path}
+        style={isDir ? { ...css.changeName, color: statusColor, cursor: 'default' } : { ...css.changeName, color: statusColor }}
+        title={isDir ? `${change.path} (${t('changes.dir')})` : change.path}
+        disabled={isDir}
         onClick={() => onShowDiff(change.path, base)}
       >
         {name}
@@ -579,9 +581,9 @@ function ChangeRow({
           type="button"
           className="dsh-git-ui__icon-btn"
           style={css.rowIconButton}
-          title={t('changes.actionDiff')}
-          aria-label={t('changes.actionDiff')}
-          disabled={busy}
+          title={isDir ? t('changes.dir') : t('changes.actionDiff')}
+          aria-label={isDir ? t('changes.dir') : t('changes.actionDiff')}
+          disabled={busy || isDir}
           onClick={() => onShowDiff(change.path, base)}
         >
           <DiffIcon />

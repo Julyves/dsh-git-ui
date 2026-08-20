@@ -17,9 +17,9 @@ function sampleSnapshot(overrides: Partial<GitSnapshot> = {}): GitSnapshot {
       { hash: 'b'.repeat(40), shortHash: 'bbbbbbb', subject: 'add feature', author: 'Bob', dateIso: '2026-08-15T09:00:00+08:00' },
     ],
     changes: [
-      { path: 'src/a.ts', status: 'modified', staged: true },
-      { path: 'new.txt', status: 'untracked', staged: false },
-      { path: 'old.ts', status: 'renamed', staged: true },
+      { path: 'src/a.ts', status: 'modified', staged: true, isDirectory: false },
+      { path: 'new.txt', status: 'untracked', staged: false, isDirectory: false },
+      { path: 'old.ts', status: 'renamed', staged: true, isDirectory: false },
     ],
     truncated: false, refreshIntervalMs: 30_000, checkedAt: 1_700_000_000_000,
     ...overrides,
@@ -36,7 +36,21 @@ describe('git snapshot schemas', () => {
       recentCommits: [{ hash: 'a'.repeat(40) }, { hash: 'b'.repeat(40) }],
     })
     expect(parsed.changes).toHaveLength(3)
-    expect(parsed.changes[2]).toEqual({ path: 'old.ts', status: 'renamed', staged: true })
+    expect(parsed.changes[2]).toEqual({ path: 'old.ts', status: 'renamed', staged: true, isDirectory: false })
+  })
+
+  it('keeps the authoritative isDirectory flag across the wire (regression: .agent/)', () => {
+    // zod z.object 曾因未声明 isDirectory 在解码时 strip 该字段，使展示层
+    // 目录识别（GitChange.isDirectory）整体失效——此处强制校验 wire 保留。
+    const parsed = gitSnapshotSchema.parse(sampleSnapshot({
+      staged: 0, modified: 0, untracked: 1, dirty: true,
+      changes: [
+        { path: '.agent/', status: 'untracked', staged: false, isDirectory: true },
+        { path: 'src/a.ts', status: 'modified', staged: true, isDirectory: false },
+      ],
+    }))
+    expect(parsed.changes[0]).toEqual({ path: '.agent/', status: 'untracked', staged: false, isDirectory: true })
+    expect(parsed.changes[1]).toEqual({ path: 'src/a.ts', status: 'modified', staged: true, isDirectory: false })
   })
 
   it('accepts a detached and unborn snapshot', () => {

@@ -243,8 +243,8 @@ describe('snapshotForSession — real repositories', () => {
     if (!result.ok) return
     expect(result.value).toMatchObject({ dirty: true, staged: 1, modified: 1 })
     expect(result.value.changes).toEqual([
-      { path: 'readme.txt', status: 'modified', staged: true },
-      { path: 'readme.txt', status: 'modified', staged: false },
+      { path: 'readme.txt', status: 'modified', staged: true, isDirectory: false },
+      { path: 'readme.txt', status: 'modified', staged: false, isDirectory: false },
     ])
   })
 

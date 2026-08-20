@@ -230,7 +230,7 @@ describe('GitController', () => {
   })
 
   it('run() applies the returned snapshot to the view immediately', async () => {
-    const after = snapshot({ staged: 1, dirty: true, changes: [{ path: 'a.txt', status: 'modified', staged: true }] })
+    const after = snapshot({ staged: 1, dirty: true, changes: [{ path: 'a.txt', status: 'modified', staged: true, isDirectory: false }] })
     remote.enqueue(okResult(snapshot()))
     controller.ensure()
     await tick()

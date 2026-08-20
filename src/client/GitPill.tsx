@@ -289,7 +289,7 @@ function GitPopupBody({
         : (
           <>
             {s.changes.map((change) => {
-              const { name, dir, isDir } = splitChangePath(change.path)
+              const { name, dir, isDir } = splitChangePath(change.path, change.isDirectory)
               const untracked = change.status === 'untracked'
               return (
                 <div key={change.path} className="dsh-git-ui__row" style={css.changeRow}>

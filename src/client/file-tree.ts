@@ -37,17 +37,21 @@ function newDirNode(name: string, path: string): MutableNode {
 }
 
 /**
- * 变更路径 → 展示段拆分。git status 对未跟踪目录输出 `dir/`（尾斜杠）：
- * 目录必须剥掉尾斜杠后取末段为名、前缀为空，否则会把目录误当文件
- * （`.agent/` 用裸 lastIndexOf('/') 会得到空名 + `.agent` 目录段）。
+ * 变更路径 → 展示段拆分。目录条目以 `dir/`（尾斜杠）出现：目录必须剥掉尾
+ * 斜杠后取末段为名、前缀为空，否则会把目录误当文件（`.agent/` 用裸
+ * lastIndexOf('/') 会得到空名 + `.agent` 目录段）。
+ * `isDir` 透传 host 解析的权威目录标记（GitChange.isDirectory）；缺省时
+ * 回退字符串派生态（diff 面包屑等仅有 path 的场景）。
  */
-export function splitChangePath(path: string): { name: string; dir: string; isDir: boolean } {
-  const isDir = path.endsWith('/')
-  const display = isDir ? path.slice(0, -1) : path
+export function splitChangePath(path: string, isDir?: boolean): { name: string; dir: string; isDir: boolean } {
+  const dirEntry = isDir ?? path.endsWith('/')
+  // 统一剥掉尾部斜杠：目录条目去掉以示目录名；非目录（权威 isDir=false）
+  // 残留的规范化尾斜杠也一并清理，避免末段拆出空名。
+  const display = path.replace(/\/+$/, '')
   const slash = display.lastIndexOf('/')
   return slash === -1
-    ? { name: display, dir: '', isDir }
-    : { name: display.slice(slash + 1), dir: display.slice(0, slash), isDir }
+    ? { name: display, dir: '', isDir: dirEntry }
+    : { name: display.slice(slash + 1), dir: display.slice(0, slash), isDir: dirEntry }
 }
 
 /** 由变更行列表构建目录树根节点集合。 */

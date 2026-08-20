@@ -52,8 +52,19 @@ describe('parseStatusOutput', () => {
     const parsed = parseStatusOutput('## main\u0000 M a.txt\u0000?? u.txt\u0000', 100)
     expect(parsed).toMatchObject({ modified: 1, untracked: 1, staged: 0 })
     expect(parsed.changes).toEqual([
-      { path: 'a.txt', status: 'modified', staged: false },
-      { path: 'u.txt', status: 'untracked', staged: false },
+      { path: 'a.txt', status: 'modified', staged: false, isDirectory: false },
+      { path: 'u.txt', status: 'untracked', staged: false, isDirectory: false },
+    ])
+  })
+
+  it('marks untracked directory entries as directories (regression: .agent/)', () => {
+    // git status 对未跟踪目录输出 `dir/`（尾斜杠）：host 必须保留并权威标记
+    // isDirectory=true，展示层据此显示文件夹，不再依赖字符串派生。
+    const parsed = parseStatusOutput('## main\u0000?? .agent/\u0000?? sub/dir/\u0000?? u.txt\u0000', 100)
+    expect(parsed.changes).toEqual([
+      { path: '.agent/', status: 'untracked', staged: false, isDirectory: true },
+      { path: 'sub/dir/', status: 'untracked', staged: false, isDirectory: true },
+      { path: 'u.txt', status: 'untracked', staged: false, isDirectory: false },
     ])
   })
 
@@ -61,28 +72,28 @@ describe('parseStatusOutput', () => {
     const parsed = parseStatusOutput('## main\u0000M  a.txt\u0000A  new.txt\u0000', 100)
     expect(parsed).toMatchObject({ staged: 2, modified: 0 })
     expect(parsed.changes).toEqual([
-      { path: 'a.txt', status: 'modified', staged: true },
-      { path: 'new.txt', status: 'added', staged: true },
+      { path: 'a.txt', status: 'modified', staged: true, isDirectory: false },
+      { path: 'new.txt', status: 'added', staged: true, isDirectory: false },
     ])
   })
 
   it('consumes the rename source path as part of the rename entry', () => {
     const parsed = parseStatusOutput('## main\u0000R  new.txt\u0000old.txt\u0000', 100)
     expect(parsed).toMatchObject({ staged: 1, modified: 0 })
-    expect(parsed.changes).toEqual([{ path: 'new.txt', status: 'renamed', staged: true }])
+    expect(parsed.changes).toEqual([{ path: 'new.txt', status: 'renamed', staged: true, isDirectory: false }])
   })
 
   it('classifies conflicted entries', () => {
     const parsed = parseStatusOutput('## main\u0000UU c.txt\u0000', 100)
     expect(parsed).toMatchObject({ staged: 1, modified: 1 })
-    expect(parsed.changes).toEqual([{ path: 'c.txt', status: 'conflicted', staged: true }])
+    expect(parsed.changes).toEqual([{ path: 'c.txt', status: 'conflicted', staged: true, isDirectory: false }])
   })
 
   it('keeps genuine conflict pairs (AA/DD) as single conflicted entries', () => {
     const parsed = parseStatusOutput('## main\u0000AA c.txt\u0000DD d.txt\u0000', 100)
     expect(parsed.changes).toEqual([
-      { path: 'c.txt', status: 'conflicted', staged: true },
-      { path: 'd.txt', status: 'conflicted', staged: true },
+      { path: 'c.txt', status: 'conflicted', staged: true, isDirectory: false },
+      { path: 'd.txt', status: 'conflicted', staged: true, isDirectory: false },
     ])
   })
 
@@ -90,24 +101,24 @@ describe('parseStatusOutput', () => {
     const parsed = parseStatusOutput('## main\u0000MM a.txt\u0000AM b.txt\u0000', 100)
     expect(parsed).toMatchObject({ staged: 2, modified: 2 })
     expect(parsed.changes).toEqual([
-      { path: 'a.txt', status: 'modified', staged: true },
-      { path: 'a.txt', status: 'modified', staged: false },
-      { path: 'b.txt', status: 'added', staged: true },
-      { path: 'b.txt', status: 'modified', staged: false },
+      { path: 'a.txt', status: 'modified', staged: true, isDirectory: false },
+      { path: 'a.txt', status: 'modified', staged: false, isDirectory: false },
+      { path: 'b.txt', status: 'added', staged: true, isDirectory: false },
+      { path: 'b.txt', status: 'modified', staged: false, isDirectory: false },
     ])
   })
 
   it('reads the status of an unstaged-only entry from the Y column', () => {
     const parsed = parseStatusOutput('## main\u0000 D gone.txt\u0000', 100)
-    expect(parsed.changes).toEqual([{ path: 'gone.txt', status: 'deleted', staged: false }])
+    expect(parsed.changes).toEqual([{ path: 'gone.txt', status: 'deleted', staged: false, isDirectory: false }])
   })
 
   it('caps dual entries of one mixed file together', () => {
     const parsed = parseStatusOutput('## main\u0000MM a.txt\u0000 M b.txt\u0000', 2)
     expect(parsed).toMatchObject({ staged: 1, modified: 2, truncated: true })
     expect(parsed.changes).toEqual([
-      { path: 'a.txt', status: 'modified', staged: true },
-      { path: 'a.txt', status: 'modified', staged: false },
+      { path: 'a.txt', status: 'modified', staged: true, isDirectory: false },
+      { path: 'a.txt', status: 'modified', staged: false, isDirectory: false },
     ])
   })
 

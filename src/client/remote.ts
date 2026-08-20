@@ -37,6 +37,9 @@ export const gitChangeSchema = z.object({
   path: z.string(),
   status: z.enum(['added', 'modified', 'deleted', 'renamed', 'untracked', 'conflicted', 'typechange']),
   staged: z.boolean(),
+  // host 权威目录标记：zod z.object 默认 strip 未知键，漏声明会在 wire 边界
+  // 剥掉该字段——展示层目录识别（GitChange.isDirectory）将整体失效。
+  isDirectory: z.boolean(),
 })
 
 export const gitSnapshotSchema = z.object({

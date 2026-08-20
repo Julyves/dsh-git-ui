@@ -120,10 +120,12 @@ export function parseStatusOutput(output: string, maxChanges: number): ParsedSta
   const changes: GitChange[] = []
   let truncated = false
 
-  /** 收录一条变更条目；超出上限仅置截断标记（计数不受影响）。 */
+  /** 收录一条变更条目；超出上限仅置截断标记（计数不受影响）。
+   * isDirectory 由 git 输出权威标记（未跟踪目录条目为 `dir/` 尾斜杠），
+   * 展示层依赖此字段，不再自行解析路径字符串。 */
   const pushChange = (path: string, status: GitChangeStatus, isStaged: boolean): void => {
     if (changes.length < maxChanges) {
-      changes.push({ path, status, staged: isStaged })
+      changes.push({ path, status, staged: isStaged, isDirectory: path.endsWith('/') })
     } else {
       truncated = true
     }
