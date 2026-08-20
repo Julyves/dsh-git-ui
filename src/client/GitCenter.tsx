@@ -24,11 +24,11 @@ import type {
 import type { GraphCommit, GitRef } from '../host/types.ts'
 import type { GitQueryOutcome } from './controller.ts'
 import { createGraphBuilder, graphWidth, markFilterEnds, GRAPH_COLORS, type GraphRow, type GraphRowMarker } from './git-graph.ts'
-import { buildFileTree, type FileTreeNode } from './file-tree.ts'
+import { buildFileTree, splitChangePath, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
 import { buildSideBySide, capSideBySideRows, isBinaryDiff, summarizeChanges, type SideCell } from './side-by-side.ts'
 import { diffBaseOf, reconcileDiffSelection, stepDiffSelection, type DiffSelection } from './changes-diff.ts'
-import { BranchIcon, ChevronIcon, CloseIcon, CollapseAllIcon, DiffIcon, ExpandAllIcon, FileIcon, FolderIcon, NextIcon, PrevIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
+import { BranchIcon, ChevronIcon, CloseIcon, CollapseAllIcon, DiffIcon, ExpandAllIcon, FileIcon, fileIconForPath, FolderIcon, NextIcon, PrevIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
 import { SelectMenu } from './select-menu.tsx'
 import * as css from './styles.ts'
@@ -396,9 +396,7 @@ function ChangesTab({
                   {diffSel.base === 'staged' ? t('diff.baseStaged') : t('diff.baseWorktree')}
                 </span>
                 {(() => {
-                  const slash = diffSel.path.lastIndexOf('/')
-                  const dir = slash === -1 ? '' : diffSel.path.slice(0, slash)
-                  const name = slash === -1 ? diffSel.path : diffSel.path.slice(slash + 1)
+                  const { name, dir } = splitChangePath(diffSel.path)
                   return (
                     <>
                       {dir !== '' && <span style={css.diffPathDir} title={diffSel.path}>{dir}</span>}
@@ -516,9 +514,7 @@ function ChangeRow({
   t: (key: GitKey) => string
 }): JSX.Element {
   const untracked = change.status === 'untracked'
-  const slash = change.path.lastIndexOf('/')
-  const name = slash === -1 ? change.path : change.path.slice(slash + 1)
-  const dir = slash === -1 ? '' : change.path.slice(0, slash)
+  const { name, dir, isDir } = splitChangePath(change.path)
   const base = diffBaseOf(change)
   const armedHere = armed === change.path
   const statusColor = css.statusTextColor[change.status] ?? 'var(--dsw-alias-label-primary)'
@@ -532,7 +528,9 @@ function ChangeRow({
         onChange={() => rowActions.onToggle(change.path)}
         aria-label={change.path}
       />
-      <span style={css.rowFileIcon} aria-hidden="true"><FileIcon /></span>
+      <span style={css.rowFileIcon} aria-hidden="true">
+        {isDir ? <FolderIcon /> : fileIconForPath(change.path)}
+      </span>
       <button
         type="button"
         style={{ ...css.changeName, color: statusColor }}

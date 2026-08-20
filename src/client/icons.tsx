@@ -125,14 +125,17 @@ const STYLESHEET_EXTS = new Set([
   'css', 'scss', 'sass', 'less', 'styl',
 ])
 
-/** 按文件路径选择类型图标（扩展名/基名分类），不匹配时回退通用文件图标。 */
+/** 按文件路径选择类型图标（扩展名/基名分类），不匹配时回退通用文件图标。
+ * 目录条目（尾斜杠，如 `.agent/`）先剥尾斜杠再分类；点目录（`.agent`）的
+ * 首字符点不被误当扩展名分隔——分类集合不命中时仍回退通用文件图标。 */
 export function fileIconForPath(path: string): JSX.Element {
-  const baseName = path.slice(path.lastIndexOf('/') + 1).toUpperCase()
+  const clean = path.endsWith('/') ? path.slice(0, -1) : path
+  const baseName = clean.slice(clean.lastIndexOf('/') + 1).toUpperCase()
   if (baseName === 'LICENSE' || baseName === 'README' || baseName === 'CHANGELOG' || baseName === 'AUTHORS') return <DocFileIcon />
   if (baseName === 'MAKEFILE' || baseName === 'DOCKERFILE' || baseName === 'CMAKECACHE') return <CodeFileIcon />
-  const dot = path.lastIndexOf('.')
+  const dot = clean.lastIndexOf('.')
   if (dot === -1) return <FileIcon />
-  const ext = path.slice(dot + 1).toLowerCase()
+  const ext = clean.slice(dot + 1).toLowerCase()
   if (CODE_EXTS.has(ext)) return <CodeFileIcon />
   if (CONFIG_EXTS.has(ext)) return <ConfigFileIcon />
   if (DOC_EXTS.has(ext)) return <DocFileIcon />

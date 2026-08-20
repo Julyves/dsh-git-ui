@@ -22,6 +22,7 @@ import { fileIconForPath, FolderIcon, RollbackIcon, StageIcon, UnstageIcon } fro
 import type { GitAction, GitActionResult, GitBranch, GitQueryRequest } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import { SelectMenu } from './select-menu.tsx'
+import { splitChangePath } from './file-tree.ts'
 import * as css from './styles.ts'
 
 // Inject the plugin's interaction styles once (idempotent, browser-only).
@@ -284,9 +285,7 @@ function GitPopupBody({
         : (
           <>
             {s.changes.map((change) => {
-              const slash = change.path.lastIndexOf('/')
-              const name = slash === -1 ? change.path : change.path.slice(slash + 1)
-              const dir = slash === -1 ? '' : change.path.slice(0, slash)
+              const { name, dir, isDir } = splitChangePath(change.path)
               const untracked = change.status === 'untracked'
               return (
                 <div key={change.path} className="dsh-git-ui__row" style={css.changeRow}>
@@ -296,7 +295,9 @@ function GitPopupBody({
                   >
                     {CHIP_LETTERS[change.status] ?? '•'}
                   </span>
-                  <span style={css.rowFileIcon} aria-hidden="true">{fileIconForPath(change.path)}</span>
+                  <span style={css.rowFileIcon} aria-hidden="true">
+                    {isDir ? <FolderIcon /> : fileIconForPath(change.path)}
+                  </span>
                   <span style={css.changeNamePop} title={change.path}>{name}</span>
                   {dir !== '' ? <span style={css.changeDirPop}>{dir}</span> : <span style={{ flex: '1 1 0%', minWidth: 0 }} />}
                   <span className="dsh-git-ui__row-actions" style={css.rowActions}>

@@ -2,7 +2,7 @@
  * 目录树构建测试：嵌套、排序（目录在前字母序）、状态挂载、文件计数、边界。
  */
 import { describe, expect, it } from 'vitest'
-import { buildFileTree } from '../../src/client/file-tree.ts'
+import { buildFileTree, splitChangePath } from '../../src/client/file-tree.ts'
 
 describe('buildFileTree', () => {
   it('returns an empty tree for no stats', () => {
@@ -50,5 +50,30 @@ describe('buildFileTree', () => {
     expect(tree).toHaveLength(1)
     expect(tree[0]!.name).toBe('deep')
     expect(tree[0]!.children[0]!.children).toHaveLength(2)
+  })
+
+  it('treats a trailing-slash entry as a directory node without status', () => {
+    // git status 对未跟踪目录输出 `dir/`（尾斜杠）：`.agent/` 应为目录节点。
+    const tree = buildFileTree([{ path: '.agent/', status: 'untracked' }])
+    expect(tree).toEqual([{ name: '.agent', path: '.agent', dir: true, children: [] }])
+  })
+})
+
+describe('splitChangePath', () => {
+  it('splits a nested file into name + dir', () => {
+    expect(splitChangePath('src/a.ts')).toEqual({ name: 'a.ts', dir: 'src', isDir: false })
+  })
+
+  it('keeps a root-level file flat', () => {
+    expect(splitChangePath('u.txt')).toEqual({ name: 'u.txt', dir: '', isDir: false })
+  })
+
+  it('treats a dot-directory entry as a directory with a name (regression: .agent/)', () => {
+    // 旧实现用裸 lastIndexOf('/')：`.agent/` → name=''、dir='.agent'，目录被当文件。
+    expect(splitChangePath('.agent/')).toEqual({ name: '.agent', dir: '', isDir: true })
+  })
+
+  it('splits a nested directory entry', () => {
+    expect(splitChangePath('sub/dir/')).toEqual({ name: 'dir', dir: 'sub', isDir: true })
   })
 })
