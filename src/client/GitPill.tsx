@@ -120,7 +120,7 @@ function DegradedPill({ label, title, t }: { label: string; title?: string; t: (
   )
 }
 
-/** 分支快捷管理（自原 Branches 标签迁入）：切换/创建并切换/两步删除。 */
+/** 分支快捷管理（自原 Branches 标签迁入）：切换 / 创建并切换。 */
 function BranchQuickManage({
   run, query, t,
 }: {
@@ -131,8 +131,6 @@ function BranchQuickManage({
   const [data, setData] = useState<{ current: string | null; local: readonly GitBranch[] } | null>(null)
   const [busy, setBusy] = useState(false)
   const [newName, setNewName] = useState('')
-  const [deleteTarget, setDeleteTarget] = useState('')
-  const [deleteArmed, setDeleteArmed] = useState(false)
   const [note, setNote] = useState<string | null>(null)
 
   const reload = async (): Promise<void> => {
@@ -146,12 +144,6 @@ function BranchQuickManage({
     void reload()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only
   }, [])
-
-  useEffect(() => {
-    if (!deleteArmed) return
-    const timer = setTimeout(() => setDeleteArmed(false), 3000)
-    return () => clearTimeout(timer)
-  }, [deleteArmed])
 
   const switchTo = async (name: string): Promise<void> => {
     if (busy || name === '') return
@@ -180,24 +172,7 @@ function BranchQuickManage({
     await reload()
   }
 
-  const remove = async (): Promise<void> => {
-    if (deleteTarget === '' || busy) return
-    if (!deleteArmed) {
-      setDeleteArmed(true)
-      return
-    }
-    setBusy(true)
-    setNote(null)
-    const result = await run({ kind: 'branch-delete', name: deleteTarget })
-    setBusy(false)
-    setDeleteArmed(false)
-    if (!result.ok) setNote(result.error.message ?? result.error.code)
-    setDeleteTarget('')
-    await reload()
-  }
-
   if (data === null) return <div style={css.emptyNote}>{t('center.loading')}</div>
-  const deletable = data.local.filter((b) => b.name !== data.current)
   return (
     <>
       <div style={css.branchManageRow}>
@@ -221,17 +196,6 @@ function BranchQuickManage({
         />
         <Button size="sm" disabled={busy || newName.trim() === ''} onClick={() => void createAndSwitch()}>
           {t('center.createAndSwitch')}
-        </Button>
-      </div>
-      <div style={css.branchManageRow}>
-        <SelectMenu
-          value={deleteTarget}
-          options={[{ value: '', label: t('center.deleteBranch') }, ...deletable.map((b) => ({ value: b.name, label: b.name }))]}
-          onSelect={(name) => { setDeleteTarget(name); setDeleteArmed(false) }}
-          ariaLabel={t('center.deleteBranch')}
-        />
-        <Button size="sm" disabled={busy || deleteTarget === ''} onClick={() => void remove()}>
-          {deleteArmed ? t('center.confirmDeleteBranch') : t('center.deleteBranch')}
         </Button>
       </div>
       {note !== null && <div style={css.emptyNote} role="alert">{note}</div>}
