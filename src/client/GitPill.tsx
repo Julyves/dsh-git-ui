@@ -24,6 +24,7 @@ import type { GitKey } from './locales.ts'
 import { SelectMenu } from './select-menu.tsx'
 import { splitChangePath } from './file-tree.ts'
 import { shouldClosePopup } from './popup-close.ts'
+import { diffBaseOf } from './changes-diff.ts'
 import * as css from './styles.ts'
 
 // Inject the plugin's interaction styles once (idempotent, browser-only).
@@ -126,11 +127,13 @@ function DegradedPill({ label, title, t }: { label: string; title?: string; t: (
  * 变更行带 hover 内联操作（暂存/取消/丢弃两步）。
  */
 function GitPopupBody({
-  view, refresh, openCenter, run, query, t,
+  view, refresh, openCenter, onOpenDiff, run, query, t,
 }: {
   view: GitView & { state: 'ready' }
   refresh: () => Promise<void>
   openCenter: () => void
+  /** 变更文件点击：打开 Git 中心并定位该文件的对照视图。 */
+  onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
   run: (action: GitAction) => Promise<GitActionResult>
   query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
   t: (key: GitKey) => string
@@ -299,7 +302,31 @@ function GitPopupBody({
                   <span style={css.rowFileIcon} aria-hidden="true">
                     {isDir ? <FolderIcon /> : fileIconForPath(change.path)}
                   </span>
-                  <span style={css.changeNamePop} title={change.path}>{name}</span>
+                  {isDir ? (
+                    // 目录条目：点击打开 Git 中心变更页（目录无 diff 语义，展开后选具体文件）。
+                    <button
+                      type="button"
+                      className="dsh-git-ui__change-link"
+                      style={css.changeNamePopBtn}
+                      title={change.path}
+                      aria-label={`${name} — ${t('center.open')}`}
+                      onClick={openCenter}
+                    >
+                      {name}
+                    </button>
+                  ) : (
+                    // 文件条目：点击打开 Git 中心并直接展示该文件对照。
+                    <button
+                      type="button"
+                      className="dsh-git-ui__change-link"
+                      style={css.changeNamePopBtn}
+                      title={change.path}
+                      aria-label={`${name} — ${t('changes.actionDiff')}`}
+                      onClick={() => onOpenDiff(change.path, diffBaseOf(change))}
+                    >
+                      {name}
+                    </button>
+                  )}
                   {dir !== '' ? <span style={css.changeDirPop}>{dir}</span> : <span style={{ flex: '1 1 0%', minWidth: 0 }} />}
                   <span className="dsh-git-ui__row-actions" style={css.rowActions}>
                     {change.staged
@@ -405,6 +432,16 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
   const [open, setOpen] = useState(false)
   const [centerOpen, setCenterOpen] = useState(false)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  /** 从 pill 变更行点击「打开 Git 中心并定位该文件 diff」的请求。 */
+  const [centerRequest, setCenterRequest] = useState<{ path: string; base: 'worktree' | 'staged' } | null>(null)
+
+  /** 打开 Git 中心并直接定位到该文件的对照视图（关 popup、切 changes 标签、查询 diff）。 */
+  const openDiffInCenter = (path: string, base: 'worktree' | 'staged'): void => {
+    setCenterRequest({ path, base })
+    setOpen(false)
+    setPos(null)
+    setCenterOpen(true)
+  }
 
   useEffect(() => {
     // First mount only: kick the controller once (single-flight; a cold
@@ -514,6 +551,7 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
             view={display}
             refresh={refresh}
             openCenter={() => { setOpen(false); setPos(null); setCenterOpen(true) }}
+            onOpenDiff={openDiffInCenter}
             run={run}
             query={query}
             t={t}
@@ -528,6 +566,7 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
         run={run}
         query={query}
         t={t}
+        openRequest={centerRequest}
       />
     </span>
   )

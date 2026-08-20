@@ -40,6 +40,8 @@ export interface GitCenterProps {
   readonly run: (action: GitAction) => Promise<GitActionResult>
   readonly query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
   readonly t: (key: GitKey) => string
+  /** 打开定位：从 pill 点击变更文件而来——切到 changes 标签并打开该文件对照。 */
+  readonly openRequest?: { readonly path: string; readonly base: 'worktree' | 'staged' } | null
 }
 
 type TabKey = 'changes' | 'history'
@@ -72,12 +74,18 @@ function timeAgo(iso: string, now: number, t: (key: GitKey) => string): string {
  * every successful operation re-renders this component with fresh state.
  */
 export function GitCenter({
-  open, onClose, snapshot, run, query, t,
+  open, onClose, snapshot, run, query, t, openRequest = null,
 }: GitCenterProps): JSX.Element | null {
   const [tab, setTab] = useState<TabKey>('changes')
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState<Feedback>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
+
+  // 打开定位请求（pill 点击变更文件）：切到 changes 标签，由 ChangesTab
+  // 响应 openRequest 打开该文件对照。openRequest 对象引用变化即再次定位。
+  useEffect(() => {
+    if (openRequest !== null) setTab('changes')
+  }, [openRequest])
 
   /** Execute a management action with shared busy/feedback/toast handling. */
   const execute = async (action: GitAction, successText: string): Promise<boolean> => {
@@ -133,7 +141,7 @@ export function GitCenter({
 
           {/* 三标签保持挂载、display 切换：保留各自状态（选中/分页/分支列表），与 IDE 行为一致。 */}
           <div style={tab === 'changes' ? { display: 'contents' } : { display: 'none' }}>
-            <ChangesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} />
+            <ChangesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} openRequest={openRequest} />
           </div>
           <div style={tab === 'history' ? { display: 'contents' } : { display: 'none' }}>
             <HistoryTab query={query} run={run} t={t} />
@@ -163,14 +171,21 @@ function byPath(a: GitChange, b: GitChange): number {
   return a.path.localeCompare(b.path)
 }
 
+/** 一条变更所属的分组键（IDEA 三段：已暂存/更改/未版本控制）。 */
+function groupKeyOfChange(c: GitChange): ChangeGroupKey {
+  if (c.status === 'untracked') return 'untracked'
+  return c.staged ? 'staged' : 'unstaged'
+}
+
 function ChangesTab({
-  snapshot, busy, execute, query, t,
+  snapshot, busy, execute, query, t, openRequest = null,
 }: {
   snapshot: GitSnapshot
   busy: boolean
   execute: (action: GitAction, successText: string) => Promise<boolean>
   query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
   t: (key: GitKey) => string
+  openRequest: { path: string; base: 'worktree' | 'staged' } | null
 }): JSX.Element {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [message, setMessage] = useState('')
@@ -241,6 +256,22 @@ function ChangesTab({
     setDiffLoading(false)
     setDiffText(outcome.ok && outcome.value.kind === 'diff' ? outcome.value.text : null)
   }
+
+  // 打开定位请求（pill 点击变更文件）：展开文件所在分组并打开对照。
+  // 仅随 openRequest 对象引用变化触发；snapshot 轮询由下方 reconcile effect 专门处理。
+  useEffect(() => {
+    if (openRequest === null) return
+    setClosedGroups((prev) => {
+      const keys = snapshot.changes.filter((c) => c.path === openRequest.path).map(groupKeyOfChange)
+      const need = [...new Set(keys)].filter((k) => prev.has(k))
+      if (need.length === 0) return prev
+      const next = new Set(prev)
+      for (const k of need) next.delete(k)
+      return next
+    })
+    void showDiff(openRequest.path, openRequest.base)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅响应 openRequest 引用变化；showDiff 每次渲染重建、snapshot 由 reconcile 协调
+  }, [openRequest])
 
   // 差异视图跟随快照：管理操作成功/轮询刷新后，文件消失 → 关闭对照；
   // 暂存侧迁移（MM 双条目）→ 按新基线重取；内容也可能随操作变化 → 一律重取。

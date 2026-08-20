@@ -275,7 +275,9 @@ export const chipStyles: Record<string, CSSProperties> = {
   typechange: { background: 'color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent)', color: 'var(--dsw-alias-label-primary)' },
 }
 
-/** 变更文件名段：prominent，按需收缩（目录优先省略）。 */
+/** 变更文件名段：prominent，按需收缩（目录优先省略）。
+ * 颜色由全局类控制（基础 label-primary / hover business-primary），否则内联
+ * color 会压掉样式表的 :hover 主色。 */
 export const changeNamePop: CSSProperties = {
   flex: '0 1 auto',
   minWidth: 0,
@@ -283,7 +285,19 @@ export const changeNamePop: CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  color: 'var(--dsw-alias-label-primary)',
+}
+
+/** 变更文件名按钮（popup）：可点击打开 Git 中心 diff，hover 由全局类反馈。 */
+export const changeNamePopBtn: CSSProperties = {
+  ...changeNamePop,
+  border: 'none',
+  background: 'transparent',
+  padding: 0,
+  fontFamily: 'inherit',
+  fontSize: 13,
+  lineHeight: '20px',
+  textAlign: 'left',
+  cursor: 'pointer',
 }
 
 /** 变更目录段：弱化，flex:1 优先省略，文件名尽量完整。 */
@@ -398,6 +412,11 @@ const globalCss = [
   '.dsh-git-ui__icon-btn { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   '.dsh-git-ui__icon-btn:disabled { opacity: 0.45; cursor: default; }',
   '.dsh-git-ui__refresh:disabled { opacity: 0.45; cursor: default; }',
+  // popup 变更文件名按钮（打开 Git 中心 diff）：基础主文本色 + hover 主色 + 按压缩放反馈。
+  // 基础色也走样式表（内联 color 会压掉 :hover 规则）。
+  '.dsh-git-ui__change-link { color: var(--dsw-alias-label-primary); transition: transform var(--ds-transition-duration-fast) ease-out, color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+  '.dsh-git-ui__change-link:hover { color: var(--dsw-alias-state-business-primary); }',
+  '.dsh-git-ui__change-link:active { transform: scale(0.97); }',
   '.dsh-git-ui__diff-fold { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   // 底栏主操作过渡（按压缩放 + hover 淡底）。
   '.dsh-git-ui__footer-primary { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
@@ -446,7 +465,7 @@ const globalCss = [
 
   // ── 减弱动效（保留辅助理解的透明度/颜色过渡，移除位移与缩放——apple 规则）──
   '@media (prefers-reduced-motion: reduce) {',
-  '  .dsh-git-ui__pill, .dsh-git-ui__pop, .dsh-git-ui__select-menu, .dsh-git-ui__icon-btn, .dsh-git-ui__tab, .dsh-git-ui__commit-row, .dsh-git-ui__row, .dsh-git-ui__branch-input, .dsh-git-ui__commit-input, .dsh-git-ui__toolbar-select, .dsh-git-ui__diff-fold, .dsh-git-ui__refresh, .dsh-git-ui__footer-primary { transition: opacity 200ms ease, background 200ms ease, color 200ms ease, border-color 200ms ease !important; transform: none !important; }',
+  '  .dsh-git-ui__pill, .dsh-git-ui__pop, .dsh-git-ui__select-menu, .dsh-git-ui__icon-btn, .dsh-git-ui__tab, .dsh-git-ui__commit-row, .dsh-git-ui__row, .dsh-git-ui__branch-input, .dsh-git-ui__commit-input, .dsh-git-ui__toolbar-select, .dsh-git-ui__diff-fold, .dsh-git-ui__refresh, .dsh-git-ui__footer-primary, .dsh-git-ui__change-link { transition: opacity 200ms ease, background 200ms ease, color 200ms ease, border-color 200ms ease !important; transform: none !important; }',
   '}',
 ].join('\n')
 
