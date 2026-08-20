@@ -727,11 +727,20 @@ function HistoryTab({
    * 增量图构建：提交集合只增时仅模拟新增段并追加行，既有行对象引用保持不变
    * （CommitRow memo 命中，避免逐批追加触发全表重渲染）；集合整体替换
    * （过滤切换/缓存恢复）时新建 builder 从头构建。
+   * 搜索条件下不分析提交关系、不渲染分支图——结果仅是跨引用的匹配条目，
+   * 图几何清空，只平铺条目。
    */
+  const searching = filter.search !== ''
   const builderRef = useRef(createGraphBuilder())
   const prevCommitsRef = useRef<readonly GraphCommit[]>([])
   const [graphRows, setGraphRows] = useState<readonly GraphRow[]>([])
   useEffect(() => {
+    if (searching) {
+      builderRef.current = createGraphBuilder()
+      prevCommitsRef.current = commits
+      setGraphRows([])
+      return
+    }
     const prev = prevCommitsRef.current
     const isExtension = prev.length <= commits.length && prev.every((c, i) => c.hash === commits[i]?.hash)
     if (!isExtension) {
@@ -742,8 +751,8 @@ function HistoryTab({
       if (newRows.length > 0) setGraphRows((existing) => [...existing, ...newRows])
     }
     prevCommitsRef.current = commits
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅随提交集合变化喂入 builder
-  }, [commits])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅随提交集合/搜索态变化喂入 builder
+  }, [commits, searching])
 
   const graphCols = useMemo(() => graphWidth(graphRows), [graphRows])
   /** 自适应车道宽：图宽超过 GRAPH_MAX_TRACK_W 时压缩车道，保全部车道可见、轨道有界、不挤压主题列。 */
@@ -751,7 +760,7 @@ function HistoryTab({
     if (graphCols === 0) return GRAPH_COL_W
     return Math.max(GRAPH_LANE_MIN_W, Math.min(GRAPH_COL_W, GRAPH_MAX_TRACK_W / graphCols))
   }, [graphCols])
-  const graphTrack = Math.ceil(graphCols * laneW)
+  const graphTrack = searching ? 0 : Math.ceil(graphCols * laneW)
   /** 过滤（搜索/作者/日期）生效时，结果集不含部分父节点——延续线永久悬垂，标为端头。 */
   const hasContentFilter = filter.search !== '' || filter.author !== '' || filter.since !== ''
   const loadedHashes = useMemo(() => new Set(commits.map((c) => c.hash)), [commits])
@@ -760,8 +769,18 @@ function HistoryTab({
     [graphRows, loadedHashes, hasContentFilter],
   )
   /** 表格列模板：图 | 提交(refs+主题) | 哈希 | 作者 | 时间；行与表头共用。
-   * 主题列 minmax(96px,1fr) 保证宽图/加载回流时内容不被压缩到不可读。 */
-  const gridTpl = `${graphTrack}px minmax(96px,1fr) 72px 110px 110px`
+   * 主题列 minmax(96px,1fr) 保证宽图/加载回流时内容不被压缩到不可读。
+   * 搜索条件下去掉图列，仅平铺条目。 */
+  const gridTpl = searching
+    ? 'minmax(96px,1fr) 72px 110px 110px'
+    : `${graphTrack}px minmax(96px,1fr) 72px 110px 110px`
+  /** 行序列：非搜索=带图几何的行（graphMarked）；搜索=无图几何的纯条目行（showGraph=false）。 */
+  const listRows = useMemo<readonly GraphRowMarker[]>(
+    () => searching
+      ? commits.map((commit) => ({ commit, column: 0, verticals: [], joins: [], nodeFromTop: false, nodeContinues: false, edges: [] } as GraphRowMarker))
+      : graphMarked,
+    [searching, commits, graphMarked],
+  )
   /** 右栏文件目录树（随选中提交的 stats 重算）。 */
   const fileTree = useMemo(() => (detail === null ? [] : buildFileTree(detail.stats)), [detail])
 
@@ -964,16 +983,16 @@ function HistoryTab({
             {!loading && commits.length === 0 && (
               <div style={css.centeredEmpty}>{t('history.noResults')}</div>
             )}
-            {graphRows.length > 0 && (
+            {commits.length > 0 && (
               <div style={{ ...css.historyHead, gridTemplateColumns: gridTpl }} aria-hidden="true">
-                <span />
+                {!searching && <span />}
                 <span>{t('history.commit')}</span>
                 <span>{t('history.hash')}</span>
                 <span>{t('history.author')}</span>
                 <span>{t('history.time')}</span>
               </div>
             )}
-            {graphMarked.map((row) => (
+            {listRows.map((row) => (
               <CommitRow
                 key={row.commit.hash}
                 row={row}
@@ -983,6 +1002,7 @@ function HistoryTab({
                 isSelected={selected?.hash === row.commit.hash}
                 now={now}
                 onSelect={select}
+                showGraph={!searching}
                 t={t}
               />
             ))}
@@ -1324,7 +1344,7 @@ function Splitter({ kind, onDrag }: { kind: 'col' | 'row'; onDrag: (delta: numbe
 
 /** 提交行：memo 化保证千条级加载下过滤/选中变更仅重渲染受影响行。 */
 const CommitRow = memo(function CommitRow({
-  row, cols, laneW, gridTpl, isSelected, now, onSelect, t,
+  row, cols, laneW, gridTpl, isSelected, now, onSelect, showGraph, t,
 }: {
   row: GraphRowMarker
   cols: number
@@ -1333,6 +1353,7 @@ const CommitRow = memo(function CommitRow({
   isSelected: boolean
   now: number
   onSelect: (commit: GraphCommit) => void
+  showGraph: boolean
   t: (key: GitKey) => string
 }): JSX.Element {
   return (
@@ -1345,7 +1366,7 @@ const CommitRow = memo(function CommitRow({
       }}
       onClick={() => onSelect(row.commit)}
     >
-      <GraphStrip row={row} cols={cols} laneW={laneW} endOpen={row.endOpen} />
+      {showGraph && <GraphStrip row={row} cols={cols} laneW={laneW} endOpen={row.endOpen} />}
       <span style={css.historySubjectCell}>
         <RefPills refs={row.commit.refs} />
         <span style={css.commitSubjectLine} title={row.commit.subject}>{row.commit.subject}</span>

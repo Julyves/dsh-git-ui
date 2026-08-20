@@ -69,8 +69,10 @@ async function historyQuery(
   }
   const search = query.search?.trim() ?? ''
   const hexLike = /^[0-9a-f]{7,40}$/i.test(search)
-  // 哈希前缀跳转：前缀直接作 rev 范围；文本搜索走 --grep（-i -E）。
-  const scope = hexLike ? [search] : query.ref === undefined ? ['--all'] : [query.ref]
+  // 哈希精准检索：仅定位目标提交自身（--no-walk 不遍历祖先）→ 单条目，
+  // 不再列出该提交的全部祖先；文本搜索走 --grep（-i -E，跨引用匹配）。
+  const scope = hexLike ? [] : query.ref === undefined ? ['--all'] : [query.ref]
+  const noWalk = hexLike ? ['--no-walk', search] : []
   const filters: string[] = []
   if (search !== '' && !hexLike) filters.push('--regexp-ignore-case', '--extended-regexp', `--grep=${search}`)
   const author = query.author?.trim() ?? ''
@@ -80,7 +82,9 @@ async function historyQuery(
 
   const log = await runCommand(
     deps.run,
-    ['git', 'log', ...scope, ...filters, `--skip=${String(safeSkip)}`, '-n', String(safeLimit), `--format=${GRAPH_FORMAT}`],
+    // -n/--skip 前置：git 的 `-n N` 出现在 `--no-walk` 之后会重置 no-walk
+    // （hexLike 会错误列出全部祖先），前置则 `-n 1000 --no-walk x` 恒返回单条。
+    ['git', 'log', ...filters, `--skip=${String(safeSkip)}`, '-n', String(safeLimit), ...noWalk, ...scope, `--format=${GRAPH_FORMAT}`],
     root,
     'log',
     deps.signal,
@@ -92,8 +96,8 @@ async function historyQuery(
     if (log.run.stderr.includes('does not have any commits')) {
       return { ok: true, value: { kind: 'history', commits: [], total: 0 } }
     }
-    // 哈希前缀无解析：稳定空结果（跳转未命中）。
-    if (hexLike && /unknown revision|bad revision/.test(log.run.stderr)) {
+    // 哈希无解析（未命中）或前缀不唯一（ambiguous）：稳定空结果（让用户输入更长前缀）。
+    if (hexLike && /unknown revision|bad revision|ambiguous/i.test(log.run.stderr)) {
       return { ok: true, value: { kind: 'history', commits: [], total: 0 } }
     }
     return gitError('log', log.run.stderr, log.run.stdout)
@@ -101,7 +105,7 @@ async function historyQuery(
 
   // 过滤范围内的提交总数（best-effort）。
   let total = 0
-  const count = await runCommand(deps.run, ['git', 'rev-list', '--count', ...scope, ...filters], root, 'rev-list', deps.signal)
+  const count = await runCommand(deps.run, ['git', 'rev-list', '--count', ...noWalk, ...scope, ...filters], root, 'rev-list', deps.signal)
   if ('run' in count && count.run.exitCode === 0) {
     const parsed = Number(count.run.stdout.trim())
     if (Number.isFinite(parsed) && parsed >= 0) total = parsed
