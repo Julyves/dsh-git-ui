@@ -770,9 +770,9 @@ function HistoryTab({
   )
   /** 表格列模板：图 | 提交(refs+主题) | 哈希 | 作者 | 时间；行与表头共用。
    * 主题列 minmax(96px,1fr) 保证宽图/加载回流时内容不被压缩到不可读。
-   * 搜索条件下去掉图列，仅平铺条目。 */
+   * 搜索条件下用装饰圆点列替代图列（28px 居中圆点），条目不紧贴左侧。 */
   const gridTpl = searching
-    ? 'minmax(96px,1fr) 72px 110px 110px'
+    ? '28px minmax(96px,1fr) 72px 110px 110px'
     : `${graphTrack}px minmax(96px,1fr) 72px 110px 110px`
   /** 行序列：非搜索=带图几何的行（graphMarked）；搜索=无图几何的纯条目行（showGraph=false）。 */
   const listRows = useMemo<readonly GraphRowMarker[]>(
@@ -985,7 +985,7 @@ function HistoryTab({
             )}
             {commits.length > 0 && (
               <div style={{ ...css.historyHead, gridTemplateColumns: gridTpl }} aria-hidden="true">
-                {!searching && <span />}
+                <span />
                 <span>{t('history.commit')}</span>
                 <span>{t('history.hash')}</span>
                 <span>{t('history.author')}</span>
@@ -1342,6 +1342,13 @@ function Splitter({ kind, onDrag }: { kind: 'col' | 'row'; onDrag: (delta: numbe
 
 // ── 提交行（memo）与自绘下拉 ────────────────────────────────────────
 
+/** 搜索条目装饰圆点取色：按提交 hash 字符码累加取模，稳定多彩（与分支图同一调色板）。 */
+function dotColorOf(hash: string): string {
+  let sum = 0
+  for (let i = 0; i < hash.length; i += 1) sum += hash.charCodeAt(i)
+  return GRAPH_COLORS[sum % GRAPH_COLORS.length]!
+}
+
 /** 提交行：memo 化保证千条级加载下过滤/选中变更仅重渲染受影响行。 */
 const CommitRow = memo(function CommitRow({
   row, cols, laneW, gridTpl, isSelected, now, onSelect, showGraph, t,
@@ -1366,7 +1373,13 @@ const CommitRow = memo(function CommitRow({
       }}
       onClick={() => onSelect(row.commit)}
     >
-      {showGraph && <GraphStrip row={row} cols={cols} laneW={laneW} endOpen={row.endOpen} />}
+      {showGraph ? (
+        <GraphStrip row={row} cols={cols} laneW={laneW} endOpen={row.endOpen} />
+      ) : (
+        <span style={css.searchDot} aria-hidden="true">
+          <span style={{ ...css.searchDotInner, background: dotColorOf(row.commit.hash) }} />
+        </span>
+      )}
       <span style={css.historySubjectCell}>
         <RefPills refs={row.commit.refs} />
         <span style={css.commitSubjectLine} title={row.commit.subject}>{row.commit.subject}</span>

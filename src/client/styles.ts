@@ -1311,6 +1311,22 @@ export const historyRow: CSSProperties = {
   color: 'var(--dsw-alias-label-primary)',
 }
 
+/** 搜索条目装饰圆点槽（28px 列居中，替代分支图位置，条目不紧贴左侧）。 */
+export const searchDot: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+}
+
+/** 装饰圆点本体：8px 直径 + 背景描边（与分支图节点圆同一视觉语言）。 */
+export const searchDotInner: CSSProperties = {
+  width: 8,
+  height: 8,
+  borderRadius: '50%',
+  border: '1.5px solid var(--dsw-alias-bg-layer-2)',
+  flex: 'none',
+}
+
 export const historyRowSelected: CSSProperties = {
   background: 'var(--dsw-alias-interactive-bg-active)',
 }
