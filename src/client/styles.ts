@@ -698,10 +698,19 @@ export const changeDir: CSSProperties = {
 
 // ── 并排差异对照 ───────────────────────────────────────────────────────
 
+/**
+ * 差异并排容器：双列独立横向滚动。
+ * display:flex 横排两列；纵向单一滚动（overflow-y:auto）保证左右行同步对齐，
+ * 横向不滚动（overflow-x:hidden）——每列各自 overflow-x:auto 独立滚动，
+ * 内容只在本列展示，根治长行左右重叠。
+ */
 export const sbsContainer: CSSProperties = {
   flex: 1,
   minHeight: 0,
-  overflow: 'auto',
+  display: 'flex',
+  overflowY: 'auto',
+  overflowX: 'hidden',
+  alignItems: 'flex-start',
   border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: 8,
   background: 'var(--dsw-alias-bg-layer-2)',
@@ -710,21 +719,42 @@ export const sbsContainer: CSSProperties = {
   lineHeight: '18px',
 }
 
-export const sbsRow: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
+/** 差异列（左/右各一）：独立横向滚动，纵向不滚动（由容器统一滚动）。 */
+export const sbsCol: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  overflowX: 'auto',
+  overflowY: 'hidden',
 }
 
+/** 右列：左侧发丝分隔线（取代旧 sbsCellRight 的单元格边框）。 */
+export const sbsColRight: CSSProperties = {
+  borderLeft: '1px solid var(--dsw-alias-border-l2)',
+}
+
+/**
+ * 列内容包装：width:max-content 使长行撑宽触发本列横向滚动；
+ * min-width:100% 使短行背景填满列宽。两列独立，互不重叠。
+ */
+export const sbsColInner: CSSProperties = {
+  minWidth: '100%',
+  width: 'max-content',
+}
+
+/** 差异行单元格：填满列内宽（width:100%），背景覆盖整行——根治滑动后同行后半段无配色。 */
 export const sbsCell: CSSProperties = {
+  boxSizing: 'border-box',
   display: 'flex',
   gap: 6,
   padding: '0 8px',
   whiteSpace: 'pre',
-  minWidth: 0,
+  width: '100%',
 }
 
-export const sbsCellRight: CSSProperties = {
-  borderLeft: '1px solid var(--dsw-alias-border-l2)',
+/** 代码文本段：pre 不换行、flex:none 不收缩（保持原始列宽，不被压缩）。 */
+export const sbsCode: CSSProperties = {
+  whiteSpace: 'pre',
+  flex: 'none',
 }
 
 /** 行号槽：定宽右对齐 + 右侧发丝线，数字与代码间留 8px 呼吸。 */

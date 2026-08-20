@@ -27,7 +27,7 @@ import type { GitQueryOutcome } from './controller.ts'
 import { createGraphBuilder, graphWidth, markFilterEnds, GRAPH_COLORS, type GraphRow, type GraphRowMarker } from './git-graph.ts'
 import { buildFileTree, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
-import { buildSideBySide, capSideBySideRows, foldContext, isBinaryDiff, summarizeChanges, type SideBySideRow, type SideCell } from './side-by-side.ts'
+import { buildSideBySide, capSideBySideRows, foldContext, isBinaryDiff, summarizeChanges, type SideCell } from './side-by-side.ts'
 import { diffBaseOf, reconcileDiffSelection, stepDiffSelection, type DiffSelection } from './changes-diff.ts'
 import { BranchIcon, ChevronIcon, CloseIcon, CollapseAllIcon, DiffIcon, ExpandAllIcon, FileIcon, FolderIcon, NextIcon, PrevIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
@@ -622,23 +622,17 @@ function DiffSideBySide({ text, t }: { text: string; t: (key: GitKey) => string 
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set())
   if (isBinaryDiff(text)) return <div style={css.emptyNote}>{t('diff.binary')}</div>
   if (rows.length === 0) return <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
-  const cellStyle = (cell: SideCell, right: boolean): CSSProperties => ({
-    ...css.sbsCell,
-    ...(right ? css.sbsCellRight : {}),
-    ...(cell.kind === 'del' ? css.sbsDel : cell.kind === 'add' ? css.sbsAdd : cell.kind === 'empty' ? css.sbsEmpty : {}),
-  })
-  const renderRow = (row: SideBySideRow, key: string): JSX.Element => (
-    <div key={key} style={css.sbsRow}>
-      <span style={cellStyle(row.left, false)}>
-        <span style={css.sbsNum}>{row.left.num ?? ''}</span>
-        {row.left.text}
-      </span>
-      <span style={cellStyle(row.right, true)}>
-        <span style={css.sbsNum}>{row.right.num ?? ''}</span>
-        {row.right.text}
-      </span>
+
+  const colorOf = (kind: SideCell['kind']): CSSProperties =>
+    kind === 'del' ? css.sbsDel : kind === 'add' ? css.sbsAdd : kind === 'empty' ? css.sbsEmpty : {}
+
+  const renderCell = (cell: SideCell, key: string): JSX.Element => (
+    <div key={key} style={{ ...css.sbsCell, ...colorOf(cell.kind) }}>
+      <span style={css.sbsNum}>{cell.num ?? ''}</span>
+      <span style={css.sbsCode}>{cell.text}</span>
     </div>
   )
+
   const toggleFold = (index: number): void => {
     setExpanded((prev) => {
       const next = new Set(prev)
@@ -647,28 +641,50 @@ function DiffSideBySide({ text, t }: { text: string; t: (key: GitKey) => string 
       return next
     })
   }
+
+  // 双列独立横向滚动：每列各渲染一份行序列（fold 块在两列同位各一次，同步展开）。
+  // 内容只在本列内展示 → 根治长行左右重叠；sbsCell width:100% 填满 inner →
+  // 背景覆盖整行，根治滑动后同行后半段无配色。
+  const renderColumn = (side: 'left' | 'right'): readonly JSX.Element[] =>
+    blocks.map((block, i) => {
+      if (block.kind === 'fold') {
+        if (expanded.has(i)) {
+          return (
+            <Fragment key={`f${i}`}>
+              {block.rows.map((r, j) => renderCell(side === 'left' ? r.left : r.right, `${i}-${j}`))}
+            </Fragment>
+          )
+        }
+        return (
+          <button
+            key={`f${i}`}
+            type="button"
+            className="dsh-git-ui__diff-fold"
+            style={css.diffFold}
+            onClick={() => toggleFold(i)}
+            aria-expanded={false}
+          >
+            {t('diff.foldCollapsed').replace('{n}', String(block.count))}
+          </button>
+        )
+      }
+      return renderCell(side === 'left' ? block.row.left : block.row.right, String(i))
+    })
+
   return (
-    <div style={css.sbsContainer}>
-      {blocks.map((block, i) => block.kind === 'fold'
-        ? (expanded.has(i)
-          ? <Fragment key={i}>{block.rows.map((r, j) => renderRow(r, `${i}-${j}`))}</Fragment>
-          : (
-            <button
-              key={i}
-              type="button"
-              className="dsh-git-ui__diff-fold"
-              style={css.diffFold}
-              onClick={() => toggleFold(i)}
-              aria-expanded={false}
-            >
-              {t('diff.foldCollapsed').replace('{n}', String(block.count))}
-            </button>
-          ))
-        : renderRow(block.row, String(i)))}
+    <>
+      <div style={css.sbsContainer}>
+        <div style={css.sbsCol}>
+          <div style={css.sbsColInner}>{renderColumn('left')}</div>
+        </div>
+        <div style={{ ...css.sbsCol, ...css.sbsColRight }}>
+          <div style={css.sbsColInner}>{renderColumn('right')}</div>
+        </div>
+      </div>
       {rows.length > MAX_DIFF_ROWS && (
         <div style={css.emptyNote}>{t('diff.truncated').replace('{count}', String(MAX_DIFF_ROWS))}</div>
       )}
-    </div>
+    </>
   )
 }
 
