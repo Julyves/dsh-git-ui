@@ -4,7 +4,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { JSX } from 'react'
+import type { CSSProperties, JSX } from 'react'
 import * as css from './styles.ts'
 
 export interface SelectMenuProps {
@@ -12,10 +12,12 @@ export interface SelectMenuProps {
   options: readonly { value: string; label: string }[]
   onSelect: (value: string) => void
   ariaLabel: string
+  /** 按钮自定义样式（默认 toolbarSelect；头部内联用时传无框变体）。 */
+  buttonStyle?: CSSProperties
 }
 
 export function SelectMenu({
-  value, options, onSelect, ariaLabel,
+  value, options, onSelect, ariaLabel, buttonStyle,
 }: SelectMenuProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)
@@ -60,7 +62,7 @@ export function SelectMenu({
         ref={btnRef}
         type="button"
         className="dsh-git-ui__toolbar-select"
-        style={css.toolbarSelect}
+        style={buttonStyle ?? css.toolbarSelect}
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}

@@ -27,10 +27,25 @@ export const pill: CSSProperties = {
   fontSize: 12,
   lineHeight: '18px',
   whiteSpace: 'nowrap',
+  maxWidth: 280,
   cursor: 'pointer',
   color: 'var(--dsw-alias-label-secondary)',
   background: 'var(--dsw-alias-bg-layer-2)',
   boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+}
+
+/** 分支名段：超长可省略，徽标优先保留。 */
+export const pillBranch: CSSProperties = {
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  minWidth: 0,
+  flexShrink: 1,
+}
+
+/** 徽标段：不截断，始终完整展示（+2 −1 ?3 / ↑1 ↓2）。 */
+export const pillBadges: CSSProperties = {
+  flexShrink: 0,
+  whiteSpace: 'nowrap',
 }
 
 /** Dimmed pill for degraded states (no repo / unavailable). */
@@ -118,32 +133,56 @@ export const popupHeaderRootText: CSSProperties = {
   fontSize: 11,
 }
 
-export const countGrid: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(3, 1fr)',
-  gap: 6,
+/** 头部分支内联切换按钮（无框融入头部，带 chevron 下拉）。 */
+export const popupBranchMenu: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  border: 'none',
+  background: 'transparent',
+  padding: '2px 4px',
+  cursor: 'pointer',
+  font: 'inherit',
+  fontSize: 13,
+  fontWeight: 600,
+  lineHeight: '20px',
+  color: 'var(--dsw-alias-label-primary)',
+  borderRadius: 4,
+}
+
+/** 紧凑状态条：横排计数（取代独立格子 grid），省垂直空间。 */
+export const popupStatusBar: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+  flexWrap: 'wrap',
   marginBottom: 10,
 }
 
-/** 计数格：层 2 淡底 + l2 发丝描边，与 pill 同一描边语言。 */
-export const countCell: CSSProperties = {
-  textAlign: 'center',
-  padding: '6px 2px 5px',
-  borderRadius: 8,
-  background: 'var(--dsw-alias-bg-layer-2)',
-  border: '1px solid var(--dsw-alias-border-l2)',
+export const popupStatItem: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'baseline',
+  gap: 4,
 }
 
-export const countValue: CSSProperties = {
+export const popupStatValue: CSSProperties = {
   fontWeight: 600,
-  fontSize: 15,
-  lineHeight: '20px',
+  fontSize: 13,
   color: 'var(--dsw-alias-label-primary)',
+  fontVariantNumeric: 'tabular-nums',
 }
 
-export const countLabel: CSSProperties = {
+export const popupStatLabel: CSSProperties = {
   fontSize: 11,
   color: 'var(--dsw-alias-label-tertiary)',
+}
+
+/** 分支操作行（新建分支，上提至头部区下方）。 */
+export const popupBranchOps: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  marginBottom: 6,
 }
 
 /** 分组小标题：macOS 式 11px semibold 弱化色（弃用全大写+字距的报表风）。 */
@@ -1524,14 +1563,6 @@ export const commitDetailMeta: CSSProperties = {
 
 // ── Branches 管理（popup）─────────────────────────────────────────────
 
-/** popup 分支管理行。 */
-export const branchManageRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '2px 0',
-}
-
 export const branchNameInput: CSSProperties = {
   flex: 1,
   minWidth: 120,
@@ -1543,18 +1574,6 @@ export const branchNameInput: CSSProperties = {
   fontFamily: 'inherit',
   background: 'var(--dsw-alias-bg-layer-2)',
   color: 'var(--dsw-alias-label-primary)',
-}
-
-export const branchSelect: CSSProperties = {
-  border: '1px solid var(--dsw-alias-border-l2)',
-  borderRadius: 8,
-  padding: '5px 8px',
-  fontSize: 13,
-  lineHeight: '20px',
-  fontFamily: 'inherit',
-  background: 'var(--dsw-alias-bg-layer-2)',
-  color: 'var(--dsw-alias-label-primary)',
-  maxWidth: 180,
 }
 
 export const branchMark: CSSProperties = {

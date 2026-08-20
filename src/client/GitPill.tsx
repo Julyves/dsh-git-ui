@@ -18,7 +18,7 @@ import { completedTurnCount, type TurnSignalSnapshot } from './turn-signal.ts'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { GitObservable, GitQueryOutcome, GitView } from './controller.ts'
 import { GitCenter } from './GitCenter.tsx'
-import { fileIconForPath, FolderIcon } from './icons.tsx'
+import { fileIconForPath, FolderIcon, RollbackIcon, StageIcon, UnstageIcon } from './icons.tsx'
 import type { GitAction, GitActionResult, GitBranch, GitQueryRequest } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import { SelectMenu } from './select-menu.tsx'
@@ -98,16 +98,14 @@ function timeAgo(iso: string, now: number, t: (key: GitKey) => string): string {
   return fill('time.daysAgo', Math.floor(seconds / 86_400))
 }
 
-/** The pill label for a ready snapshot. */
-function pillLabel(view: GitView & { state: 'ready' }, t: (key: GitKey) => string): string {
+/** The pill label parts: 分支名（可 ellipsis 收缩）+ 徽标（不截断保留）。 */
+function pillParts(view: GitView & { state: 'ready' }, t: (key: GitKey) => string): { branch: string; badges: string[] } {
   const s = view.snapshot
   const branch = s.branch === null
     ? `(${t('pill.detached')}) · ${s.head ?? ''}`
-    : s.branch
-  const base = s.unborn ? `${branch} · ${t('pill.noCommits')}` : branch
-  const badge = dirtyBadge(view)
-  const ahead = aheadBehind(view)
-  return [base, badge, ahead].filter(Boolean).join(' · ')
+    : (s.unborn ? `${s.branch} · ${t('pill.noCommits')}` : s.branch)
+  const badges = [dirtyBadge(view), aheadBehind(view)].filter(Boolean)
+  return { branch, badges }
 }
 
 /** Dimmed pill for degraded states. */
@@ -120,23 +118,37 @@ function DegradedPill({ label, title, t }: { label: string; title?: string; t: (
   )
 }
 
-/** 分支快捷管理（自原 Branches 标签迁入）：切换 / 创建并切换。 */
-function BranchQuickManage({
-  run, query, t,
+/**
+ * Popup body (rendered inside the portaled card)。
+ * 分支管理（切换/新建）已并入本组件：头部内联切换 + 新建行上提；
+ * 变更行带 hover 内联操作（暂存/取消/丢弃两步）。
+ */
+function GitPopupBody({
+  view, refresh, openCenter, run, query, t,
 }: {
+  view: GitView & { state: 'ready' }
+  refresh: () => Promise<void>
+  openCenter: () => void
   run: (action: GitAction) => Promise<GitActionResult>
   query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
   t: (key: GitKey) => string
 }): JSX.Element {
-  const [data, setData] = useState<{ current: string | null; local: readonly GitBranch[] } | null>(null)
+  const now = Date.now()
+  const s = view.snapshot
+  const branchLabel = s.branch === null ? `(${t('pill.detached')})` : s.branch
+
+  // 分支管理状态（自原 BranchQuickManage 并入）：切换（头部内联）+ 新建（上提）。
+  const [branchData, setBranchData] = useState<{ current: string | null; local: readonly GitBranch[] } | null>(null)
   const [busy, setBusy] = useState(false)
   const [newName, setNewName] = useState('')
   const [note, setNote] = useState<string | null>(null)
+  // 变更行丢弃两步确认：armed 记录待确认的路径，3s 自动解除。
+  const [armed, setArmed] = useState<string | null>(null)
 
   const reload = async (): Promise<void> => {
     const outcome = await query({ kind: 'branches' })
     if (outcome.ok && outcome.value.kind === 'branches') {
-      setData({ current: outcome.value.current, local: outcome.value.local })
+      setBranchData({ current: outcome.value.current, local: outcome.value.local })
     }
   }
 
@@ -144,6 +156,12 @@ function BranchQuickManage({
     void reload()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only
   }, [])
+
+  useEffect(() => {
+    if (armed === null) return
+    const timer = setTimeout(() => setArmed(null), 3000)
+    return () => clearTimeout(timer)
+  }, [armed])
 
   const switchTo = async (name: string): Promise<void> => {
     if (busy || name === '') return
@@ -172,19 +190,65 @@ function BranchQuickManage({
     await reload()
   }
 
-  if (data === null) return <div style={css.emptyNote}>{t('center.loading')}</div>
+  /** 执行一条变更行操作（暂存/取消/丢弃），失败以 note 显示。 */
+  const runChange = async (action: GitAction, path: string): Promise<void> => {
+    if (busy) return
+    setBusy(true)
+    setNote(null)
+    const result = await run(action)
+    setBusy(false)
+    if (!result.ok) setNote(result.error.message ?? result.error.code)
+  }
+
+  const stage = (path: string): void => void runChange({ kind: 'stage', paths: [path] }, path)
+  const unstage = (path: string): void => void runChange({ kind: 'unstage', paths: [path] }, path)
+  const discard = (path: string): void => {
+    if (busy) return
+    if (armed !== path) { setArmed(path); return }
+    setArmed(null)
+    void runChange({ kind: 'discard', paths: [path] }, path)
+  }
+
   return (
     <>
-      <div style={css.branchManageRow}>
-        <SelectMenu
-          value={data.current ?? ''}
-          options={data.local.map((b) => ({ value: b.name, label: b.name }))}
-          onSelect={(name) => void switchTo(name)}
-          ariaLabel={t('center.currentBranch')}
-        />
-        <span style={css.commitHint}>{t('center.currentBranch')}</span>
+      <header style={css.popupHeader}>
+        <div style={css.popupHeaderMain}>
+          <span style={s.dirty ? css.dotDirty : css.dot} aria-hidden="true" />
+          {branchData === null ? (
+            <span style={css.popupHeaderBranch}>{branchLabel}</span>
+          ) : (
+            <SelectMenu
+              value={branchData.current ?? ''}
+              options={[
+                // 游离 HEAD：注入伪选项让头部显示游离标签，仍可下拉切换本地分支。
+                ...(branchData.current === null ? [{ value: '', label: branchLabel }] : []),
+                ...branchData.local.map((b) => ({ value: b.name, label: b.name })),
+              ]}
+              onSelect={(name) => void switchTo(name)}
+              ariaLabel={t('center.currentBranch')}
+              buttonStyle={css.popupBranchMenu}
+            />
+          )}
+          {s.unborn && <span style={css.popupBadge}>{t('pill.noCommits')}</span>}
+          {s.dirty && <span style={css.popupBadge}>{dirtyBadge(view)}</span>}
+          {(s.ahead > 0 || s.behind > 0) && <span style={css.popupBadge}>{aheadBehind(view)}</span>}
+        </div>
+        <div style={css.popupHeaderRoot} title={s.root}>
+          <FolderIcon />
+          <span style={css.popupHeaderRootText}>{s.root}</span>
+        </div>
+      </header>
+      <div style={css.popupStatusBar}>
+        {([
+          ['popup.staged', s.staged], ['popup.modified', s.modified], ['popup.untracked', s.untracked],
+        ] as const).map(([key, value]) => (
+          <span key={key} style={css.popupStatItem}>
+            <span style={css.popupStatValue}>{value}</span>
+            <span style={css.popupStatLabel}>{t(key)}</span>
+          </span>
+        ))}
       </div>
-      <div style={css.branchManageRow}>
+      <div style={css.popupBranchOps}>
         <input
           className="dsh-git-ui__branch-input"
           style={css.branchNameInput}
@@ -199,49 +263,6 @@ function BranchQuickManage({
         </Button>
       </div>
       {note !== null && <div style={css.emptyNote} role="alert">{note}</div>}
-    </>
-  )
-}
-
-/** Popup body (rendered inside the portaled card): root, counts, commits, changes, refresh. */
-function GitPopupBody({
-  view, refresh, openCenter, run, query, t,
-}: {
-  view: GitView & { state: 'ready' }
-  refresh: () => Promise<void>
-  openCenter: () => void
-  run: (action: GitAction) => Promise<GitActionResult>
-  query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
-  t: (key: GitKey) => string
-}): JSX.Element {
-  const now = Date.now()
-  const s = view.snapshot
-  const branchLabel = s.branch === null ? `(${t('pill.detached')})` : s.branch
-  return (
-    <>
-      <header style={css.popupHeader}>
-        <div style={css.popupHeaderMain}>
-          <span style={s.dirty ? css.dotDirty : css.dot} aria-hidden="true" />
-          <span style={css.popupHeaderBranch}>{branchLabel}</span>
-          {s.unborn && <span style={css.popupBadge}>{t('pill.noCommits')}</span>}
-          {s.dirty && <span style={css.popupBadge}>{dirtyBadge(view)}</span>}
-          {(s.ahead > 0 || s.behind > 0) && <span style={css.popupBadge}>{aheadBehind(view)}</span>}
-        </div>
-        <div style={css.popupHeaderRoot} title={s.root}>
-          <FolderIcon />
-          <span style={css.popupHeaderRootText}>{s.root}</span>
-        </div>
-      </header>
-      <div style={css.countGrid}>
-        {([
-          ['popup.staged', s.staged], ['popup.modified', s.modified], ['popup.untracked', s.untracked],
-        ] as const).map(([key, value]) => (
-          <div key={key} style={css.countCell}>
-            <div style={css.countValue}>{value}</div>
-            <div style={css.countLabel}>{t(key)}</div>
-          </div>
-        ))}
-      </div>
       <div style={css.sectionTitle}>{t('popup.recentCommits')}</div>
       {s.recentCommits.length === 0
         ? <div style={css.emptyNote}>{t('popup.emptyCommits')}</div>
@@ -266,8 +287,9 @@ function GitPopupBody({
               const slash = change.path.lastIndexOf('/')
               const name = slash === -1 ? change.path : change.path.slice(slash + 1)
               const dir = slash === -1 ? '' : change.path.slice(0, slash)
+              const untracked = change.status === 'untracked'
               return (
-                <div key={change.path} style={css.changeRow}>
+                <div key={change.path} className="dsh-git-ui__row" style={css.changeRow}>
                   <span
                     style={{ ...css.changeChip, ...(css.chipStyles[change.status] ?? css.chipStyles.untracked) }}
                     title={change.status}
@@ -276,7 +298,33 @@ function GitPopupBody({
                   </span>
                   <span style={css.rowFileIcon} aria-hidden="true">{fileIconForPath(change.path)}</span>
                   <span style={css.changeNamePop} title={change.path}>{name}</span>
-                  {dir !== '' ? <span style={css.changeDirPop}>{dir}</span> : <span style={{ flex: 1 }} />}
+                  {dir !== '' ? <span style={css.changeDirPop}>{dir}</span> : <span style={{ flex: '1 1 0%', minWidth: 0 }} />}
+                  <span className="dsh-git-ui__row-actions" style={css.rowActions}>
+                    {change.staged
+                      ? (
+                        <button type="button" className="dsh-git-ui__icon-btn" style={css.rowIconButton} title={t('center.unstage')} aria-label={t('center.unstage')} disabled={busy} onClick={() => unstage(change.path)}>
+                          <UnstageIcon />
+                        </button>
+                      )
+                      : (
+                        <button type="button" className="dsh-git-ui__icon-btn" style={css.rowIconButton} title={t('center.stage')} aria-label={t('center.stage')} disabled={busy} onClick={() => stage(change.path)}>
+                          <StageIcon />
+                        </button>
+                      )}
+                    {!untracked && (
+                      <button
+                        type="button"
+                        className="dsh-git-ui__icon-btn"
+                        style={armed === change.path ? { ...css.rowIconButton, color: 'var(--dsw-alias-state-error-primary)' } : css.rowIconButton}
+                        title={armed === change.path ? t('center.confirmDiscard') : t('center.discard')}
+                        aria-label={armed === change.path ? t('center.confirmDiscard') : t('center.discard')}
+                        disabled={busy}
+                        onClick={() => discard(change.path)}
+                      >
+                        <RollbackIcon />
+                      </button>
+                    )}
+                  </span>
                 </div>
               )
             })}
@@ -285,8 +333,6 @@ function GitPopupBody({
             )}
           </>
         )}
-      <div style={css.sectionTitle}>{t('center.branches')}</div>
-      <BranchQuickManage run={run} query={query} t={t} />
       <div style={css.footerRow}>
         <span style={css.checkedAt}>{t('popup.checkedAt').replace('{time}', new Date(s.checkedAt).toLocaleTimeString())}</span>
         <span style={css.footerActions}>
@@ -441,6 +487,7 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
   }
 
   const dirty = display.snapshot.dirty
+  const parts = pillParts(display, t)
   return (
     <span ref={wrapRef} style={{ display: 'inline-flex' }}>
       <button
@@ -450,10 +497,11 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
         onClick={() => setOpen(!open)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title={`${display.snapshot.root}\n${pillLabel(display, t)}`}
+        title={`${display.snapshot.root}\n${[parts.branch, ...parts.badges].filter(Boolean).join(' · ')}`}
       >
         <span style={dirty ? css.dotDirty : css.dot} aria-hidden="true" />
-        <span>{pillLabel(display, t)}</span>
+        <span style={css.pillBranch}>{parts.branch}</span>
+        {parts.badges.length > 0 && <span style={css.pillBadges}>{parts.badges.join(' · ')}</span>}
       </button>
       {open && pos !== null && createPortal(
         <div
