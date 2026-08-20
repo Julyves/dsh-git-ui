@@ -92,6 +92,7 @@ export const gitActionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('branch-create'), name: z.string(), from: z.string().optional() }),
   z.object({ kind: z.literal('branch-checkout'), name: z.string() }),
   z.object({ kind: z.literal('branch-delete'), name: z.string(), force: z.boolean().optional() }),
+  z.object({ kind: z.literal('fetch') }),
 ])
 
 export const gitOperationErrorSchema = z.object({
@@ -123,7 +124,7 @@ export const gitQuerySchema = z.discriminatedUnion('kind', [
 ])
 
 const gitFileStatSchema = z.object({ path: z.string(), status: z.enum(['added', 'modified', 'deleted', 'renamed', 'untracked', 'conflicted', 'typechange']) })
-const gitBranchSchema = z.object({ name: z.string(), shortHash: z.string().nullable() })
+const gitBranchSchema = z.object({ name: z.string(), shortHash: z.string().nullable(), ahead: z.number().optional(), behind: z.number().optional() })
 
 export const gitQueryResultSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('history'), commits: z.array(gitGraphCommitSchema), total: z.number() }),

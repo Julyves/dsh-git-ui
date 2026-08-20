@@ -14,9 +14,8 @@
  * in-panel banner. Discard/delete are destructive and require a second click
  * within 3s.
  */
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, JSX, MouseEvent as ReactMouseEvent } from 'react'
-import { createPortal } from 'react-dom'
 import { Button, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   GitAction, GitActionResult, GitBranch, GitChange, GitFileStat,
@@ -137,7 +136,7 @@ export function GitCenter({
             <ChangesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} />
           </div>
           <div style={tab === 'history' ? { display: 'contents' } : { display: 'none' }}>
-            <HistoryTab query={query} t={t} />
+            <HistoryTab query={query} run={run} t={t} />
           </div>
         </div>
       </div>
@@ -671,9 +670,10 @@ const GRAPH_NODE_MIN_R = 2
 // ── History tab ───────────────────────────────────────────────────────────
 
 function HistoryTab({
-  query, t,
+  query, run, t,
 }: {
   query: GitCenterProps['query']
+  run: GitCenterProps['run']
   t: (key: GitKey) => string
 }): JSX.Element {
   const [commits, setCommits] = useState<readonly GraphCommit[]>([])
@@ -796,19 +796,36 @@ function HistoryTab({
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 240) void loadPage(commits.length, filter)
   }
 
-  // 首次激活：并行加载过滤树（分支 + 标签）。
+  // 加载过滤树（分支 + 标签 + 作者）；首次激活与 fetch 后复用。
+  const loadTree = useCallback(async (): Promise<void> => {
+    const [branches, tags, authorsOutcome] = await Promise.all([query({ kind: 'branches' }), query({ kind: 'tags' }), query({ kind: 'authors' })])
+    setAuthors(authorsOutcome.ok && authorsOutcome.value.kind === 'authors' ? authorsOutcome.value.authors : [])
+    setTree({
+      current: branches.ok && branches.value.kind === 'branches' ? branches.value.current : null,
+      defaultBranch: branches.ok && branches.value.kind === 'branches' ? branches.value.defaultBranch : null,
+      local: branches.ok && branches.value.kind === 'branches' ? branches.value.local : [],
+      remote: branches.ok && branches.value.kind === 'branches' ? branches.value.remote : [],
+      tags: tags.ok && tags.value.kind === 'tags' ? tags.value.tags : [],
+    })
+  }, [query])
+
+  /** fetch 远程引用后重载过滤树（刷新 ahead/behind + 远程分支列表）。 */
+  const [fetching, setFetching] = useState(false)
+  /** fetch 结果提示：成功=已同步远程；失败=错误信息。 */
+  const [fetchNote, setFetchNote] = useState<string | null>(null)
+  const onFetch = useCallback(async (): Promise<void> => {
+    if (fetching) return
+    setFetching(true)
+    setFetchNote(null)
+    const result = await run({ kind: 'fetch' })
+    await loadTree()
+    setFetching(false)
+    setFetchNote(result.ok ? t('center.fetchDone') : result.error.message ?? result.error.code)
+  }, [fetching, run, loadTree, t])
+
+  // 首次激活：加载过滤树。
   useEffect(() => {
-    void (async () => {
-      const [branches, tags, authorsOutcome] = await Promise.all([query({ kind: 'branches' }), query({ kind: 'tags' }), query({ kind: 'authors' })])
-      setAuthors(authorsOutcome.ok && authorsOutcome.value.kind === 'authors' ? authorsOutcome.value.authors : [])
-      setTree({
-        current: branches.ok && branches.value.kind === 'branches' ? branches.value.current : null,
-        defaultBranch: branches.ok && branches.value.kind === 'branches' ? branches.value.defaultBranch : null,
-        local: branches.ok && branches.value.kind === 'branches' ? branches.value.local : [],
-        remote: branches.ok && branches.value.kind === 'branches' ? branches.value.remote : [],
-        tags: tags.ok && tags.value.kind === 'tags' ? tags.value.tags : [],
-      })
-    })()
+    void loadTree()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- first activation only
   }, [])
 
@@ -883,6 +900,9 @@ function HistoryTab({
             onFilter={(f) => setFilter((prev) => ({ ...prev, ref: f.kind === 'all' ? null : f.name }))}
             closed={closedSections}
             onToggleSection={toggleSection}
+            onFetch={onFetch}
+            fetching={fetching}
+            fetchNote={fetchNote}
             t={t}
           />
         </div>
@@ -939,7 +959,10 @@ function HistoryTab({
             onScroll={onScroll}
           >
             {loading && commits.length === 0 && (
-              <div style={css.emptyNote}>{t('center.loading')}</div>
+              <div style={css.centeredEmpty}>{t('center.loading')}</div>
+            )}
+            {!loading && commits.length === 0 && (
+              <div style={css.centeredEmpty}>{t('history.noResults')}</div>
             )}
             {graphRows.length > 0 && (
               <div style={{ ...css.historyHead, gridTemplateColumns: gridTpl }} aria-hidden="true">
@@ -1006,9 +1029,9 @@ function HistoryTab({
                 <>
                   <div style={{ ...css.rightFiles, flex: 'none', height: `${rightTopPct}%` }}>
                 {detail === null
-                  ? <div style={css.emptyNote}>{t('center.loading')}</div>
+                  ? <div style={css.centeredEmpty}>{t('center.loading')}</div>
                   : detail.stats.length === 0
-                    ? <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
+                    ? <div style={css.centeredEmpty}>{t('center.diffEmpty')}</div>
                     : (
                       <FileTreeNodes
                         nodes={fileTree}
@@ -1031,7 +1054,9 @@ function HistoryTab({
                         {selected.shortHash} · {selected.author} · {timeAgo(selected.dateIso, now, t)}
                       </span>
                     </div>
-                    {detail !== null && detail.body !== '' && <pre style={css.msgBody}>{detail.body}</pre>}
+                    {detail !== null && detail.body !== ''
+                      ? <pre style={css.msgBody}>{detail.body}</pre>
+                      : <div style={css.centeredEmpty}>{t('right.noMessage')}</div>}
                   </div>
                 </>
               )}
@@ -1046,7 +1071,7 @@ function HistoryTab({
 /** 左栏：全部分支入口 + 本地/远程/标签可折叠分组，点击过滤历史。
  * 图标语义（IDEA 式）：默认分支=星形、当前检出=橙色签出标、普通=灰色分支、标签=标签形。 */
 function HistoryFilterTree({
-  tree, filter, onFilter, closed, onToggleSection, t,
+  tree, filter, onFilter, closed, onToggleSection, onFetch, fetching, fetchNote, t,
 }: {
   tree: {
     current: string | null
@@ -1059,6 +1084,9 @@ function HistoryFilterTree({
   onFilter: (filter: { kind: 'all' } | { kind: 'ref'; name: string }) => void
   closed: ReadonlySet<string>
   onToggleSection: (section: string) => void
+  onFetch: () => Promise<void>
+  fetching: boolean
+  fetchNote: string | null
   t: (key: GitKey) => string
 }): JSX.Element {
   /** 搜索（分支或标签）：匹配行高亮，搜索时平铺展示并忽略折叠态。 */
@@ -1085,8 +1113,9 @@ function HistoryFilterTree({
     if (tree !== null && tree.defaultBranch !== null && bare === tree.defaultBranch) return { icon: <StarIcon />, color: amber }
     return { icon: <BranchIcon /> }
   }
-  const row = (name: string, bare: string, active: boolean, mark: boolean, indent: number): JSX.Element => {
+  const row = (name: string, bare: string, active: boolean, mark: boolean, indent: number, branch?: GitBranch): JSX.Element => {
     const face = branchFace(name, bare)
+    const hasSync = branch !== undefined && ((branch.ahead ?? 0) > 0 || (branch.behind ?? 0) > 0)
     return (
       <button
         type="button"
@@ -1097,6 +1126,13 @@ function HistoryFilterTree({
       >
         <span style={face.color === undefined ? css.treeIcon : { ...css.treeIcon, color: face.color }} aria-hidden="true">{face.icon}</span>
         <span style={mark ? { ...css.treeName, ...css.treeNameCurrent } : css.treeName}>{highlight(name)}</span>
+        {hasSync && (
+          <span style={css.treeSyncBadge}>
+            {(branch!.ahead ?? 0) > 0 && `↑${branch!.ahead}`}
+            {(branch!.ahead ?? 0) > 0 && (branch!.behind ?? 0) > 0 && ' '}
+            {(branch!.behind ?? 0) > 0 && `↓${branch!.behind}`}
+          </span>
+        )}
         {mark && <span style={css.branchMark}>✓</span>}
       </button>
     )
@@ -1145,7 +1181,19 @@ function HistoryFilterTree({
           onChange={(e) => setSearch(e.target.value)}
           aria-label={t('history.searchTree')}
         />
+        <button
+          type="button"
+          className="dsh-git-ui__refresh"
+          style={css.treeFetchBtn}
+          onClick={() => void onFetch()}
+          disabled={fetching}
+          aria-label={t('center.fetch')}
+          title={t('center.fetch')}
+        >
+          {fetching ? t('center.fetching') : t('center.fetch')}
+        </button>
       </div>
+      {fetchNote !== null && <div style={css.treeFetchNote}>{fetchNote}</div>}
       <div style={css.historyTree}>
         <button
           type="button"
@@ -1159,14 +1207,14 @@ function HistoryFilterTree({
         {tree !== null && (searching ? (
           // 搜索态：匹配行平铺（本地→远程→标签），忽略折叠。
           <>
-            {tree.local.filter((b) => matches(b.name)).map((b) => row(b.name, b.name, filter.kind === 'ref' && filter.name === b.name, b.name === tree.current, 24))}
+            {tree.local.filter((b) => matches(b.name)).map((b) => row(b.name, b.name, filter.kind === 'ref' && filter.name === b.name, b.name === tree.current, 24, b))}
             {tree.remote.filter((b) => matches(b.name)).map((b) => row(b.name, bareOf(b.name), filter.kind === 'ref' && filter.name === b.name, false, 24))}
             {tree.tags.filter((b) => matches(b.name)).map((b) => tagRow(b.name))}
           </>
         ) : (
           <>
             {sectionHead('local', t('center.localBranches'))}
-            {!closed.has('local') && tree.local.map((b) => row(b.name, b.name, filter.kind === 'ref' && filter.name === b.name, b.name === tree.current, 24))}
+            {!closed.has('local') && tree.local.map((b) => row(b.name, b.name, filter.kind === 'ref' && filter.name === b.name, b.name === tree.current, 24, b))}
             {tree.remote.length > 0 && sectionHead('remote', t('center.remoteBranches'))}
             {!closed.has('remote') && remoteGroups.map(([remoteName, branches]) => (
               <div key={`g-${remoteName}`}>

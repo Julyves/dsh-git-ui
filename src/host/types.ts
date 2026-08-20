@@ -119,6 +119,7 @@ export type GitAction =
   | { readonly kind: 'branch-create'; readonly name: string; readonly from?: string }
   | { readonly kind: 'branch-checkout'; readonly name: string }
   | { readonly kind: 'branch-delete'; readonly name: string; readonly force?: boolean }
+  | { readonly kind: 'fetch' }
 
 export type GitOperationErrorCode =
   | 'session-not-found'
@@ -169,10 +170,15 @@ export interface GitFileStat {
   readonly status: GitChangeStatus
 }
 
-/** One branch row from `git branch --format`. */
+/** One branch row from `git branch --format`. Local branches may carry
+ * ahead/behind counts relative to their upstream (from `%(upstream:track)`). */
 export interface GitBranch {
   readonly name: string
   readonly shortHash: string | null
+  /** 本地分支领先上游的提交数（仅本地有上游时存在）。 */
+  readonly ahead?: number
+  /** 本地分支落后上游的提交数（仅本地有上游时存在）。 */
+  readonly behind?: number
 }
 
 export type GitQueryResult =

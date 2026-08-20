@@ -207,14 +207,16 @@ async function tagsQuery(deps: SnapshotDeps, root: string): Promise<GitQueryResp
 }
 
 async function branchesQuery(deps: SnapshotDeps, root: string): Promise<GitQueryResponse> {
-  // git branch --format supports %09 (tab) but not %xNN escapes — tab it is.
-  const FORMAT = '--format=%(refname:short)%09%(objectname:short)'
-  const local = await runCommand(deps.run, ['git', 'branch', FORMAT], root, 'branch', deps.signal)
+  // 本地分支格式：name\thash\tupstream\ttrack（track 如 [ahead 2, behind 1]）。
+  // 远程分支无上游 → upstream/track 为空。
+  const LOCAL_FORMAT = '--format=%(refname:short)%09%(objectname:short)%09%(upstream:short)%09%(upstream:track)'
+  const REMOTE_FORMAT = '--format=%(refname:short)%09%(objectname:short)'
+  const local = await runCommand(deps.run, ['git', 'branch', LOCAL_FORMAT], root, 'branch', deps.signal)
   if ('failure' in local) return { ok: false, error: operationError(local.failure).error }
   if (local.run.timedOut) return { ok: false, error: { code: 'timeout' } }
   if (local.run.exitCode !== 0) return gitError('branch', local.run.stderr, local.run.stdout)
 
-  const remote = await runCommand(deps.run, ['git', 'branch', '-r', FORMAT], root, 'branch -r', deps.signal)
+  const remote = await runCommand(deps.run, ['git', 'branch', '-r', REMOTE_FORMAT], root, 'branch -r', deps.signal)
   if ('failure' in remote) return { ok: false, error: operationError(remote.failure).error }
   if (remote.run.timedOut) return { ok: false, error: { code: 'timeout' } }
   if (remote.run.exitCode !== 0) return gitError('branch -r', remote.run.stderr, remote.run.stdout)
@@ -243,14 +245,30 @@ async function branchesQuery(deps: SnapshotDeps, root: string): Promise<GitQuery
   }
 }
 
-/** Parse `%(refname:short)%09%(objectname:short)` rows (tab-separated). */
+/**
+ * 解析 `%(refname:short)%09%(objectname:short)[%09%(upstream:short)%09%(upstream:track)]` 行。
+ * 本地分支含 4 字段（upstream + track），远程分支仅 2 字段（无上游）。
+ * track 格式：`[ahead N]`、`[behind N]`、`[ahead N, behind N]` 或空（无上游/已同步）。
+ */
 function parseBranchList(output: string): readonly GitBranch[] {
   const branches: GitBranch[] = []
   for (const line of output.split('\n')) {
     if (line === '') continue
-    const [name, hash] = line.split('\t')
+    const parts = line.split('\t')
+    const name = parts[0]
+    const hash = parts[1]
     if (name === undefined || name === '') continue
-    branches.push({ name, shortHash: hash === undefined || hash === '' ? null : hash })
+    const track = parts[3] ?? ''
+    const aheadMatch = /ahead (\d+)/.exec(track)
+    const behindMatch = /behind (\d+)/.exec(track)
+    const ahead = aheadMatch ? Number(aheadMatch[1]) : 0
+    const behind = behindMatch ? Number(behindMatch[1]) : 0
+    branches.push({
+      name,
+      shortHash: hash === undefined || hash === '' ? null : hash,
+      ...(ahead > 0 ? { ahead } : {}),
+      ...(behind > 0 ? { behind } : {}),
+    })
   }
   return branches
 }

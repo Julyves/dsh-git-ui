@@ -306,6 +306,19 @@ export const emptyNote: CSSProperties = {
   padding: '4px 0',
 }
 
+/** 居中空状态占位（IDEA 式：大区空背景时中心显示提示文字）。 */
+export const centeredEmpty: CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontSize: 12,
+  lineHeight: '18px',
+  padding: '16px 0',
+}
+
 /**
  * Global styles for pseudo-class interactions (inline styles can't express
  * :hover/:focus-visible). Injected once per document under a plugin-scoped id.
@@ -345,6 +358,7 @@ const globalCss = [
   // 行操作图标按钮的过渡。
   '.dsh-git-ui__icon-btn { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   '.dsh-git-ui__icon-btn:disabled { opacity: 0.45; cursor: default; }',
+  '.dsh-git-ui__refresh:disabled { opacity: 0.45; cursor: default; }',
   '.dsh-git-ui__diff-fold { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   // 底栏主操作过渡（按压缩放 + hover 淡底）。
   '.dsh-git-ui__footer-primary { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
@@ -1042,6 +1056,43 @@ export const treeName: CSSProperties = {
 export const treeNameCurrent: CSSProperties = {
   color: 'var(--dsw-alias-state-business-primary)',
   fontWeight: 600,
+}
+
+/** 分支与远程同步差异徽标（↑n ↓m），弱化等宽小字。 */
+export const treeSyncBadge: CSSProperties = {
+  flex: 'none',
+  fontSize: 10,
+  lineHeight: '14px',
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontVariantNumeric: 'tabular-nums',
+  whiteSpace: 'nowrap',
+}
+
+/** 过滤树头部 fetch 按钮（与搜索框同栏）。 */
+export const treeFetchBtn: CSSProperties = {
+  flex: 'none',
+  border: '1px solid var(--dsw-alias-border-l2)',
+  borderRadius: 8,
+  background: 'var(--dsw-alias-bg-layer-2)',
+  color: 'var(--dsw-alias-label-secondary)',
+  fontSize: 11,
+  lineHeight: '14px',
+  padding: '4px 8px',
+  cursor: 'pointer',
+  font: 'inherit',
+  whiteSpace: 'nowrap',
+}
+
+/** fetch 结果提示（成功弱化色 / 失败可见文本）。 */
+export const treeFetchNote: CSSProperties = {
+  flex: 'none',
+  fontSize: 11,
+  lineHeight: '16px',
+  color: 'var(--dsw-alias-label-tertiary)',
+  padding: '4px 12px',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
 }
 
 /** 中栏顶部工具栏：与左右 paneHead 同高同边线，组成统一头带。 */

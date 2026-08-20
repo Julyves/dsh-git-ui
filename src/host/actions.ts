@@ -56,6 +56,9 @@ function buildArgv(action: GitAction, root: string): { readonly argv: readonly (
       return { argv: [['git', 'checkout', action.name]] }
     case 'branch-delete':
       return { argv: [['git', 'branch', action.force === true ? '-D' : '-d', action.name]] }
+    case 'fetch':
+      // fetch --all --prune：拉取所有远程引用更新 + 清理已删除的远程跟踪分支。
+      return { argv: [['git', 'fetch', '--all', '--prune']] }
   }
 }
 

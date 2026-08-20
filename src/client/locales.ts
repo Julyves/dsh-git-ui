@@ -99,6 +99,11 @@ export const zh = {
   'diff.foldCollapsed': '… {n} 行未变更',
   'diff.binary': '二进制文件，无法显示差异',
   'changes.listTruncated': '仅显示前 {count} 个，共 {total} 个变更',
+  'right.noMessage': '无提交信息',
+  'history.noResults': '未找到匹配的提交',
+  'center.fetch': '拉取远程',
+  'center.fetching': '拉取中…',
+  'center.fetchDone': '已同步远程',
 } satisfies Record<string, string>
 
 export type GitKey = keyof typeof zh
@@ -202,4 +207,9 @@ export const en: Record<GitKey, string> = {
   'diff.foldCollapsed': '… {n} unchanged lines',
   'diff.binary': 'Binary file — diff unavailable',
   'changes.listTruncated': 'Showing first {count} of {total} changes',
+  'right.noMessage': 'No commit message',
+  'history.noResults': 'No matching commits found',
+  'center.fetch': 'Fetch remote',
+  'center.fetching': 'Fetching…',
+  'center.fetchDone': 'Remote synced',
 }
