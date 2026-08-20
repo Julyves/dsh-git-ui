@@ -99,9 +99,12 @@ export const gitActionSchema = z.discriminatedUnion('kind', [
 ])
 
 export const gitOperationErrorSchema = z.object({
+  // 与 host GitOperationErrorCode 保持一致：zod z.enum 手工镜像枚举，缺一项
+  // 会在 strict 解码时 reject，把可预期业务错误改写为晦涩的 git-error。
   code: z.enum([
     'session-not-found', 'cwd-unavailable', 'path-not-found',
     'not-a-git-repo', 'invalid-path', 'invalid-name', 'git-error', 'timeout',
+    'local-changes-block',
   ]),
   message: z.string().optional(),
 })

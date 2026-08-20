@@ -281,7 +281,7 @@ describe('runAction — branches', () => {
     expect(result.snapshot.branch).toBe('other')
   })
 
-  it('surfaces a git error when checkout collides with a dirty tree', async () => {
+  it('classifies a dirty-tree checkout collision as local-changes-block (friendly alert)', async () => {
     const dir = await tempDir()
     await gitInit(dir)
     // Give `other` divergent content so the checkout really conflicts.
@@ -293,7 +293,12 @@ describe('runAction — branches', () => {
     await writeFile(join(dir, 'readme.txt'), 'dirty local change\n')
     const result = await runAction(depsFor(dir), CONFIG, request('s1', { kind: 'branch-checkout', name: 'other' }))
     expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.error.code).toBe('git-error')
+    if (!result.ok) {
+      // 可预期业务失败：专用 code（client 映射友好文案 + 处理变更引导），
+      // 原始 git 信息仍保留在 message 供查看。
+      expect(result.error.code).toBe('local-changes-block')
+      expect(result.error.message).toMatch(/overwritten by checkout/i)
+    }
   })
 
   it('deletes a merged branch safely and refuses the current branch', async () => {

@@ -15,7 +15,7 @@
  */
 import { resolve, sep } from 'node:path'
 import { resolveWorkspace, runCommand, snapshotForSession, type GitStatusConfig, type SnapshotDeps } from './core.ts'
-import type { GitAction, GitActionResult, GitActionRequest } from './types.ts'
+import type { GitAction, GitActionResult, GitActionRequest, GitOperationErrorCode } from './types.ts'
 
 /** Build the command sequence for one action, validating every path against the root. */
 function buildArgv(action: GitAction, root: string): { readonly argv: readonly (readonly string[])[] } | { readonly error: string } {
@@ -107,6 +107,19 @@ export function operationError(failure: Extract<Awaited<ReturnType<typeof resolv
 }
 
 /**
+ * 把 git 命令失败归类为可预期的业务错误（其余保持 git-error）。
+ * 切分支被工作区未提交变更阻止是最常见的可预期失败：git 输出
+ * "would be overwritten by checkout"（或中文本地化 "将被 checkout 覆盖"），
+ * 归一化为 local-changes-block，client 据此给友好提示 + 处理变更引导。
+ */
+export function classifyOperationError(kind: GitAction['kind'], message: string): GitOperationErrorCode {
+  if (kind === 'branch-checkout' && /would be overwritten by checkout|将被 checkout 覆盖|有未跟踪工作区文件将会被 checkout 覆盖/i.test(message)) {
+    return 'local-changes-block'
+  }
+  return 'git-error'
+}
+
+/**
  * Execute one management action against the session's repository and return
  * the refreshed snapshot on success (the caller re-renders from it, so the
  * UI never waits for the next poll).
@@ -147,10 +160,11 @@ export async function runAction(
       // git writes user-facing failures to stderr OR stdout (e.g. a clean
       // repo's `git commit` reports "nothing to commit" on stdout).
       const message = outcome.run.stderr.trim() || outcome.run.stdout.trim()
+      const code = classifyOperationError(request.action.kind, message)
       return {
         ok: false,
         error: {
-          code: 'git-error',
+          code,
           message: message !== '' ? message : `git ${request.action.kind} exited ${String(outcome.run.exitCode)}`,
         },
       }

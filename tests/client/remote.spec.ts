@@ -173,6 +173,18 @@ describe('gitInfoRemote run endpoint', () => {
     const ok = runDescriptor.result.schema.parse({ ok: true, snapshot: sampleSnapshot() })
     expect(ok).toMatchObject({ ok: true })
   })
+
+  it('round-trips a local-changes-block run failure through the codecs (wire contract sync)', () => {
+    // host 新增错误码必须同步进 gitOperationErrorSchema，否则 strict 解码
+    // reject → client 把可预期业务错误改写为晦涩 git-error，友好化失效。
+    const runDescriptor = gitInfoRemote.descriptors[1]
+    if (runDescriptor === undefined) throw new Error('missing run descriptor')
+    const failure = runDescriptor.result.schema.parse({
+      ok: false,
+      error: { code: 'local-changes-block', message: 'error: Your local changes ... would be overwritten by checkout ... Aborting' },
+    })
+    expect(failure).toMatchObject({ ok: false, error: { code: 'local-changes-block' } })
+  })
 })
 
 describe('gitInfoRemote query endpoint', () => {

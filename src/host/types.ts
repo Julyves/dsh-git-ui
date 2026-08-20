@@ -136,6 +136,10 @@ export type GitOperationErrorCode =
   | 'invalid-name'
   | 'git-error'
   | 'timeout'
+  /** 切分支被工作区未提交变更阻止（git: "would be overwritten by checkout"）。
+   * host 归一化为业务错误：client 用友好文案 +「处理变更」引导，不再直接
+   * 抛原始多行 git stderr。原始信息保留在 message。 */
+  | 'local-changes-block'
 
 export type GitActionResult =
   | { readonly ok: true; readonly snapshot: GitSnapshot; readonly output?: string }

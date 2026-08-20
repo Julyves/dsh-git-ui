@@ -30,6 +30,7 @@ import { buildSideBySide, capSideBySideRows, isBinaryDiff, summarizeChanges, typ
 import { diffBaseOf, reconcileDiffSelection, stepDiffSelection, type DiffSelection } from './changes-diff.ts'
 import { BranchIcon, ChevronIcon, CloseIcon, CollapseAllIcon, DiffIcon, ExpandAllIcon, FileIcon, fileIconForPath, FolderIcon, NextIcon, PrevIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
+import { errorText } from './error-text.ts'
 import { SelectMenu } from './select-menu.tsx'
 import * as css from './styles.ts'
 
@@ -46,7 +47,8 @@ export interface GitCenterProps {
 
 type TabKey = 'changes' | 'history'
 
-type Feedback = { readonly text: string } | null
+/** 反馈条：text 为展示文案（业务错误经 i18n 友好化）；detail 保留原始信息供 title。 */
+type Feedback = { readonly text: string; readonly detail?: string } | null
 
 interface ToastState {
   readonly text: string
@@ -98,7 +100,10 @@ export function GitCenter({
       setToast({ text: successText, seq: Date.now() })
       return true
     }
-    setFeedback({ text: result.error.message ?? result.error.code })
+    setFeedback({
+      text: errorText(result.error.code, result.error.message, t),
+      ...(result.error.message === undefined ? {} : { detail: result.error.message }),
+    })
     return false
   }
 
@@ -133,7 +138,7 @@ export function GitCenter({
 
         <div style={css.centerBody}>
           {feedback !== null && (
-            <div style={css.feedbackError} role="alert">
+            <div style={css.feedbackError} role="alert" title={feedback.detail}>
               <span style={{ flex: 1 }}>{feedback.text}</span>
               <button type="button" style={css.feedbackClose} onClick={() => setFeedback(null)} aria-label={t('center.close')}>✕</button>
             </div>

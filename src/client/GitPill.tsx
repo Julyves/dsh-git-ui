@@ -19,12 +19,13 @@ import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { GitObservable, GitQueryOutcome, GitView } from './controller.ts'
 import { GitCenter } from './GitCenter.tsx'
 import { fileIconForPath, FolderIcon, RollbackIcon, StageIcon, UnstageIcon } from './icons.tsx'
-import type { GitAction, GitActionResult, GitBranch, GitQueryRequest } from '../host/types.ts'
+import type { GitAction, GitActionResult, GitBranch, GitOperationErrorCode, GitQueryRequest } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import { SelectMenu } from './select-menu.tsx'
 import { splitChangePath } from './file-tree.ts'
 import { shouldClosePopup } from './popup-close.ts'
 import { diffBaseOf } from './changes-diff.ts'
+import { errorText, errorAction } from './error-text.ts'
 import * as css from './styles.ts'
 
 // Inject the plugin's interaction styles once (idempotent, browser-only).
@@ -142,13 +143,22 @@ function GitPopupBody({
   const s = view.snapshot
   const branchLabel = s.branch === null ? `(${t('pill.detached')})` : s.branch
 
-  // 分支管理状态（自原 BranchQuickManage 并入）：切换（头部内联）+ 新建（上提）。
+  /** 分支管理状态（自原 BranchQuickManage 并入）：切换（头部内联）+ 新建（上提）。 */
   const [branchData, setBranchData] = useState<{ current: string | null; local: readonly GitBranch[] } | null>(null)
   const [busy, setBusy] = useState(false)
   const [newName, setNewName] = useState('')
-  const [note, setNote] = useState<string | null>(null)
+  const [note, setNote] = useState<{ text: string; detail?: string; action?: 'open-center' } | null>(null)
   // 变更行丢弃两步确认：armed 记录待确认的路径，3s 自动解除。
   const [armed, setArmed] = useState<string | null>(null)
+
+  /** 操作失败 → 友好告警：业务错误用 i18n 文案 + 行动按钮，原始信息留 detail。 */
+  const setErrorNote = (err: { code: GitOperationErrorCode; message?: string }): void => {
+    setNote({
+      text: errorText(err.code, err.message, t),
+      ...(err.message === undefined ? {} : { detail: err.message }),
+      ...(errorAction(err.code) === null ? {} : { action: errorAction(err.code) ?? undefined }),
+    })
+  }
 
   const reload = async (): Promise<void> => {
     const outcome = await query({ kind: 'branches' })
@@ -174,7 +184,7 @@ function GitPopupBody({
     setNote(null)
     const result = await run({ kind: 'branch-checkout', name })
     setBusy(false)
-    if (!result.ok) setNote(result.error.message ?? result.error.code)
+    if (!result.ok) setErrorNote(result.error)
     await reload()
   }
 
@@ -186,10 +196,10 @@ function GitPopupBody({
     const created = await run({ kind: 'branch-create', name })
     if (created.ok) {
       const switched = await run({ kind: 'branch-checkout', name })
-      if (!switched.ok) setNote(switched.error.message ?? switched.error.code)
+      if (!switched.ok) setErrorNote(switched.error)
       setNewName('')
     } else {
-      setNote(created.error.message ?? created.error.code)
+      setErrorNote(created.error)
     }
     setBusy(false)
     await reload()
@@ -202,7 +212,7 @@ function GitPopupBody({
     setNote(null)
     const result = await run(action)
     setBusy(false)
-    if (!result.ok) setNote(result.error.message ?? result.error.code)
+    if (!result.ok) setErrorNote(result.error)
   }
 
   const stage = (path: string): void => void runChange({ kind: 'stage', paths: [path] }, path)
@@ -267,7 +277,24 @@ function GitPopupBody({
           {t('center.createAndSwitch')}
         </Button>
       </div>
-      {note !== null && <div style={css.emptyNote} role="alert">{note}</div>}
+      {note !== null && (
+        <div style={css.popupNote} role="alert">
+          <span style={{ flex: 1, minWidth: 0 }} title={note.detail}>{note.text}</span>
+          {note.action === 'open-center' && (
+            <Button size="sm" onClick={openCenter}>{t('error.handleChanges')}</Button>
+          )}
+          <button
+            type="button"
+            className="dsh-git-ui__icon-btn"
+            style={css.rowIconButton}
+            title={t('center.close')}
+            aria-label={t('center.close')}
+            onClick={() => setNote(null)}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div style={css.sectionTitle}>{t('popup.recentCommits')}</div>
       {s.recentCommits.length === 0
         ? <div style={css.emptyNote}>{t('popup.emptyCommits')}</div>

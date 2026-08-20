@@ -713,6 +713,21 @@ export const feedbackError: CSSProperties = {
   overflowY: 'auto',
 }
 
+/** popup 告警横幅：友好文案 + 行动按钮 + 关闭；原始信息在 title。 */
+export const popupNote: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  margin: '8px 12px 0',
+  padding: '6px 8px',
+  borderRadius: 8,
+  fontSize: 12,
+  lineHeight: '18px',
+  background: 'var(--dsw-alias-state-error-secondary)',
+  color: 'var(--dsw-alias-state-error-primary)',
+  wordBreak: 'break-word',
+}
+
 export const feedbackClose: CSSProperties = {
   flex: 'none',
   border: 0,
