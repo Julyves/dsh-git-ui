@@ -705,15 +705,20 @@ export const feedbackError: CSSProperties = {
   borderRadius: 8,
   fontSize: 12,
   lineHeight: '18px',
-  background: 'var(--dsw-alias-state-error-secondary)',
-  color: 'var(--dsw-alias-state-error-primary)',
+  // 淡晕背景 + 高对比文字（与 sbsDel/chip 同一配色语言）；
+  // 旧用 state-error-secondary 饱和填充 + error-primary 同色系文字，
+  // 对比度极低、文字几乎不可读。
+  background: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent)',
+  color: 'var(--dsw-alias-label-primary)',
+  borderLeft: '3px solid var(--dsw-alias-state-error-primary)',
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
   maxHeight: 120,
   overflowY: 'auto',
 }
 
-/** popup 告警横幅：友好文案 + 行动按钮 + 关闭；原始信息在 title。 */
+/** popup 告警横幅：友好文案 + 行动按钮 + 关闭；原始信息在 title。
+ * 淡红晕背景 + 高对比文字 + 左侧红色发丝边（语义标识），不再饱和填充压文字。 */
 export const popupNote: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -723,8 +728,9 @@ export const popupNote: CSSProperties = {
   borderRadius: 8,
   fontSize: 12,
   lineHeight: '18px',
-  background: 'var(--dsw-alias-state-error-secondary)',
-  color: 'var(--dsw-alias-state-error-primary)',
+  background: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent)',
+  color: 'var(--dsw-alias-label-primary)',
+  borderLeft: '3px solid var(--dsw-alias-state-error-primary)',
   wordBreak: 'break-word',
 }
 
