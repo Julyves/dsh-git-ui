@@ -129,9 +129,10 @@ async function diffQuery(
   base: 'worktree' | 'staged',
 ): Promise<GitQueryResponse> {
   if (!isSafePath(path, root)) return { ok: false, error: { code: 'invalid-path', message: `unsafe path: ${path}` } }
+  // 使用 -U999999 显示完整文档上下文（而非仅变更 hunk），支持文档浏览体验。
   const argv = base === 'staged'
-    ? ['git', 'diff', '--cached', '--', path]
-    : ['git', 'diff', '--', path]
+    ? ['git', 'diff', '--cached', '-U999999', '--', path]
+    : ['git', 'diff', '-U999999', '--', path]
   const run = await runCommand(deps.run, argv, root, 'diff', deps.signal)
   if ('failure' in run) return { ok: false, error: operationError(run.failure).error }
   if (run.run.timedOut) return { ok: false, error: { code: 'timeout' } }
@@ -140,7 +141,7 @@ async function diffQuery(
     return { ok: true, value: { kind: 'diff', path, text: run.run.stdout } }
   }
   // 空差异：可能是未版本管理文件——与 /dev/null 对比生成全增差异。
-  const ni = await runCommand(deps.run, ['git', 'diff', '--no-index', '--', '/dev/null', path], root, 'diff --no-index', deps.signal)
+  const ni = await runCommand(deps.run, ['git', 'diff', '--no-index', '-U999999', '--', '/dev/null', path], root, 'diff --no-index', deps.signal)
   if ('failure' in ni) return { ok: false, error: operationError(ni.failure).error }
   if (ni.run.timedOut) return { ok: false, error: { code: 'timeout' } }
   if (ni.run.exitCode !== 0 && ni.run.exitCode !== 1) return gitError('diff', ni.run.stderr, ni.run.stdout)

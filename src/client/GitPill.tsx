@@ -21,6 +21,7 @@ import { GitCenter } from './GitCenter.tsx'
 import { FolderIcon } from './icons.tsx'
 import type { GitAction, GitActionResult, GitBranch, GitQueryRequest } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
+import { SelectMenu } from './select-menu.tsx'
 import * as css from './styles.ts'
 
 // Inject the plugin's interaction styles once (idempotent, browser-only).
@@ -200,15 +201,12 @@ function BranchQuickManage({
   return (
     <>
       <div style={css.branchManageRow}>
-        <select
-          style={css.branchSelect}
+        <SelectMenu
           value={data.current ?? ''}
-          aria-label={t('center.currentBranch')}
-          disabled={busy}
-          onChange={(e) => void switchTo(e.target.value)}
-        >
-          {data.local.map((b) => <option key={b.name} value={b.name}>{b.name}</option>)}
-        </select>
+          options={data.local.map((b) => ({ value: b.name, label: b.name }))}
+          onSelect={(name) => void switchTo(name)}
+          ariaLabel={t('center.currentBranch')}
+        />
         <span style={css.commitHint}>{t('center.currentBranch')}</span>
       </div>
       <div style={css.branchManageRow}>
@@ -226,16 +224,12 @@ function BranchQuickManage({
         </Button>
       </div>
       <div style={css.branchManageRow}>
-        <select
-          style={css.branchSelect}
+        <SelectMenu
           value={deleteTarget}
-          aria-label={t('center.deleteBranch')}
-          disabled={busy}
-          onChange={(e) => { setDeleteTarget(e.target.value); setDeleteArmed(false) }}
-        >
-          <option value="">{t('center.deleteBranch')}</option>
-          {deletable.map((b) => <option key={b.name} value={b.name}>{b.name}</option>)}
-        </select>
+          options={[{ value: '', label: t('center.deleteBranch') }, ...deletable.map((b) => ({ value: b.name, label: b.name }))]}
+          onSelect={(name) => { setDeleteTarget(name); setDeleteArmed(false) }}
+          ariaLabel={t('center.deleteBranch')}
+        />
         <Button size="sm" disabled={busy || deleteTarget === ''} onClick={() => void remove()}>
           {deleteArmed ? t('center.confirmDeleteBranch') : t('center.deleteBranch')}
         </Button>
