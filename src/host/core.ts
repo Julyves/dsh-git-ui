@@ -157,8 +157,14 @@ export async function resolveWorkspace(
  *   1. `git rev-parse --show-toplevel`      — repo detection (exit 128 → not-a-git-repo)
  *   2. `git branch --show-current`          — null when detached
  *   3. `git rev-parse --short HEAD`         — null + unborn when the repo has no commits
- *   4. `git status --porcelain=v1 -z --branch`
+ *   4. `git status --porcelain=v1 -z --branch --untracked-files=all`
  *   5. `git log -n 5 --format=%H%x1f%h%x1f%s%x1f%an%x1f%aI`
+ *
+ * --untracked-files=all：git 默认 normal 模式会把整目录未跟踪折叠为单条
+ * `?? dir/`（尾斜杠）且不枚举其内部文件——隐藏目录（.agent/.tianqi 等）的
+ * 变更因此从不进入变更清单。`all` 强制逐文件枚举（与 IDEA / VSCode 一致），
+ * 内部文件得以展示；maxChanges 截断列表、maxStatusBytes spill 保计数精确，
+ * 超大未跟踪树（如未 gitignore 的构建产物）经此路径优雅降级。
  */
 export async function snapshotForSession(
   deps: SnapshotDeps,
@@ -182,7 +188,8 @@ export async function snapshotForSession(
   // main`), so a corrupt repo is never misreported as "no commits".
   const head = headRun.run.exitCode === 0 ? (headRun.run.stdout.trim() || null) : null
 
-  const status = await runCommand(deps.run, ['git', 'status', '--porcelain=v1', '-z', '--branch'], root, 'status', deps.signal)
+  // --untracked-files=all：强制枚举未跟踪目录内部文件（根因修复——见模块注释）。
+  const status = await runCommand(deps.run, ['git', 'status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all'], root, 'status', deps.signal)
   if ('failure' in status) return { ok: false, error: status.failure }
   if (status.run.timedOut) return { ok: false, error: { code: 'timeout' } }
   if (status.run.exitCode !== 0) {
