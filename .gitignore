@@ -31,3 +31,10 @@ AGENT.md
 .agent/
 .mimocode/
 .codegraph/
+
+# Release
+release/
+
+# Scripts (local-only, not tracked)
+scripts/
+

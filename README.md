@@ -133,6 +133,34 @@ pnpm run build        # host (esbuild ESM, never minified) + client (ModuleLoade
 dsh plugin --profile web add ./   # local install; restart dsh web to verify
 ```
 
+### Architecture
+
+The plugin is layered to isolate the dsh platform behind a narrow adapter seam,
+so business logic stays untouched when dsh APIs evolve:
+
+```mermaid
+flowchart TB
+    subgraph Biz["Business Layer — zero dsh imports"]
+        HostBiz["src/host/ · core / actions / queries / parser"]
+        ClientBiz["src/client/ · controller / GitPill / GitCenter"]
+    end
+    subgraph Contracts["Contracts Layer — stable interfaces"]
+        C["src/contracts/ · host-endpoints / client-platform / ui-primitives"]
+    end
+    subgraph Adapters["Adapters Layer — the only dsh-aware code"]
+        A["src/adapters/dsh/ · client-adapter / ui-primitives / types"]
+    end
+    HostBiz --> C
+    ClientBiz --> C
+    C --> A
+    A --> DSH["dsh platform · cordis / typert / ui-primitives"]
+```
+
+- `src/contracts/` defines the plugin's own stable interfaces (no dsh imports).
+- `src/host/` and `src/client/` implement business logic against those interfaces.
+- `src/adapters/dsh/` is the **only** place that imports `@deepseek-ai/*`;
+  a dsh upgrade only requires changes here.
+
 ## License
 
 [MIT](LICENSE)

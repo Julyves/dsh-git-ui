@@ -130,6 +130,33 @@ pnpm run build        # host（esbuild ESM，禁止压缩）+ client（ModuleLoa
 dsh plugin --profile web add ./   # 本地安装；重启 dsh web 验证
 ```
 
+### 架构
+
+插件采用分层架构，将 dsh 平台隔离在窄适配层之后，dsh API 演进时业务逻辑零改动：
+
+```mermaid
+flowchart TB
+    subgraph Biz["业务层 — 零 dsh import"]
+        HostBiz["src/host/ · core / actions / queries / parser"]
+        ClientBiz["src/client/ · controller / GitPill / GitCenter"]
+    end
+    subgraph Contracts["契约层 — 稳定接口"]
+        C["src/contracts/ · host-endpoints / client-platform / ui-primitives"]
+    end
+    subgraph Adapters["适配层 — 唯一感知 dsh 的代码"]
+        A["src/adapters/dsh/ · client-adapter / ui-primitives / types"]
+    end
+    HostBiz --> C
+    ClientBiz --> C
+    C --> A
+    A --> DSH["dsh 平台 · cordis / typert / ui-primitives"]
+```
+
+- `src/contracts/` 定义插件自己的稳定接口（零 dsh import）。
+- `src/host/` 与 `src/client/` 基于这些接口实现业务逻辑。
+- `src/adapters/dsh/` 是**唯一** import `@deepseek-ai/*` 的地方；
+  dsh 升级只需修改此处。
+
 ## 许可证
 
 [MIT](LICENSE)
