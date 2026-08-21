@@ -19,6 +19,8 @@ const reactStub = {
   useRef: () => ({ current: null }),
   useState: () => [undefined, () => {}],
   useMemo: (fn: unknown) => (typeof fn === 'function' ? (fn as () => unknown)() : fn),
+  createContext: () => ({ Provider: (props: unknown) => props }),
+  useContext: () => undefined,
 }
 
 interface Captured {

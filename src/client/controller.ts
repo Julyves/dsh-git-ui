@@ -5,44 +5,12 @@
  * connection reset, `dispose()` on slot teardown (clears the timer and
  * rejects nothing — in-flight work settles into a withdrawn view).
  */
-import type { GitActionResult, GitActionRequest, GitQueryRequest, GitQueryResponse, GitSnapshot, GitSnapshotFailure, GitSnapshotRequest, GitSnapshotResult } from '../host/types.ts'
+import type { GitActionResult, GitActionRequest, GitQueryRequest, GitQueryResponse, GitSnapshot, GitSnapshotRequest, GitSnapshotResult } from '../host/types.ts'
+import type { GitObservable, GitView, GitRemoteLike, GitQueryOutcome, RemoteEnvelope } from '../contracts/client-platform.ts'
 
-/** The observable view contract components consume (useSyncExternalStore shape). */
-export interface GitObservable<V> {
-  subscribe(listener: () => void): () => void
-  getSnapshot(): V
-}
-
-export type GitView =
-  | { readonly state: 'no-cwd' }
-  | { readonly state: 'cold' }
-  | { readonly state: 'loading' }
-  | { readonly state: 'ready'; readonly snapshot: GitSnapshot }
-  | { readonly state: 'error'; readonly error: GitSnapshotFailure }
-
-/**
- * RPC envelope returned by every mounted Remote method (see the api-gateway
- * client's `invoke`): `ok` reflects the transport/gateway outcome, and the
- * business return value of the host method rides inside `value`. For
- * `gitInfo/snapshot` that business value is a `GitSnapshotResult` — so a
- * successful call resolves to `{ ok: true, value: { ok: true, value:
- * GitSnapshot } }`.
- */
-export type GitRemoteEnvelope<T> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: { readonly code?: string; readonly message?: string; readonly details?: unknown } }
-
-/** Structural face of the mounted gitInfo Remote namespace. */
-export interface GitRemoteLike {
-  snapshot(request: GitSnapshotRequest): Promise<GitRemoteEnvelope<GitSnapshotResult>>
-  run(request: GitActionRequest): Promise<GitRemoteEnvelope<GitActionResult>>
-  query(request: GitQueryRequest): Promise<GitRemoteEnvelope<GitQueryResponse>>
-}
-
-/** Simplified query outcome for the UI (envelope + business errors unwrapped). */
-export type GitQueryOutcome =
-  | { readonly ok: true; readonly value: Extract<GitQueryResponse, { ok: true }>['value'] }
-  | { readonly ok: false; readonly message: string }
+// Re-export for backward compatibility — 其他模块仍可从 controller 导入这些类型
+export type { GitObservable, GitView, GitRemoteLike, GitQueryOutcome } from '../contracts/client-platform.ts'
+export type { RemoteEnvelope as GitRemoteEnvelope } from '../contracts/client-platform.ts'
 
 /** Failure codes that mean "no working directory to watch" — degrade to a
  * low-frequency probe instead of a normal poll. */

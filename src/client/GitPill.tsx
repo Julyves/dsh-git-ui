@@ -15,8 +15,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { JSX } from 'react'
 import { completedTurnCount, type TurnSignalSnapshot } from './turn-signal.ts'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useUI } from '../contracts/ui-context.tsx'
 import type { GitObservable, GitQueryOutcome, GitView } from './controller.ts'
+import type { GitInjected } from '../contracts/client-platform.ts'
 import { GitCenter } from './GitCenter.tsx'
 import { fileIconForPath, FolderIcon, AlertIcon, CloseIcon, RollbackIcon, StageIcon, UnstageIcon } from './icons.tsx'
 import type { GitAction, GitActionResult, GitBranch, GitOperationErrorCode, GitQueryRequest } from '../host/types.ts'
@@ -31,20 +32,8 @@ import * as css from './styles.ts'
 // Inject the plugin's interaction styles once (idempotent, browser-only).
 css.ensureGlobalCss()
 
-/** Injected business face of the header utility entry. */
-export interface GitInjected {
-  hooks: {
-    /** The owning Session's git view source. The slot runtime binds this
-     * observable into the `useGit` selector hook the component consumes. */
-    git: GitObservable<GitView>
-  }
-  /** Force an immediate re-check (same path as polling). */
-  refresh: () => Promise<void>
-  /** Execute one management action (host returns a fresh snapshot). */
-  run: (action: GitAction) => Promise<GitActionResult>
-  /** Run one read-only query (history / diff / show / branches). */
-  query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
-}
+// Re-export for backward compatibility
+export type { GitInjected } from '../contracts/client-platform.ts'
 
 /** Selector hook shape the slot runtime binds from `hooks.git`. */
 export type UseGit = <S = GitView>(
@@ -139,6 +128,7 @@ function GitPopupBody({
   query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
   t: (key: GitKey) => string
 }): JSX.Element {
+  const { Button } = useUI()
   const now = Date.now()
   const s = view.snapshot
   const branchLabel = s.branch === null ? `(${t('pill.detached')})` : s.branch

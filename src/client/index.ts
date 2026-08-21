@@ -1,151 +1,54 @@
 /**
- * Git status widget — client half entry.
+ * dsh-git-ui client 入口：Cordis 约定字段 + 委托。
  *
- * The bundle is a ModuleLoader closure: `factory(require)` returns the plugin
- * shape `{ name, inject, apply }`; the framework activates it once the listed
- * services exist.
- *
- * Service-access contract (verified against cordis 0.1.0-rc.x): the gitInfo
- * namespace service is provided by OUR OWN `ctx.remote.$mount(gitInfoRemote)`
- * inside apply, so the main fiber can never declare `remote.gitInfo` in its
- * `inject` — cordis would wait for the service before running apply, and the
- * service only appears once apply runs (deadlock). Conversely, accessing
- * `ctx.remote.gitInfo` without the inject declaration throws cordis's
- * "cannot get property ... without inject". The consumer therefore lives in a
- * CHILD fiber created after the mount: its inject declares `remote.gitInfo`,
- * and by the time it activates the service already exists — no wait, no
- * access violation. (In-repo plugins like ui-message-feedback can inject
- * their namespace directly because a separate assembly package mounts it; a
- * standalone plugin mounts its own.)
+ * 导出 Cordis 插件约定字段（`inject` / `name` / `apply`）；`apply` 内部
+ * 将 Cordis Context 适配为 `ClientPlatform` 接口后委托给纯业务函数。
+ * dsh 适配逻辑在 `adapters/dsh/client-adapter.ts`。
  */
-import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
-import { GitController, type GitRemoteLike } from './controller.ts'
+import { createElement, type ReactNode } from 'react'
+import { GitPill, type GitPillProps } from './GitPill.tsx'
+import { UIPrimitivesProvider } from '../contracts/ui-context.tsx'
+import { dshUIPrimitives } from '../adapters/dsh/ui-primitives.ts'
+import { adaptDshClientContext, type DshClientContext } from '../adapters/dsh/client-adapter.ts'
+import { activatePlugin, type PluginDependencies } from '../contracts/plugin-activation.ts'
+import { GitController } from './controller.ts'
 import { gitInfoRemote } from './remote.ts'
-import { GitPill, type GitInjected } from './GitPill.tsx'
 import { en, zh } from './locales.ts'
 
-/** Structural face of the browser plugin context (host-provided). */
-interface ClientContext {
-  get<T = unknown>(key: string): T | undefined
-  /** Subscribe to an application event (auto-cleaned on fiber dispose). */
-  on(event: string, listener: (...args: never[]) => void): (() => void) | void
-  /** Register a side effect with auto-cleanup on fiber dispose. */
-  effect(callback: () => void | (() => void | Promise<void>), label?: string): void
-  /** Register a nested cordis plugin (fiber) under this context. */
-  plugin(definition: {
-    readonly name: string
-    readonly inject: readonly string[]
-    apply: (ctx: ClientContext) => void | Promise<void>
-  }): Promise<unknown>
-  /** The typed Client Remote mount + mounted namespaces. */
-  remote: {
-    $mount(contribution: TypertRemoteContribution): Promise<() => Promise<void>>
-    gitInfo: GitRemoteLike
-  }
-  /** The slot registry (ui-slots). */
-  slots: {
-    inject(slotName: string, provider: () => (() => void) | void): void
-    register(
-      options: {
-        readonly name: string
-        readonly id: string
-        readonly order?: number
-        readonly locale?: string
-        readonly inject: (sessionId: string) => GitInjected
-      },
-      component: unknown,
-    ): () => void
-  }
-  /** The locale service (ui-locale). */
-  locale: {
-    register(namespace: string, dictionaries: { readonly zh: Record<string, string>; readonly en: Record<string, string> }): void
-  }
-  [key: string]: unknown
-}
-
 /**
- * Required services: slot registry, Remote base (gateway client), and copy.
+ * Cordis 插件约定：声明需要的服务。
  *
- * `remote.gitInfo` is deliberately NOT listed here — see the module comment:
- * the namespace is mounted by our own apply, so injecting it would deadlock.
- * The child fiber that consumes it declares it instead (after the mount).
+ * `remote.gitInfo` 不在此列出——它由我们自己的 apply 挂载，
+ * 若在 inject 中声明会导致死锁（服务在 apply 执行后才存在）。
  */
 export const inject = ['slots', 'remote', 'locale'] as const
 
-/** Plugin identity: the factory handoff returns this plus the exports above. */
+/** 插件标识。 */
 export const name = 'dsh-git-ui'
 
+/** 插件入口使用的 UI 基础组件实现（dsh 宿主提供）。 */
+const uiPrimitives = dshUIPrimitives
+
+/** 包裹 GitPill，注入 UI 基础组件上下文。 */
+function GitPillWithUI(props: GitPillProps): ReactNode {
+  return createElement(UIPrimitivesProvider, { value: uiPrimitives }, createElement(GitPill, props))
+}
+
 /**
- * Plugin body: register copy, mount the gitInfo Remote, then host the header
- * utility in a child fiber that may legitimately access `remote.gitInfo`.
+ * Cordis 插件入口：适配 Context 后委托给纯业务函数。
+ *
+ * dsh 升级导致插件 API 变更时，只需更新 `adapters/dsh/client-adapter.ts`
+ * 中的 `DshClientContext` 接口和 `adaptDshClientContext` 实现。
  */
-export async function apply(ctx: ClientContext): Promise<void> {
-  ctx.effect(() => ctx.locale.register('git', { zh, en }), 'dsh-git-ui: dictionaries')
-
-  // Mount first — the namespace service only exists after this resolves.
-  await ctx.remote.$mount(gitInfoRemote)
-
-  const controllers = new Map<string, GitController>()
-  const faces = new Map<string, GitInjected>()
-
-  // Consumer fiber: `remote.gitInfo` is declared in ITS inject list, so the
-  // access inside the controller factory is legal; the service is already
-  // provided by the mount above, so activation does not wait (no deadlock).
-  const child = ctx.plugin({
-    name: 'dsh-git-ui:git',
-    inject: ['slots', 'remote.gitInfo'],
-    apply: (sub) => {
-      const controllerFor = (sessionId: string): GitController => {
-        let controller = controllers.get(sessionId)
-        if (controller === undefined) {
-          controller = new GitController(sub.remote.gitInfo, sessionId)
-          controllers.set(sessionId, controller)
-        }
-        return controller
-      }
-
-      sub.slots.inject('conversation.session.header.utilities', () => {
-        const dispose = sub.slots.register({
-          name: 'conversation.session.header.utilities',
-          id: 'git',
-          order: 10,
-          locale: 'git',
-          inject: (sessionId): GitInjected => {
-            // Per-session stable face: the slot runtime may re-invoke the
-            // inject factory on every render, and components depend on the
-            // `refresh` reference staying stable (a fresh arrow function per
-            // call would re-run mount effects and loop: refresh → view
-            // change → re-render → new refresh → refresh …). Cache the face
-            // so the same controller (and its bound refresh/run) is always
-            // handed out per session.
-            let face = faces.get(sessionId)
-            if (face === undefined) {
-              const controller = controllerFor(sessionId)
-              face = {
-                hooks: { git: controller as GitInjected['hooks']['git'] },
-                refresh: () => controller.refresh(),
-                run: (action) => controller.run(action),
-                query: (query) => controller.query(query),
-              }
-              faces.set(sessionId, face)
-            }
-            return face
-          },
-        }, GitPill)
-        return () => {
-          dispose()
-          for (const controller of controllers.values()) controller.dispose()
-          controllers.clear()
-          faces.clear()
-        }
-      })
-    },
-  })
-  await child
-
-  // A reconnect can only invalidate what was already read; a cold Session
-  // stays cold until something asks for it.
-  ctx.on('connection/reset', () => {
-    for (const controller of controllers.values()) controller.resync()
-  })
+export async function apply(ctx: DshClientContext): Promise<void> {
+  const platform = adaptDshClientContext(ctx)
+  
+  // 提供插件依赖
+  const deps: PluginDependencies = {
+    remoteContribution: gitInfoRemote,
+    locales: { zh, en },
+    createController: (remote, sessionId) => new GitController(remote, sessionId),
+  }
+  
+  await activatePlugin(platform, deps, GitPillWithUI)
 }

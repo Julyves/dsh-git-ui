@@ -15,8 +15,9 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"],
     "paths": {
-      "@deepseek-ai/dsh-typert-protocol": ["./types/typert-protocol.d.ts"],
-      "@deepseek-ai/cordis": ["./types/cordis.d.ts"]
+      "@deepseek-ai/dsh-typert-protocol": ["./src/adapters/dsh/types/typert-protocol.d.ts"],
+      "@deepseek-ai/cordis": ["./src/adapters/dsh/types/cordis.d.ts"],
+      "@deepseek-ai/dsh-client-ui-primitives": ["./src/adapters/dsh/types/ui-primitives.d.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx", "types/**/*.d.ts"]

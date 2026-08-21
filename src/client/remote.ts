@@ -8,7 +8,7 @@
  * sync by parsing host-typed samples through these schemas.
  */
 import { z } from 'zod'
-import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
+import type { RemoteContribution } from '../contracts/client-platform.ts'
 
 export const gitCommitSchema = z.object({
   hash: z.string(),
@@ -152,7 +152,7 @@ export const gitQueryRequestSchema = z.object({
 })
 
 /** The contribution mounted into `ctx.remote` by the client plugin body. */
-export const gitInfoRemote: TypertRemoteContribution = {
+export const gitInfoRemote: RemoteContribution = {
   package: 'dsh-git-ui',
   descriptors: [
     {

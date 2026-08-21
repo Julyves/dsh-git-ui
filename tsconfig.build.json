@@ -8,6 +8,6 @@
     "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src/host/**/*.ts", "types/**/*.d.ts"],
+  "include": ["src/host/**/*.ts", "src/adapters/dsh/types/**/*.d.ts", "types/**/*.d.ts"],
   "exclude": ["tests", "src/client"]
 }

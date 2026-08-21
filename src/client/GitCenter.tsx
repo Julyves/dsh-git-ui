@@ -16,7 +16,7 @@
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, JSX, MouseEvent as ReactMouseEvent } from 'react'
-import { Button, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useUI } from '../contracts/ui-context.tsx'
 import type {
   GitAction, GitActionResult, GitBranch, GitChange, GitFileStat,
   GitQueryRequest, GitSnapshot,
@@ -78,6 +78,7 @@ function timeAgo(iso: string, now: number, t: (key: GitKey) => string): string {
 export function GitCenter({
   open, onClose, snapshot, run, query, t, openRequest = null,
 }: GitCenterProps): JSX.Element | null {
+  const { Modal, Button, Toast } = useUI()
   const [tab, setTab] = useState<TabKey>('changes')
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState<Feedback>(null)
@@ -192,6 +193,7 @@ function ChangesTab({
   t: (key: GitKey) => string
   openRequest: { path: string; base: 'worktree' | 'staged' } | null
 }): JSX.Element {
+  const { Button } = useUI()
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [message, setMessage] = useState('')
   const [armed, setArmed] = useState<string | 'all' | null>(null)
