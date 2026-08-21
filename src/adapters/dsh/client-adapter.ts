@@ -24,6 +24,12 @@ export interface DshClientContext {
   on(event: string, listener: (...args: never[]) => void): (() => void) | void
   /** 注册副作用（自动在 fiber 卸载时清理）。 */
   effect(callback: () => void | (() => void | Promise<void>), label?: string): void
+  /** 启动一个嵌套插件 fiber（子上下文）。 */
+  plugin(definition: {
+    readonly name: string
+    readonly inject: readonly string[]
+    apply: (ctx: DshClientContext) => void | Promise<void>
+  }): Promise<unknown>
   /** Remote 服务：挂载贡献 + 访问已挂载的命名空间。 */
   remote: {
     $mount(contribution: TypertRemoteContribution): Promise<() => Promise<void>>
@@ -62,10 +68,11 @@ function toTypertContribution(ours: RemoteContribution): TypertRemoteContributio
 /**
  * 将 Cordis Context 适配为 `ClientPlatform`。
  *
- * 注意：`mountRemoteAndGetService` 的实现利用了 Cordis 的特性——
- * 挂载完成后，`ctx.remote.gitInfo` 立即可用。无需 child fiber 模式
- * （该模式是 Cordis 内部为避免 inject 死锁的优化，此处我们在 mount
- * 完成后直接访问，效果等价）。
+ * `mountRemoteAndGetService` 必须通过 child fiber 访问命名空间服务：
+ * Cordis 的访问控制要求读取 `remote.gitInfo` 前必须在 inject 中声明它，
+ * 而主 fiber 不能声明（服务由我们自己的 apply 挂载，声明会死锁——
+ * cordis 会等待 apply 执行后才存在的服务）。child fiber 在 mount 之后
+ * 激活，声明 `remote.gitInfo` 时服务已存在——无等待、无访问违规。
  */
 export function adaptDshClientContext(ctx: DshClientContext): ClientPlatform {
   return {
@@ -74,14 +81,24 @@ export function adaptDshClientContext(ctx: DshClientContext): ClientPlatform {
     },
 
     async mountRemoteAndGetService(contribution, namespace) {
-      // 挂载 Remote 贡献
+      // 挂载 Remote 贡献（主 fiber 内执行，仅调用 $mount 方法本身）
       await ctx.remote.$mount(toTypertContribution(contribution))
-      // 挂载完成后，命名空间服务立即可用
-      // 当前只有 'gitInfo' 命名空间，直接返回
-      if (namespace === 'gitInfo') {
-        return ctx.remote.gitInfo
+      if (namespace !== 'gitInfo') {
+        throw new Error(`adaptDshClientContext: 未知命名空间 "${namespace}"`)
       }
-      throw new Error(`adaptDshClientContext: 未知命名空间 "${namespace}"`)
+      // child fiber：inject 声明 remote.gitInfo，apply 内读取合法
+      let service: GitRemoteLike | undefined
+      await ctx.plugin({
+        name: 'dsh-git-ui:git',
+        inject: ['remote.gitInfo'],
+        apply: (sub) => {
+          service = sub.remote.gitInfo
+        },
+      })
+      if (service === undefined) {
+        throw new Error('adaptDshClientContext: gitInfo 服务未就绪')
+      }
+      return service
     },
 
     registerSlotEntry(options, component) {
