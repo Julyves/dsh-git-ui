@@ -14,7 +14,7 @@
  * in-panel banner. Discard/delete are destructive and require a second click
  * within 3s.
  */
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, Fragment } from 'react'
 import type { CSSProperties, JSX, MouseEvent as ReactMouseEvent } from 'react'
 import { useUI } from '../contracts/ui-context.tsx'
 import type {
@@ -23,20 +23,23 @@ import type {
 } from '../host/types.ts'
 import type { GraphCommit, GitRef } from '../host/types.ts'
 import type { GitQueryOutcome } from './controller.ts'
-import { createGraphBuilder, graphWidth, markFilterEnds, GRAPH_COLORS, type GraphRow, type GraphRowMarker } from './git-graph.ts'
+import { colorOf, createGraphBuilder, graphWidth, markFilterEnds, GRAPH_COLORS, type GraphRow, type GraphRowMarker } from './git-graph.ts'
 import { buildFileTree, splitChangePath, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
 import { buildSideBySide, capSideBySideRows, isBinaryDiff, summarizeChanges, type SideCell } from './side-by-side.ts'
 import { diffBaseOf, reconcileDiffSelection, stepDiffSelection, type DiffSelection } from './changes-diff.ts'
-import { BranchIcon, ChevronIcon, CloseIcon, CollapseAllIcon, DiffIcon, ExpandAllIcon, FileIcon, fileIconForPath, FolderIcon, NextIcon, PrevIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
+import { BranchIcon, CheckIcon, ChevronIcon, CloseIcon, CollapseAllIcon, CommitIcon, DiffIcon, ExpandAllIcon, FileIcon, fileIconForPath, FolderIcon, GearIcon, NextIcon, PrevIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
 import { errorText } from './error-text.ts'
 import { SelectMenu } from './select-menu.tsx'
+import { SettingsTab } from './settings/SettingsTab.tsx'
 import * as css from './styles.ts'
 
 export interface GitCenterProps {
   readonly open: boolean
   readonly onClose: () => void
+  /** 打开时定位的 Tab（默认 changes）；pill 齿轮入口传 settings。 */
+  readonly initialTab?: TabKey
   readonly snapshot: GitSnapshot
   readonly run: (action: GitAction) => Promise<GitActionResult>
   readonly query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
@@ -45,7 +48,8 @@ export interface GitCenterProps {
   readonly openRequest?: { readonly path: string; readonly base: 'worktree' | 'staged' } | null
 }
 
-type TabKey = 'changes' | 'history'
+/** Tab 键：设置 Tab 与功能 Tab 并列（信息架构：工作区 + 偏好区）。 */
+type TabKey = 'changes' | 'history' | 'settings'
 
 /** 反馈条：text 为展示文案（业务错误经 i18n 友好化）；detail 保留原始信息供 title。 */
 type Feedback = { readonly text: string; readonly detail?: string } | null
@@ -55,7 +59,7 @@ interface ToastState {
   readonly seq: number
 }
 
-const HISTORY_PAGE = 1000
+const HISTORY_PAGE = 300
 
 const CHIP_LETTERS: Record<string, string> = {
   added: 'A', modified: 'M', deleted: 'D', renamed: 'R',
@@ -76,13 +80,19 @@ function timeAgo(iso: string, now: number, t: (key: GitKey) => string): string {
  * every successful operation re-renders this component with fresh state.
  */
 export function GitCenter({
-  open, onClose, snapshot, run, query, t, openRequest = null,
+  open, onClose, initialTab = 'changes', snapshot, run, query, t, openRequest = null,
 }: GitCenterProps): JSX.Element | null {
-  const { Modal, Button, Toast } = useUI()
-  const [tab, setTab] = useState<TabKey>('changes')
+  const { Modal, Toast } = useUI()
+  const [tab, setTab] = useState<TabKey>(initialTab)
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState<Feedback>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
+
+  // 打开即定位（pill 齿轮 / 常规打开 / 变更文件直达）：open 上升沿重设 tab，
+  // 而非依赖 initialTab 引用变化——连续两次齿轮打开时引用不变，需以 open 为触发。
+  useEffect(() => {
+    if (open) setTab(initialTab)
+  }, [open, initialTab])
 
   // 打开定位请求（pill 点击变更文件）：切到 changes 标签，由 ChangesTab
   // 响应 openRequest 打开该文件对照。openRequest 对象引用变化即再次定位。
@@ -108,33 +118,64 @@ export function GitCenter({
     return false
   }
 
-  const tabs: Array<{ key: TabKey; label: string }> = [
+  const tabs: Array<{ key: TabKey; label: string; icon?: JSX.Element; dividerBefore?: boolean }> = [
     { key: 'changes', label: t('center.changes') },
     { key: 'history', label: t('center.history') },
+    // 偏好区：与功能 Tab 用发丝分隔线轻隔离（设置 = 非仓库操作）。
+    { key: 'settings', label: t('settings.title'), icon: <GearIcon />, dividerBefore: true },
   ]
+
+  /** Toast 通知通道：设置 Tab 的重置反馈等复用统一 toast。 */
+  const notify = (text: string): void => setToast({ text, seq: Date.now() })
+
+  /** 顶栏右端的分支上下文胶囊：承接被移除标题行的分支信息（title 显示仓库根）。 */
+  const branchLabel = snapshot.branch !== null ? snapshot.branch : `(${t('pill.detached')})`
 
   return (
     <Modal open={open} onClose={onClose} title={t('center.title')} closeLabel={t('center.close')} headless className="dsh-git-ui__center">
       <div style={css.centerShell}>
-        <div style={css.centerHeader}>
-          <h2 style={css.centerTitle} title={snapshot.root}>{snapshot.branch ?? '(detached)'} — {t('center.title')}</h2>
-          <Button size="sm" onClick={onClose} aria-label={t('center.close')}>✕</Button>
-        </div>
-
-        <div style={css.tabs} role="tablist">
-          {tabs.map(({ key, label }) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={tab === key}
-              className={`dsh-git-ui__tab${tab === key ? ' dsh-git-ui__tab--active' : ''}`}
-              style={tab === key ? { ...css.tab, ...css.tabActive } : css.tab}
-              onClick={() => setTab(key)}
+        {/* 顶栏 = 功能域：左 tab 组 + 右工具组（分支上下文 + 关闭），标题行已移除以让出内容区 */}
+        <div style={css.topBar}>
+          <div style={css.tabs} role="tablist">
+            {tabs.map(({ key, label, icon, dividerBefore }) => (
+              <Fragment key={key}>
+                {dividerBefore === true && <span style={css.tabDivider} aria-hidden="true" />}
+                <button
+                  type="button"
+                  role="tab"
+                  id={`dsh-git-ui-tab-${key}`}
+                  aria-selected={tab === key}
+                  aria-controls={`dsh-git-ui-panel-${key}`}
+                  className={`dsh-git-ui__tab${tab === key ? ' dsh-git-ui__tab--active' : ''}`}
+                  style={tab === key ? { ...css.tab, ...css.tabActive } : css.tab}
+                  onClick={() => setTab(key)}
+                >
+                  {icon !== undefined && <span style={css.tabIcon} aria-hidden="true">{icon}</span>}
+                  {label}
+                </button>
+              </Fragment>
+            ))}
+          </div>
+          <div style={css.tabsTrailing}>
+            <span
+              style={css.branchContextChip}
+              title={snapshot.root}
+              aria-label={`${t('center.currentBranch')}: ${branchLabel} · ${snapshot.root}`}
             >
-              {label}
+              <span style={snapshot.dirty ? css.dotDirty : css.dot} aria-hidden="true" />
+              <span style={css.branchContextName}>{branchLabel}</span>
+            </span>
+            <button
+              type="button"
+              className="dsh-git-ui__icon-btn"
+              style={css.rowIconButton}
+              title={t('center.close')}
+              aria-label={t('center.close')}
+              onClick={onClose}
+            >
+              <CloseIcon />
             </button>
-          ))}
+          </div>
         </div>
 
         <div style={css.centerBody}>
@@ -146,11 +187,29 @@ export function GitCenter({
           )}
 
           {/* 三标签保持挂载、display 切换：保留各自状态（选中/分页/分支列表），与 IDE 行为一致。 */}
-          <div style={tab === 'changes' ? { display: 'contents' } : { display: 'none' }}>
+          <div
+            role="tabpanel"
+            id="dsh-git-ui-panel-changes"
+            aria-labelledby="dsh-git-ui-tab-changes"
+            style={tab === 'changes' ? { display: 'contents' } : { display: 'none' }}
+          >
             <ChangesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} openRequest={openRequest} />
           </div>
-          <div style={tab === 'history' ? { display: 'contents' } : { display: 'none' }}>
+          <div
+            role="tabpanel"
+            id="dsh-git-ui-panel-history"
+            aria-labelledby="dsh-git-ui-tab-history"
+            style={tab === 'history' ? { display: 'contents' } : { display: 'none' }}
+          >
             <HistoryTab query={query} run={run} t={t} />
+          </div>
+          <div
+            role="tabpanel"
+            id="dsh-git-ui-panel-settings"
+            aria-labelledby="dsh-git-ui-tab-settings"
+            style={tab === 'settings' ? { display: 'contents' } : { display: 'none' }}
+          >
+            <SettingsTab t={t} notify={notify} />
           </div>
         </div>
       </div>
@@ -336,14 +395,28 @@ function ChangesTab({
     <div style={css.changesLayout}>
       <div style={{ ...css.changesLeft, width: leftW }}>
         <div style={css.toolRow}>
-          <Button size="sm" disabled={busy || (unstagedItems.length === 0 && untrackedItems.length === 0)} onClick={() => void execute({ kind: 'stage-all' }, t('center.done'))}>
+          <button
+            type="button"
+            className="dsh-git-ui__tool-button"
+            style={css.toolButton}
+            disabled={busy || (unstagedItems.length === 0 && untrackedItems.length === 0)}
+            onClick={() => void execute({ kind: 'stage-all' }, t('center.done'))}
+          >
             {t('center.stageAll')}
-          </Button>
-          <Button size="sm" disabled={busy || stagedItems.length === 0} onClick={() => void execute({ kind: 'unstage-all' }, t('center.done'))}>
+          </button>
+          <button
+            type="button"
+            className="dsh-git-ui__tool-button"
+            style={css.toolButton}
+            disabled={busy || stagedItems.length === 0}
+            onClick={() => void execute({ kind: 'unstage-all' }, t('center.done'))}
+          >
             {t('center.unstageAll')}
-          </Button>
-          <Button
-            size="sm"
+          </button>
+          <button
+            type="button"
+            className="dsh-git-ui__tool-button"
+            style={armed === 'all' ? { ...css.toolButton, ...css.toolButtonDanger } : css.toolButton}
             disabled={busy || stagedItems.length + unstagedItems.length === 0}
             onClick={() => {
               if (armed === 'all') {
@@ -354,11 +427,17 @@ function ChangesTab({
             }}
           >
             {armed === 'all' ? t('center.confirmDiscard') : t('center.discardAll')}
-          </Button>
+          </button>
+          <span style={{ flex: 1 }} />
         </div>
         <div style={css.changesList}>
           {snapshot.changes.length === 0
-            ? <div style={css.emptyNote}>{t('center.empty')}</div>
+            ? (
+              <div style={css.emptyState}>
+                <span style={css.emptyStateIcon} aria-hidden="true"><CheckIcon /></span>
+                {t('center.empty')}
+              </div>
+            )
             : (
               <>
                 {groups.map((group) => (
@@ -427,7 +506,12 @@ function ChangesTab({
       <Splitter kind="col" onDrag={(dx) => setLeftW((w) => clampNum(w + dx, 280, 520))} />
       <div style={css.changesRight}>
         {diffSel === null
-          ? <div style={css.rightEmptyZone}>{t('center.selectFileDiff')}</div>
+          ? (
+            <div style={css.emptyState}>
+              <span style={css.emptyStateIcon} aria-hidden="true"><DiffIcon /></span>
+              {t('center.selectFileDiff')}
+            </div>
+          )
           : (
             <>
               <div style={css.diffToolbar}>
@@ -512,6 +596,7 @@ function ChangeGroupHeader({
     <div style={css.groupHeader}>
       <input
         type="checkbox"
+        className="dsh-git-ui__checkbox"
         style={css.changeCheckbox}
         checked={allChecked}
         ref={(el) => { if (el !== null) el.indeterminate = someChecked && !allChecked }}
@@ -561,6 +646,7 @@ function ChangeRow({
     <div className="dsh-git-ui__row" style={diffActive ? { ...css.centerRow, ...css.centerRowActive } : css.centerRow}>
       <input
         type="checkbox"
+        className="dsh-git-ui__checkbox"
         style={css.changeCheckbox}
         checked={checked}
         disabled={busy}
@@ -715,6 +801,13 @@ function HistoryTab({
   t: (key: GitKey) => string
 }): JSX.Element {
   const [commits, setCommits] = useState<readonly GraphCommit[]>([])
+  /**
+   * 窗口化渲染：固定行高（HISTORY_ROW_H=32），列表只挂载可视窗 ±overscan 的行，
+   * 上下以垫片撑出滚动高度——历史与搜索结果的行数可到数千，全量渲染会拖垮
+   * Web 端（本轮修复：加载 1000+/页 全量 DOM + 行入场动画 → 转圈/加载失败）。
+   */
+  const ROW_OVERSCAN = 10
+  const [windowSlice, setWindowSlice] = useState({ start: 0, end: 60 })
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<GraphCommit | null>(null)
@@ -849,7 +942,12 @@ function HistoryTab({
   /** 无限滚动：接近底部 240px 自动加载下一批。 */
   const onScroll = (): void => {
     const el = listRef.current
-    if (el === null || loading || commits.length >= total) return
+    if (el === null) return
+    // 窗口化渲染：只渲染可视窗 ±overscan 的行（固定行高），滚动时滑动窗口。
+    const start = Math.max(0, Math.floor(el.scrollTop / css.HISTORY_ROW_H) - ROW_OVERSCAN)
+    const end = Math.min(listRows.length, Math.ceil((el.scrollTop + el.clientHeight) / css.HISTORY_ROW_H) + ROW_OVERSCAN)
+    setWindowSlice((w) => (w.start === start && w.end === end ? w : { start, end }))
+    if (loading || commits.length >= total) return
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 240) void loadPage(commits.length, filter)
   }
 
@@ -890,6 +988,9 @@ function HistoryTab({
   useEffect(() => {
     setSelected(null)
     setDetail(null)
+    // 过滤切换：列表内容整体替换，滚动与窗口化切片归零。
+    setWindowSlice({ start: 0, end: 60 })
+    if (listRef.current !== null) listRef.current.scrollTop = 0
     const cached = historyCache.current.get(cacheKey(filter))
     if (cached !== undefined) {
       setCommits(cached.commits)
@@ -1030,20 +1131,28 @@ function HistoryTab({
                 <span>{t('history.time')}</span>
               </div>
             )}
-            {listRows.map((row) => (
-              <CommitRow
-                key={row.commit.hash}
-                row={row}
-                cols={graphCols}
-                laneW={laneW}
-                gridTpl={gridTpl}
-                isSelected={selected?.hash === row.commit.hash}
-                now={now}
-                onSelect={select}
-                showGraph={!searching}
-                t={t}
-              />
-            ))}
+            {listRows.length > 0 && (
+              <>
+                {/* 顶垫：撑出窗口前的高度（固定行高 × 行数），保持滚动条真实。 */}
+                <div style={{ height: windowSlice.start * css.HISTORY_ROW_H, flexShrink: 0 }} aria-hidden="true" />
+                {listRows.slice(windowSlice.start, windowSlice.end).map((row) => (
+                  <CommitRow
+                    key={row.commit.hash}
+                    row={row}
+                    cols={graphCols}
+                    laneW={laneW}
+                    gridTpl={gridTpl}
+                    isSelected={selected?.hash === row.commit.hash}
+                    now={now}
+                    onSelect={select}
+                    showGraph={!searching}
+                    t={t}
+                  />
+                ))}
+                {/* 底垫：窗口后剩余高度（列表可能在加载更多，底垫随行数增长自动扩展）。 */}
+                <div style={{ height: Math.max(0, listRows.length - windowSlice.end) * css.HISTORY_ROW_H, flexShrink: 0 }} aria-hidden="true" />
+              </>
+            )}
             {commits.length < total && (
               <div style={css.loadSentinel}>{loading ? t('center.loading') : ''}</div>
             )}
@@ -1079,8 +1188,14 @@ function HistoryTab({
             {selected === null
               ? (
                 <>
-                  <div style={css.rightEmptyZone}>{t('right.selectCommit')}</div>
-                  <div style={{ ...css.rightEmptyZone, ...css.rightEmptyZoneBottom }}>{t('right.commitDetails')}</div>
+                  <div style={css.emptyState}>
+                    <span style={css.emptyStateIcon} aria-hidden="true"><CommitIcon /></span>
+                    {t('right.selectCommit')}
+                  </div>
+                  <div style={{ ...css.emptyState, ...css.rightEmptyZoneBottom }}>
+                    <span style={css.emptyStateIcon} aria-hidden="true"><CommitIcon /></span>
+                    {t('right.commitDetails')}
+                  </div>
                 </>
               )
               : (
@@ -1108,9 +1223,12 @@ function HistoryTab({
                   <div style={css.rightMsg}>
                     <div style={css.commitDetailHeader}>
                       <span style={css.commitDetailSubject}>{selected.subject}</span>
-                      <span style={css.commitDetailMeta}>
-                        {selected.shortHash} · {selected.author} · {timeAgo(selected.dateIso, now, t)}
-                      </span>
+                      <div style={css.commitDetailMetaRow}>
+                        <span style={css.commitDetailHash}>{selected.shortHash}</span>
+                        <span style={css.commitDetailMeta}>{selected.author}</span>
+                        <span style={css.commitDot}>·</span>
+                        <span style={css.commitDetailMeta}>{timeAgo(selected.dateIso, now, t)}</span>
+                      </div>
                     </div>
                     {detail !== null && detail.body !== ''
                       ? <pre style={css.msgBody}>{detail.body}</pre>
@@ -1380,11 +1498,9 @@ function Splitter({ kind, onDrag }: { kind: 'col' | 'row'; onDrag: (delta: numbe
 
 // ── 提交行（memo）与自绘下拉 ────────────────────────────────────────
 
-/** 搜索条目装饰圆点取色：按提交 hash 字符码累加取模，稳定多彩（与分支图同一调色板）。 */
+/** 搜索条目装饰圆点取色：提交稳定散列色（复用分支图色板与 colorOf）。 */
 function dotColorOf(hash: string): string {
-  let sum = 0
-  for (let i = 0; i < hash.length; i += 1) sum += hash.charCodeAt(i)
-  return GRAPH_COLORS[sum % GRAPH_COLORS.length]!
+  return colorOf(hash)
 }
 
 /** 提交行：memo 化保证千条级加载下过滤/选中变更仅重渲染受影响行。 */
@@ -1401,10 +1517,12 @@ const CommitRow = memo(function CommitRow({
   showGraph: boolean
   t: (key: GitKey) => string
 }): JSX.Element {
+  const isMerge = row.commit.parents.length > 1
   return (
     <button
       type="button"
       className="dsh-git-ui__commit-row"
+      aria-current={isSelected ? 'true' : undefined}
       style={{
         ...(isSelected ? { ...css.historyRow, ...css.historyRowSelected } : css.historyRow),
         gridTemplateColumns: gridTpl,
@@ -1412,15 +1530,24 @@ const CommitRow = memo(function CommitRow({
       onClick={() => onSelect(row.commit)}
     >
       {showGraph ? (
-        <GraphStrip row={row} cols={cols} laneW={laneW} endOpen={row.endOpen} />
+        <GraphStrip row={row} cols={cols} laneW={laneW} endOpen={row.endOpen} selected={isSelected} />
       ) : (
         <span style={css.searchDot} aria-hidden="true">
-          <span style={{ ...css.searchDotInner, background: dotColorOf(row.commit.hash) }} />
+          <span
+            style={{
+              ...css.searchDotInner,
+              background: dotColorOf(row.commit.hash),
+              ...(isSelected ? { boxShadow: '0 0 0 2px var(--dsw-alias-state-business-primary)' } : {}),
+            }}
+          />
         </span>
       )}
       <span style={css.historySubjectCell}>
         <RefPills refs={row.commit.refs} />
-        <span style={css.commitSubjectLine} title={row.commit.subject}>{row.commit.subject}</span>
+        {/* IDEA 式：merge 提交（多父）主题弱化——不喧宾夺主，与普通提交区分。 */}
+        <span style={isMerge ? { ...css.commitSubjectLine, ...css.commitSubjectMerge } : css.commitSubjectLine} title={row.commit.subject}>
+          {row.commit.subject}
+        </span>
       </span>
       <span style={css.historyHash} title={row.commit.hash}>{row.commit.shortHash}</span>
       <span style={css.historyAuthor} title={row.commit.author}>{row.commit.author}</span>
@@ -1465,62 +1592,90 @@ function RefPills({ refs }: { refs: readonly GitRef[] }): JSX.Element | null {
 
 /**
  * 一行的分支图：条带高度 = HISTORY_ROW_H（与行高同一常量），行间线条连续。
- * 竖线贯穿活跃车道；节点车道按 nodeFromTop / nodeContinues 画上下半段；
- * 分叉经 joins 水平连接汇入节点；merge 分裂为贝塞尔曲线（节点→行底）。
- * 宽度 = 全图车道数 × laneW（自适应车道宽，超宽图压缩以适配有界轨道、
- * 不挤压右侧提交信息）。
+ *
+ * 颜色（IDEA 式）：由 git-graph 算法随行交付的 `lineColors`/`nodeColor`——
+ * 每条线 = 其源分支链色（同链恒一色，跨行同色延续；汇聚线保持各自子链色）。
+ * 线条等权细线（1.5px 全色，无分层透明度）——IDEA 日志图的统一权重语汇。
+ * 选中行：节点外接 business 色细环，与右侧详情面板锚定联动。
  */
-function GraphStrip({ row, cols, laneW, endOpen }: { row: GraphRow; cols: number; laneW: number; endOpen?: boolean }): JSX.Element {
+function GraphStrip({
+  row, cols, laneW, endOpen, selected,
+}: {
+  row: GraphRow
+  cols: number
+  laneW: number
+  endOpen?: boolean
+  selected?: boolean
+}): JSX.Element {
   const w = Math.max(cols, 1) * laneW
   const h = css.HISTORY_ROW_H
   const x = (col: number): number => col * laneW + laneW / 2
   const cy = h / 2
   const nodeR = Math.max(GRAPH_NODE_MIN_R, Math.min(GRAPH_NODE_R, laneW / 3))
-  const color = (col: number): string => GRAPH_COLORS[col % GRAPH_COLORS.length]!
+  /** 车道线色：行内解析色优先，缺失回退车道索引色（兼容旧数据）。 */
+  const colorOfLane = (col: number): string => row.lineColors?.[col] ?? GRAPH_COLORS[col % GRAPH_COLORS.length]!
+  /** 节点色：所在链色（行内已解析；回退车道索引色）。 */
+  const nodeColor = row.nodeColor ?? colorOfLane(row.column)
   return (
-    <svg width={w} height={h} style={{ display: 'block', flexShrink: 0 }} aria-hidden="true">
+    // overflow visible：选中环（r+3）在极窄车道（laneW=8 的 24+ 列图）下会超出
+    // SVG 边界——放行视觉溢出（display:block 不影响布局，仅选中行绘环）。
+    <svg width={w} height={h} style={{ display: 'block', flexShrink: 0, overflow: 'visible' }} aria-hidden="true">
       {row.verticals.map((col) => (
-        <line key={`v-${col}`} x1={x(col)} y1={0} x2={x(col)} y2={h} stroke={color(col)} strokeWidth={1.5} strokeLinecap="round" />
+        <line key={`v-${col}`} x1={x(col)} y1={0} x2={x(col)} y2={h} stroke={colorOfLane(col)} strokeWidth={1.5} strokeLinecap="round" />
       ))}
       {row.nodeFromTop && (
-        <line x1={x(row.column)} y1={0} x2={x(row.column)} y2={cy} stroke={color(row.column)} strokeWidth={1.5} strokeLinecap="round" />
+        // 来线段：上游链色（分支起点行的来线保持上游色，与上行延续线连续）。
+        <line x1={x(row.column)} y1={0} x2={x(row.column)} y2={cy} stroke={row.incomingColor ?? colorOfLane(row.column)} strokeWidth={1.5} strokeLinecap="round" />
       )}
       {row.joins.map((join) => (
         <g key={`j-${join}`}>
-          {/* 汇聚车道：自上方竖线到节点高度，再水平连接线汇入节点（锚定父节点行）。 */}
-          <line x1={x(join)} y1={0} x2={x(join)} y2={cy} stroke={color(join)} strokeWidth={1.5} strokeLinecap="round" />
-          <line x1={x(join)} y1={cy} x2={x(row.column)} y2={cy} stroke={color(join)} strokeWidth={1.5} strokeLinecap="round" />
+          {/* 汇聚车道：各自子链色自上方竖线到节点高度，再水平连接线汇入节点（锚定父节点行）。 */}
+          <line x1={x(join)} y1={0} x2={x(join)} y2={cy} stroke={colorOfLane(join)} strokeWidth={1.5} strokeLinecap="round" />
+          <line x1={x(join)} y1={cy} x2={x(row.column)} y2={cy} stroke={colorOfLane(join)} strokeWidth={1.5} strokeLinecap="round" />
         </g>
       ))}
       {row.nodeContinues && (endOpen === true ? (
         <>
           {/* 悬垂端头：父提交不在已加载集合（被过滤/边界），虚线 + 端止横杠，诚实提示上游未载入。 */}
-          <line x1={x(row.column)} y1={cy} x2={x(row.column)} y2={h - 5} stroke={color(row.column)} strokeWidth={1.5} strokeDasharray="3 3" strokeLinecap="round" />
-          <line x1={x(row.column) - 4} y1={h - 5} x2={x(row.column) + 4} y2={h - 5} stroke={color(row.column)} strokeWidth={1.5} strokeLinecap="round" />
+          <line x1={x(row.column)} y1={cy} x2={x(row.column)} y2={h - 5} stroke={colorOfLane(row.column)} strokeWidth={1.5} strokeDasharray="3 3" strokeLinecap="round" />
+          <line x1={x(row.column) - 4} y1={h - 5} x2={x(row.column) + 4} y2={h - 5} stroke={colorOfLane(row.column)} strokeWidth={1.5} strokeLinecap="round" />
         </>
       ) : (
-        <line x1={x(row.column)} y1={cy} x2={x(row.column)} y2={h} stroke={color(row.column)} strokeWidth={1.5} strokeLinecap="round" />
+        <line x1={x(row.column)} y1={cy} x2={x(row.column)} y2={h} stroke={colorOfLane(row.column)} strokeWidth={1.5} strokeLinecap="round" />
       ))}
       {row.edges.map((edge, i) => (
         <path
           key={`e-${i}`}
-          d={`M ${x(edge.from)} ${cy} C ${x(edge.from)} ${(cy + h) / 2}, ${x(edge.to)} ${(cy + h) / 2}, ${x(edge.to)} ${h}`}
+          // 曲线控制点 0.4/0.6 交错：起段微陡、中段平缓、收段回陡——比中点控制更圆润的曲线。
+          // 颜色 = merge 链色（曲线是 merge 节点发出的；不随目标车道色——octopus 复用
+          // 车道时目标线保持其源链色，曲线独立于车道线）。
+          d={`M ${x(edge.from)} ${cy} C ${x(edge.from)} ${cy + (h - cy) * 0.4}, ${x(edge.to)} ${cy + (h - cy) * 0.6}, ${x(edge.to)} ${h}`}
           fill="none"
-          stroke={color(edge.to)}
+          stroke={nodeColor}
           strokeWidth={1.5}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
       ))}
+      {/* 选中环：business 色细环 + 节点色核心，与右侧详情面板联动锚定。 */}
+      {selected === true && (
+        <circle
+          cx={x(row.column)}
+          cy={cy}
+          r={nodeR + 3}
+          fill="none"
+          stroke="var(--dsw-alias-state-business-primary)"
+          strokeWidth={1.5}
+        />
+      )}
       <circle
         cx={x(row.column)}
         cy={cy}
         r={nodeR}
-        fill={color(row.column)}
+        fill={nodeColor}
         stroke="var(--dsw-alias-bg-layer-2)"
         strokeWidth={1.5}
       />
     </svg>
   )
 }
-

@@ -3,7 +3,7 @@
  * 用例覆盖:线性延续、分裂、merge 回归、车道回收复用、收敛、图宽度。
  */
 import { describe, expect, it } from 'vitest'
-import { buildGraph, createGraphBuilder, graphWidth, markFilterEnds, GRAPH_COLORS } from '../src/client/git-graph.ts'
+import { buildGraph, colorOf, createGraphBuilder, graphWidth, markFilterEnds, GRAPH_COLORS } from '../src/client/git-graph.ts'
 import type { GraphCommit } from '../src/host/types.ts'
 
 /** 构造简单提交链(新→旧,与 git log 输出序一致)。 */
@@ -219,5 +219,92 @@ describe('markFilterEnds', () => {
     expect(marked[2]!.endOpen).toBe(true)
     // init 为根(nodeContinues=false) → 恒不标。
     expect(marked[3]!.endOpen).toBeUndefined()
+  })
+})
+
+describe('colorOf / laneHashes / 链色（IDEA 语义）', () => {
+  it('colorOf derives a stable color from a key (same key, same color)', () => {
+    expect(colorOf('abc123')).toBe(colorOf('abc123'))
+    // mod 16 散列理论可碰撞：此处仅验证「这两条具体键不撞」，非普适不变量。
+    expect(colorOf('abc123')).not.toBe(colorOf('def456'))
+    expect(GRAPH_COLORS).toContain(colorOf('abc123'))
+  })
+
+  it('records lane owners: linear chain lanes keyed by their source commit', () => {
+    const rows = buildGraph(chain(['a', 'b', 'c']))
+    // 每行车道的 owner = 当前提交（列线归属）。
+    expect(rows[2]!.laneHashes).toEqual({ 0: 'c' })
+    expect(rows[1]!.laneHashes).toMatchObject({ 0: 'b' })
+    expect(rows[0]!.laneHashes).toMatchObject({ 0: 'a' })
+  })
+
+  it('keeps merge edge lanes keyed by the merge commit (their color source)', () => {
+    const rows = buildGraph(MERGE_SEQUENCE)
+    // merge 行：节点列 0 与分裂目标 1 的 owner 均为 merge。
+    expect(rows[0]!.laneHashes).toMatchObject({ 0: 'merge', 1: 'merge' })
+    // feat 行：贯穿竖线车道 0 属 main-1（其首父线）；节点列 1 属 feat-1。
+    expect(rows[2]!).toMatchObject({ column: 1, verticals: [0] })
+    expect(rows[2]!.laneHashes).toMatchObject({ 0: 'main-1', 1: 'feat-1' })
+  })
+
+  it('keeps one chain color along a linear chain (IDEA semantics, no rainbow)', () => {
+    const rows = buildGraph(chain(['a', 'b', 'c']))
+    expect(rows.every((r) => r.nodeColor === colorOf('a'))).toBe(true)
+    // 下行延续线（等待父）与上行来线全部同链色。
+    expect(rows[1]!.lineColors?.[0]).toBe(colorOf('a'))
+    expect(rows[0]!.lineColors?.[0]).toBe(colorOf('a'))
+  })
+
+  it('anchors the whole chain by its branch ref name', () => {
+    const commits = [
+      { ...commit('a', ['b']), refs: [{ kind: 'branch' as const, name: 'dev', head: true }] },
+      commit('b', ['c']),
+      commit('c', []),
+    ]
+    const rows = buildGraph(commits)
+    expect(rows.every((r) => r.nodeColor === colorOf('dev'))).toBe(true)
+  })
+
+  it('preserves child chain colors on joins and merge curves', () => {
+    const rows = buildGraph(MERGE_SEQUENCE)
+    // merge 分裂曲线 = merge 链色。
+    expect(rows[0]!.lineColors?.[1]).toBe(colorOf('merge'))
+    // main-1 行贯穿的 feat 车道线保持 feat 链色（= 自 merge 下传）。
+    expect(rows[1]!.lineColors?.[1]).toBe(colorOf('merge'))
+  })
+
+  it('keeps joins lanes at their own child chain colors (distinct branches)', () => {
+    // 两个子提交各锚定不同分支：汇聚行（base）的 joins 线保持各自子链色，节点取主链色。
+    const seq = [
+      { ...commit('a', ['base']), refs: [{ kind: 'branch' as const, name: 'main', head: true }] },
+      { ...commit('b', ['base']), refs: [{ kind: 'branch' as const, name: 'feature', head: false }] },
+      commit('base', []),
+    ]
+    const rows = buildGraph(seq)
+    // base 汇聚行：节点列 0 继承首个等待者（a/main）链色；joins 车道 1 保持 feature 子链色。
+    expect(rows[2]!).toMatchObject({ column: 0, joins: [1] })
+    expect(rows[2]!.nodeColor).toBe(colorOf('main'))
+    expect(rows[2]!.lineColors?.[0]).toBe(colorOf('main'))
+    expect(rows[2]!.lineColors?.[1]).toBe(colorOf('feature'))
+  })
+})
+
+describe('分支起点行的来线色（IDEA 分叉视觉）', () => {
+  it('keeps the incoming line at the upstream chain color while the node takes the new branch color', () => {
+    const commits = [
+      { ...commit('a', ['b']), refs: [{ kind: 'branch' as const, name: 'dev', head: true }] },
+      { ...commit('b', ['c']), refs: [{ kind: 'branch' as const, name: 'test', head: false }] },
+      commit('c', []),
+    ]
+    const rows = buildGraph(commits)
+    // b 行（test 分支 tip）：节点 = test 链色；来线段（来自 a 的 dev 链）= dev 色；
+    // 延续线段（等待 c）= 当前 test 链色——同一列两段线各归其色（IDEA 分叉视觉）。
+    expect(rows[1]!.nodeColor).toBe(colorOf('test'))
+    expect(rows[1]!.incomingColor).toBe(colorOf('dev'))
+    expect(rows[1]!.lineColors?.[0]).toBe(colorOf('test'))
+    // c 行：继承子链（b）的 test 色；来线 = test 色；a 行延续线段属 dev 链（保 dev 色）。
+    expect(rows[2]!.nodeColor).toBe(colorOf('test'))
+    expect(rows[2]!.incomingColor).toBe(colorOf('test'))
+    expect(rows[0]!.lineColors?.[0]).toBe(colorOf('dev'))
   })
 })

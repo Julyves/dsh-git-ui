@@ -4,14 +4,23 @@
  * 输入为 `git log --all` 拓扑序（新→旧）的 `GraphCommit[]`。本模块维护一组
  * “车道”（lane）：每条车道等待下一个应出现的提交（waiting-for）。提交到达时：
  *   - 等待该提交的所有车道中，首个承载节点，其余（`joins`）在本行经水平连接线
- *     汇入节点——**多子汇向同一父的汇聚锚定在父节点行**（IDEA 式分叉/汇聚，
- *     不再提前回归，修复原「return 曲线在父节点上方一行拐弯」的视觉偏移）；
+ *     汇入节点——**多子汇向同一父的汇聚锚定在父节点行**（IDEA 式分叉/汇聚）；
  *   - 首父继承当前车道（直线延续）；
  *   - 第二及更多父提交复用已等待它的车道，否则开辟新车道，均产生分裂曲线；
  *   - 释放的车道按索引回收，列数贴近历史真实并发度，永不单调增长。
  *
- * 一个哈希可同时被多条车道等待（分叉的多个子提交各占一条）；该提交出现时
- * 全部收敛：节点落在首条车道，其余车道画「竖线→水平连接→节点」。
+ * 颜色语义（IDEA 式「一条分支链恒一色」，修复「每提交一色 → 彩虹链」）：
+ *   - 车道携带 `owner`（该线归属的源提交）：线条颜色 = 其 owner 所在链的颜色，
+ *     因此同一条可见长线跨行颜色恒定、且恒为其源分支色；
+ *   - 链色规则：提交自身带本地分支/HEAD 引用 → `colorOf(分支名)`（分支起点色）；
+ *     否则继承「等待该提交的首个车道 owner（子）」的链色（子先处理，链向下延续；
+ *     多子异色时以先处理者（更低车道索引）为依据——确定性启发式，非语义主干）；
+ *     无等待者（无名根/tip）→ `colorOf(hash)` 兜底。
+ *   - 节点 = 所在链色；汇聚线各自保持**子链色**汇入（IDEA 丰富度）；
+ *     merge 分裂曲线 = merge 链色（曲线是 merge 节点发出的，不随目标车道——
+ *     octopus merge 复用车道时目标线保持其源链色，两者互不染指）。
+ *   - 每行解析完毕的最终色随 `lineColors`/`nodeColor`/`incomingColor` 存入行
+ *     ——渲染零上下文、纯数据可测、增量追加安全（已渲染行颜色永不变）。
  *
  * 渲染契约（与行样式共用单一事实来源）：行高固定、条带占满整行，
  * 竖线在行间自然衔接；分裂用贝塞尔曲线，汇聚用水平连接线。
@@ -35,42 +44,115 @@ export interface GraphRow {
   readonly nodeContinues: boolean
   /** 自节点向下的分裂曲线（merge 的第二父 fan-out），终点在行底的目标车道。 */
   readonly edges: readonly GraphEdge[]
+  /**
+   * 每车道的「来源提交」（可选）：该线归属的源提交 hash——链色判定依据
+   * （贯穿线=车道 owner；节点列=当前提交；edges 目标=merge 提交）。
+   * 缺失时渲染层回退车道索引色。
+   */
+  readonly laneHashes?: Readonly<Record<number, string>>
+  /** 每车道最终色（可选）：随行交付的解析色，渲染零上下文。 */
+  readonly lineColors?: Readonly<Record<number, string>>
+  /** 节点最终色（可选）：所在链色。 */
+  readonly nodeColor?: string
+  /**
+   * 上方来线段最终色（可选）：分支起点行的「来线」保持上游链色（IDEA 分叉
+   * 视觉）——与 nodeContinues 延续线的当前链色并存。无来线时缺省。
+   */
+  readonly incomingColor?: string
 }
 
-/** 一条分裂曲线（merge 节点 → 第二父车道，着目标车道色）。 */
+/** 一条分裂曲线（merge 节点 → 第二父车道，着 merge 链色）。 */
 export interface GraphEdge {
   readonly from: number
   readonly to: number
 }
 
 /**
- * 车道列的语义调色板（明暗主题下均有足够对比度），16 色循环。
- * 分支身份色与主题解耦是有意为之（与 IDEA 一致的固定车道配色）。
+ * 车道语义调色板（IDEA 式）：Material 500 系——中等饱和、亮暗主题对比度
+ * 双满足（暗底不刺眼、浅底不飘淡）；色相分布均匀，16 色循环。
  */
 export const GRAPH_COLORS: readonly string[] = [
-  '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899',
-  '#06B6D4', '#84CC16', '#F97316', '#6366F1', '#14B8A6', '#E11D48',
-  '#0EA5E9', '#A855F7', '#22C55E', '#F43F5E',
+  '#4CAF50', '#FF9800', '#2196F3', '#9C27B0', '#00BCD4', '#E91E63',
+  '#3F51B5', '#009688', '#FF5722', '#8BC34A', '#607D8B', '#795548',
+  '#F44336', '#03A9F4', '#CDDC39', '#673AB7',
 ]
 
-/** 回收第一个空闲车道索引；无空闲则扩容。 */
-function freeLane(lanes: (string | null)[], opened: Set<number>): number {
+/** 稳定的散列色：字符串字符累加取模色板（同一分支名/提交永远同色）。 */
+export function colorOf(key: string): string {
+  let sum = 0
+  for (let i = 0; i < key.length; i += 1) sum += key.charCodeAt(i)
+  return GRAPH_COLORS[sum % GRAPH_COLORS.length]!
+}
+
+/** 车道条目的身份：等待的目标 + 归属来源（线色判定键）。 */
+interface LaneEntry {
+  /** 该车道等待的提交 hash。 */
+  readonly wait: string
+  /** 该线的来源提交 hash：颜色 = 其链色。 */
+  readonly owner: string
+}
+
+/** 回收第一个空闲车道索引并登记为本行新开；无空闲则扩容。 */
+function openLane(lanes: (LaneEntry | null)[], opened: Set<number>): number {
   const index = lanes.indexOf(null)
   const lane = index === -1 ? (lanes.push(null), lanes.length - 1) : index
   opened.add(lane)
   return lane
 }
 
-/** 处理单个提交：更新车道并产出该行几何（buildGraph 与增量 builder 共用同一循环体）。 */
-function processCommit(commit: GraphCommit, lanes: (string | null)[]): GraphRow {
+/**
+ * 解析一个提交的链色（IDEA 规则）：
+ *   1. 自身带分支引用（本地分支/HEAD）→ 该分支名散列色（分支起点，全链锚定色）；
+ *   2. 否则继承「等待它的首个车道 owner（子）」的链色（子先处理、已解析）；
+ *   3. 无等待者（无名根/尖端）→ 该提交 hash 散列色。
+ */
+function resolveChainColor(
+  commit: GraphCommit,
+  waitingOwners: readonly string[],
+  memo: Map<string, string>,
+): string {
+  const cached = memo.get(commit.hash)
+  if (cached !== undefined) return cached
+  // 分支名锚定：本地分支（含 HEAD -> 装饰解析出的 head 分支）；远程/标签不定义链色。
+  const branchRef = commit.refs.find((ref) => ref.kind === 'branch')
+  if (branchRef !== undefined) {
+    const color = colorOf(branchRef.name)
+    memo.set(commit.hash, color)
+    return color
+  }
+  // 子链继承：首个等待者（先到的子车道）的链色。
+  for (const owner of waitingOwners) {
+    const inherited = memo.get(owner)
+    if (inherited !== undefined) {
+      memo.set(commit.hash, inherited)
+      return inherited
+    }
+  }
+  const color = colorOf(commit.hash)
+  memo.set(commit.hash, color)
+  return color
+}
+
+/** 处理单个提交：更新车道并产出该行几何与最终色（buildGraph 与增量 builder 共用同一循环体）。 */
+function processCommit(
+  commit: GraphCommit,
+  lanes: (LaneEntry | null)[],
+  memo: Map<string, string>,
+): GraphRow {
   const opened = new Set<number>()
+  // 车道身份快照（在清空/改写前记录）：每条线的颜色 = 其 owner 的链色。
+  const laneHashes: Record<number, string> = {}
+  lanes.forEach((entry, index) => {
+    if (entry !== null) laneHashes[index] = entry.owner
+  })
   // 1. 节点列：等待该提交的所有车道（分叉多子各占一条）中首个；否则新开车道（分支尖端）。
   //    其余等待车道记入 `joins`——本行经「竖线→水平连接线→节点」汇入（锚定父节点行）。
   const waiting: number[] = []
-  lanes.forEach((waitingHash, index) => {
-    if (waitingHash === commit.hash) waiting.push(index)
+  lanes.forEach((entry, index) => {
+    if (entry !== null && entry.wait === commit.hash) waiting.push(index)
   })
-  const column = waiting.length > 0 ? waiting[0]! : freeLane(lanes, opened)
+  const waitingOwners = waiting.map((index) => lanes[index]!.owner)
+  const column = waiting.length > 0 ? waiting[0]! : openLane(lanes, opened)
   const nodeFromTop = waiting.length > 0
   const joins = waiting.slice(1)
   for (const index of waiting) lanes[index] = null
@@ -80,17 +162,21 @@ function processCommit(commit: GraphCommit, lanes: (string | null)[]): GraphRow 
   const firstParent = commit.parents[0]
   let nodeContinues = false
   if (firstParent !== undefined) {
-    lanes[column] = firstParent
+    lanes[column] = { wait: firstParent, owner: commit.hash }
     nodeContinues = true
+    laneHashes[column] = commit.hash
+  } else {
+    laneHashes[column] = commit.hash
   }
 
   // 3. 第二及更多父提交：复用已等待它的车道，否则开辟新车道；均记分裂曲线。
   for (let p = 1; p < commit.parents.length; p += 1) {
     const parentHash = commit.parents[p]!
-    let target = lanes.indexOf(parentHash)
+    let target = lanes.findIndex((entry) => entry !== null && entry.wait === parentHash)
     if (target === -1) {
-      target = freeLane(lanes, opened)
-      lanes[target] = parentHash
+      target = openLane(lanes, opened)
+      lanes[target] = { wait: parentHash, owner: commit.hash }
+      laneHashes[target] = commit.hash
     }
     edges.push({ from: column, to: target })
   }
@@ -99,12 +185,26 @@ function processCommit(commit: GraphCommit, lanes: (string | null)[]): GraphRow 
   const excluded = new Set<number>(joins)
   excluded.add(column)
   const verticals: number[] = []
-  lanes.forEach((waitingHash, index) => {
-    if (waitingHash === null || excluded.has(index) || opened.has(index)) return
+  lanes.forEach((entry, index) => {
+    if (entry === null || excluded.has(index) || opened.has(index)) return
     verticals.push(index)
+    laneHashes[index] = entry.owner
   })
 
-  return { commit, column, verticals, joins, nodeFromTop, nodeContinues, edges }
+  // 5. 链色解析：节点 = 当前提交链色；各线 = 其 owner 的链色（子先处理、已解析）。
+  //    节点列两段线需并行：上方来线段（若存在）= 上游链色（incomingColor，分支起点
+  //    视觉：节点 = 新链色、来线 = 上游链色）；延续线段 = 当前链色（lineColors[column]）。
+  const nodeColor = resolveChainColor(commit, waitingOwners, memo)
+  const lineColors: Record<number, string> = {}
+  for (const [laneKey, owner] of Object.entries(laneHashes) as [string, string][]) {
+    lineColors[Number(laneKey)] = memo.get(owner) ?? colorOf(owner)
+  }
+  lineColors[column] = nodeColor
+  const incomingColor = waiting.length > 0
+    ? (memo.get(waitingOwners[0]!) ?? colorOf(waitingOwners[0]!))
+    : undefined
+
+  return { commit, column, verticals, joins, nodeFromTop, nodeContinues, edges, laneHashes, lineColors, nodeColor, ...(incomingColor === undefined ? {} : { incomingColor }) }
 }
 
 /**
@@ -121,7 +221,8 @@ export interface GraphBuilder {
 }
 
 export function createGraphBuilder(): GraphBuilder {
-  const lanes: (string | null)[] = []
+  const lanes: (LaneEntry | null)[] = []
+  const memo = new Map<string, string>()
   let count = 0
   return {
     get count() {
@@ -130,7 +231,7 @@ export function createGraphBuilder(): GraphBuilder {
     append(commits) {
       const rows: GraphRow[] = []
       for (const commit of commits) {
-        rows.push(processCommit(commit, lanes))
+        rows.push(processCommit(commit, lanes, memo))
         count += 1
       }
       return rows

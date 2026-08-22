@@ -48,11 +48,19 @@ export const pillBadges: CSSProperties = {
   whiteSpace: 'nowrap',
 }
 
-/** Dimmed pill for degraded states (no repo / unavailable). */
+/** Dimmed pill for degraded states (no repo / unavailable).
+ * 加弱化图标锚点：纯文字在头部序列里立不住。 */
 export const pillDimmed: CSSProperties = {
   ...pill,
   opacity: 0.55,
   cursor: 'default',
+}
+
+/** 降级态图标槽（AlertIcon 弱化色）。 */
+export const pillDimmedIcon: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  color: 'var(--dsw-alias-label-tertiary)',
 }
 
 /** Status dot: green when clean, warn when the tree is dirty. */
@@ -118,11 +126,20 @@ export const popupBadge: CSSProperties = {
   fontVariantNumeric: 'tabular-nums',
 }
 
+/** 头部仓库路径行：root 段 flex 收缩 + 行尾齿轮槽（与路径同行，消除独立占行）。 */
+export const popupHeaderRootRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
+}
+
 /** 根路径行：文件夹图标 + 弱化省略路径。 */
 export const popupHeaderRoot: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 5,
+  flex: 1,
+  minWidth: 0,
   color: 'var(--dsw-alias-label-tertiary)',
 }
 
@@ -150,24 +167,29 @@ export const popupBranchMenu: CSSProperties = {
   borderRadius: 4,
 }
 
-/** 紧凑状态条：横排计数（取代独立格子 grid），省垂直空间。 */
+/** 紧凑状态条：发丝边 stat chips（与 diff 基线徽章同族），横排计数。 */
 export const popupStatusBar: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 12,
+  gap: 6,
   flexWrap: 'wrap',
   marginBottom: 10,
 }
 
+/** 状态 chip：layer-2 底 + 发丝边 + 圆角 6（与 changeChip/行圆角同族）。 */
 export const popupStatItem: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'baseline',
   gap: 4,
+  padding: '2px 8px',
+  borderRadius: 6,
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
 }
 
 export const popupStatValue: CSSProperties = {
   fontWeight: 600,
-  fontSize: 13,
+  fontSize: 12,
   color: 'var(--dsw-alias-label-primary)',
   fontVariantNumeric: 'tabular-nums',
 }
@@ -185,9 +207,12 @@ export const popupBranchOps: CSSProperties = {
   marginBottom: 6,
 }
 
-/** 分组小标题：macOS 式 11px semibold 弱化色（弃用全大写+字距的报表风）。 */
+/** 分区小标题：macOS 分组节奏——上方 16px 弱发丝线 + 标题 11px semibold tertiary。
+ * 区块边界由此线建立，信息带不再连续堆叠。 */
 export const sectionTitle: CSSProperties = {
   margin: '14px 0 6px',
+  paddingTop: 10,
+  borderTop: '1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 55%, transparent)',
   fontSize: 11,
   fontWeight: 600,
   color: 'var(--dsw-alias-label-tertiary)',
@@ -359,6 +384,57 @@ export const emptyNote: CSSProperties = {
   padding: '4px 0',
 }
 
+/** 空状态（弹窗紧凑版）：语义色小圆点 + 弱化文字，居中横排。 */
+export const emptyStateSmall: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 7,
+  padding: '10px 0 6px',
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontSize: 12,
+  lineHeight: '18px',
+}
+
+/** 空状态圆点（视觉锚点）：8px 直径成功色（干净/未提交的正向语义）+ 发丝描边。
+ * 亮色主题下灰面描边与弹窗底同白不可见——语义色保证两种主题均可读。 */
+export const emptyStateDot: CSSProperties = {
+  flex: 'none',
+  width: 8,
+  height: 8,
+  borderRadius: '50%',
+  background: 'color-mix(in srgb, var(--dsw-alias-state-success-primary) 55%, var(--dsw-alias-bg-layer-2))',
+  boxShadow: 'inset 0 0 0 1.5px var(--dsw-alias-state-success-primary)',
+}
+
+/** 空状态（大区版）：图标容器 + 说明文字，居中纵排。 */
+export const emptyState: CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 10,
+  padding: '20px 16px',
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontSize: 12,
+  lineHeight: '18px',
+}
+
+/** 空状态图标容器：40px 圆形 layer-2 面 + 发丝边。 */
+export const emptyStateIcon: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 40,
+  height: 40,
+  borderRadius: '50%',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
 /** 居中空状态占位（IDEA 式：大区空背景时中心显示提示文字）。 */
 export const centeredEmpty: CSSProperties = {
   flex: 1,
@@ -392,11 +468,22 @@ const globalCss = [
   '.dsh-git-ui__pop, .dsh-git-ui__select-menu { opacity: 1; transform: scale(1); @starting-style { opacity: 0; transform: scale(0.97); } }',
 
   // ── 基础几何 + 过渡（含按压 transform，GPU 友好；禁用 transition: all）──────
+  // 按钮基础重置：平台/UA 按钮的默认底色与文字统一到主题令牌。
+  // 此前依赖内联 background: transparent——它能压住 UA 底，但也会把全局
+  // :hover/:active 反馈一并压掉（交互态从不渲染）。现改由全局 CSS 提供基础值，
+  // 基础规则在前、伪类规则在后（.tab:hover / .icon-btn:active 等），可正常覆盖。
+  '.dsh-git-ui__tab, .dsh-git-ui__icon-btn { background: transparent; }',
+  '.dsh-git-ui__tab { color: var(--dsw-alias-label-tertiary); }',
+  '.dsh-git-ui__icon-btn { color: var(--dsw-alias-label-secondary); }',
   '.dsh-git-ui__row { border-radius: 6px; }',
   // 按压即时缩放：所有可按压元素 :active 时 scale(0.97)，松手回弹（emil「按钮必须可按压」）。
   '.dsh-git-ui__pill { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
-  '.dsh-git-ui__commit-row, .dsh-git-ui__row { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+  '.dsh-git-ui__row { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+  // 提交行：基础 transition（transform/background）+ 选中强调条过渡（box-shadow 220ms 淡入）。
+  '.dsh-git-ui__commit-row { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), box-shadow 220ms var(--ds-ease-in-out); }',
   '.dsh-git-ui__refresh { transition: transform var(--ds-transition-duration-fast) ease-out, color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+  // 提交行入场：仅首次挂载（增量追加/过滤切换）淡入微上移一次，fill-mode both
+  // 保持最终态；reduced-motion 下禁用（见下）。
   // 输入框 hover 反馈：边框由 l2 加深至 l1（聚焦环由 focus-visible 承担）。
   '.dsh-git-ui__branch-input, .dsh-git-ui__commit-input { transition: border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   // System tab underline: 2px bar below the active tab.
@@ -420,11 +507,24 @@ const globalCss = [
   '.dsh-git-ui__diff-fold { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   // 底栏主操作过渡（按压缩放 + hover 淡底）。
   '.dsh-git-ui__footer-primary { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+  // ── 设置区控件过渡（Mac 风：轨道淡变 + 滑钮弹性位移 + 徽章淡变）──
+  '.dsh-git-ui__switch { transition: background var(--ds-transition-duration) var(--ds-ease-in-out); }',
+  '.dsh-git-ui__switch-knob { transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }',
+  '.dsh-git-ui__segment { transition: background var(--ds-transition-duration-fast) var(--ds-ease-in-out), color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+  '.dsh-git-ui__counts-badge { transition: background var(--ds-transition-duration-fast) var(--ds-ease-in-out), border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out), color var(--ds-transition-duration-fast) var(--ds-ease-in-out), opacity var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+  // 开关状态经 data-on 切换（组件向元素写 data 属性，避免 JS 内联背景/位移）。
+  '.dsh-git-ui__switch[data-on="true"] { background: var(--dsw-alias-state-business-primary); box-shadow: inset 0 0 0 1px transparent; }',
+  '.dsh-git-ui__switch[data-on="true"] .dsh-git-ui__switch-knob { transform: translateX(16px); }',
+  // 工具栏自绘按钮（发丝边胶囊族）：hover 提边 + 可按压。
+  '.dsh-git-ui__tool-button { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out), color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
+  '.dsh-git-ui__tool-button:disabled { opacity: 0.45; cursor: default; }',
+  // 复选框键盘聚焦（原生 focus ring 不可控，统一为主题业务色）。
+  '.dsh-git-ui__checkbox:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 1px; }',
 
   // ── 按压态（:active，触屏与指针均触发，不闸控）────────────────────────
   // 仅叶子按钮缩放；.dsh-git-ui__row 是含 checkbox/按钮的容器行，:active 会向
   // 祖先传播——按压其子按钮会令整行缩放（非预期），故行级仅用底色反馈（见下条）。
-  '.dsh-git-ui__pill:active, .dsh-git-ui__icon-btn:active, .dsh-git-ui__tab:active, .dsh-git-ui__refresh:active, .dsh-git-ui__toolbar-select:active, .dsh-git-ui__diff-fold:active, .dsh-git-ui__commit-row:active, .dsh-git-ui__footer-primary:active { transform: scale(0.97); }',
+  '.dsh-git-ui__pill:active, .dsh-git-ui__icon-btn:active, .dsh-git-ui__tab:active, .dsh-git-ui__refresh:active, .dsh-git-ui__toolbar-select:active, .dsh-git-ui__diff-fold:active, .dsh-git-ui__commit-row:active, .dsh-git-ui__footer-primary:active, .dsh-git-ui__segment:active, .dsh-git-ui__counts-badge:active, .dsh-git-ui__tool-button:active { transform: scale(0.97); }',
   '.dsh-git-ui__commit-row:active, .dsh-git-ui__row:active { background: var(--dsw-alias-interactive-bg-active); }',
   '.dsh-git-ui__icon-btn:active { background: var(--dsw-alias-interactive-bg-active); }',
 
@@ -440,6 +540,10 @@ const globalCss = [
   '.dsh-git-ui__icon-btn:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   '.dsh-git-ui__diff-fold:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
   '.dsh-git-ui__footer-primary:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__switch:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }',
+  '.dsh-git-ui__segment:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__counts-badge:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  '.dsh-git-ui__tool-button:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
 
   // Git center dialog: widen the platform Modal card (headless mode).
   '.dsh-git-ui__center { width: min(1200px, 100vw); height: min(760px, calc(100vh - 48px)); }',
@@ -457,6 +561,9 @@ const globalCss = [
   '  .dsh-git-ui__icon-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }',
   '  .dsh-git-ui__diff-fold:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }',
   '  .dsh-git-ui__footer-primary:hover { background: var(--dsw-alias-interactive-bg-hover); }',
+  '  .dsh-git-ui__segment:hover { background: var(--dsw-alias-interactive-bg-hover); }',
+  '  .dsh-git-ui__counts-badge:hover { border-color: var(--dsw-alias-border-l1); }',
+  '  .dsh-git-ui__tool-button:hover { border-color: var(--dsw-alias-border-l1); color: var(--dsw-alias-label-primary); }',
   '  .dsh-git-ui__row:hover .dsh-git-ui__row-actions { opacity: 1; }',
   '}',
 
@@ -465,7 +572,7 @@ const globalCss = [
 
   // ── 减弱动效（保留辅助理解的透明度/颜色过渡，移除位移与缩放——apple 规则）──
   '@media (prefers-reduced-motion: reduce) {',
-  '  .dsh-git-ui__pill, .dsh-git-ui__pop, .dsh-git-ui__select-menu, .dsh-git-ui__icon-btn, .dsh-git-ui__tab, .dsh-git-ui__commit-row, .dsh-git-ui__row, .dsh-git-ui__branch-input, .dsh-git-ui__commit-input, .dsh-git-ui__toolbar-select, .dsh-git-ui__diff-fold, .dsh-git-ui__refresh, .dsh-git-ui__footer-primary, .dsh-git-ui__change-link { transition: opacity 200ms ease, background 200ms ease, color 200ms ease, border-color 200ms ease !important; transform: none !important; }',
+  '  .dsh-git-ui__pill, .dsh-git-ui__pop, .dsh-git-ui__select-menu, .dsh-git-ui__icon-btn, .dsh-git-ui__tab, .dsh-git-ui__commit-row, .dsh-git-ui__row, .dsh-git-ui__branch-input, .dsh-git-ui__commit-input, .dsh-git-ui__toolbar-select, .dsh-git-ui__diff-fold, .dsh-git-ui__refresh, .dsh-git-ui__footer-primary, .dsh-git-ui__change-link, .dsh-git-ui__switch, .dsh-git-ui__switch-knob, .dsh-git-ui__segment, .dsh-git-ui__counts-badge, .dsh-git-ui__tool-button { transition: opacity 200ms ease, background 200ms ease, color 200ms ease, border-color 200ms ease !important; transform: none !important; animation: none !important; }',
   '}',
 ].join('\n')
 
@@ -491,25 +598,51 @@ export const centerShell: CSSProperties = {
   color: 'var(--dsw-alias-label-primary)',
 }
 
-export const centerHeader: CSSProperties = {
+/** 顶栏（功能域）：左 tab 组 + 右工具组的统一容器——替代旧标题行，
+ * 为内容区让出 ~50px 高度。tab 下划线贴容器底缘（alignItems flex-end）。 */
+export const topBar: CSSProperties = {
   display: 'flex',
-  alignItems: 'center',
-  gap: 10,
-  padding: '16px 20px 12px',
+  alignItems: 'flex-end',
+  minHeight: 44,
+  padding: '0 20px',
   borderBottom: '1px solid var(--dsw-alias-border-l2)',
   flex: 'none',
 }
 
-export const centerTitle: CSSProperties = {
-  margin: 0,
-  fontSize: 15,
-  lineHeight: '22px',
-  fontWeight: 600,
-  flex: 1,
+/** 顶栏右端工具组：分支上下文胶囊 + 关闭（垂直居中于 44px 顶栏）。 */
+export const tabsTrailing: CSSProperties = {
+  marginLeft: 'auto',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  alignSelf: 'center',
+}
+
+/** 分支上下文胶囊（承接被移除标题行的分支信息）：pill 同族的弱化胶囊。 */
+export const branchContextChip: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  maxWidth: 220,
+  height: 24,
+  padding: '0 9px',
+  borderRadius: 12,
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  color: 'var(--dsw-alias-label-secondary)',
+  fontSize: 11,
+  lineHeight: '16px',
+  fontVariantNumeric: 'tabular-nums',
+  whiteSpace: 'nowrap',
+  cursor: 'default',
+}
+
+/** 分支上下文胶囊文本段（可省略；minWidth:0 让 flex 子项可收缩，否则 maxWidth 形同虚设）。 */
+export const branchContextName: CSSProperties = {
+  minWidth: 0,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  color: 'var(--dsw-alias-label-primary)',
 }
 
 export const centerBody: CSSProperties = {
@@ -546,7 +679,9 @@ export const rowActions: CSSProperties = {
   width: 78,
 }
 
-/** 行操作图标按钮（24px 方形、透明底；交互态见全局 CSS）。 */
+/** 行操作图标按钮（24px 方形；交互态见全局 CSS）。
+ * 基础色/底色由全局提供（.dsh-git-ui__icon-btn）：默认透明 + secondary，
+ * :hover/:active 反馈得以渲染（内联会被其优先级压制）。 */
 export const rowIconButton: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -555,11 +690,9 @@ export const rowIconButton: CSSProperties = {
   width: 24,
   height: 24,
   border: 'none',
-  background: 'transparent',
   borderRadius: 6,
   cursor: 'pointer',
   padding: 0,
-  color: 'var(--dsw-alias-label-secondary)',
 }
 
 /** 文件名前的轻量文件图标槽。 */
@@ -603,7 +736,7 @@ export const statusLetter: CSSProperties = {
 }
 
 /** IDEA 式分组头：粘性吸顶，全选复选 + 折叠箭头 + 名称 + 计数。
- * 发丝级底部分隔（l2）让吸顶头与滚动内容轻轻分离，不产生重边框。 */
+ * 半透明底 + backdrop blur：吸顶时滚动内容从底下透出，不糊不浮（macOS 工具栏语汇）。 */
 export const groupHeader: CSSProperties = {
   position: 'sticky',
   top: 0,
@@ -614,7 +747,9 @@ export const groupHeader: CSSProperties = {
   height: 30,
   flexShrink: 0,
   padding: '0 8px',
-  background: 'var(--dsw-alias-bg-layer-2)',
+  background: 'color-mix(in srgb, var(--dsw-alias-bg-layer-2) 88%, transparent)',
+  WebkitBackdropFilter: 'blur(6px)',
+  backdropFilter: 'blur(6px)',
   borderBottom: '1px solid var(--dsw-alias-border-l2)',
 }
 
@@ -652,27 +787,53 @@ export const changeCheckbox: CSSProperties = {
 export const toolRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 8,
+  gap: 6,
   flexWrap: 'wrap',
-  padding: '6px 0 2px',
+  // 水平基准与列表行一致（面板 6px + 行内 8px = 14px），按钮与复选列对齐。
+  padding: '2px 8px 6px',
+}
+
+/** 工具栏自绘按钮：发丝边胶囊族（与 treeFetchBtn/设置 reset 同语言，取代宿主 Button）。 */
+export const toolButton: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  height: 26,
+  padding: '0 10px',
+  border: '1px solid var(--dsw-alias-border-l2)',
+  borderRadius: 8,
+  background: 'var(--dsw-alias-bg-layer-2)',
+  color: 'var(--dsw-alias-label-secondary)',
+  fontSize: 12,
+  lineHeight: '18px',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  whiteSpace: 'nowrap',
+  flex: 'none',
+}
+
+/** 破坏性 armed 态：error 描边 + 淡晕（警示强调，替代纯文字变化）。 */
+export const toolButtonDanger: CSSProperties = {
+  color: 'var(--dsw-alias-state-error-primary)',
+  borderColor: 'var(--dsw-alias-state-error-primary)',
+  background: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent)',
 }
 
 export const commitBox: CSSProperties = {
   borderTop: '1px solid var(--dsw-alias-border-l2)',
-  padding: '12px 20px 16px',
+  padding: '10px 14px 14px',
   display: 'flex',
   flexDirection: 'column',
   gap: 8,
   flex: 'none',
   marginTop: 'auto',
-  background: 'var(--dsw-alias-bg-layer-1)',
 }
 
 export const commitInput: CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
   minHeight: 64,
-  resize: 'vertical',
+  resize: 'none',
   border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: 8,
   padding: '6px 10px',
@@ -803,12 +964,17 @@ export const changesLayout: CSSProperties = {
   minHeight: 0,
 }
 
+/** 左列表面板：layer-1 轻面 + 圆角 12 + 发丝边（与右侧 diff 盒子成「板—盒」对称体系）。 */
 export const changesLeft: CSSProperties = {
   flex: 'none',
   minWidth: 0,
   display: 'flex',
   flexDirection: 'column',
   minHeight: 0,
+  background: 'var(--dsw-alias-bg-layer-1)',
+  borderRadius: 12,
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  padding: '8px 6px 0',
 }
 
 export const changesList: CSSProperties = {
@@ -826,8 +992,6 @@ export const changesRight: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 6,
-  borderLeft: '1px solid var(--dsw-alias-border-l2)',
-  paddingLeft: 12,
 }
 
 /** 变更行目录部分（弱化显示，与文件名同阶 12px，IDEA 同尺寸弱化）。 */
@@ -1027,23 +1191,23 @@ export const commitKbd: CSSProperties = {
 
 // ── Git center tabs (system tab spec: 13/16/500, 2px indicator) ───────────
 
+/** Tab 组（role=tablist 容器）：间距与外框由 topBar 提供，自身仅排布。 */
 export const tabs: CSSProperties = {
   display: 'flex',
   gap: 24,
-  padding: '0 20px',
-  borderBottom: '1px solid var(--dsw-alias-border-l2)',
-  flex: 'none',
+  minWidth: 0,
 }
 
 export const tab: CSSProperties = {
   position: 'relative',
-  padding: '0 0 11px',
+  // 撑满顶栏（14 上 + 16 行高 + 14 下 = 44 = topBar 高）：文字精确垂直居中
+  // （14+8=22=44/2），下划线贴容器底缘（与 topBar alignItems flex-end 配合）。
+  // 基础色/底色由全局 CSS 提供（.dsh-git-ui__tab），避免内联压掉 :hover/:active。
+  padding: '14px 0 14px',
   border: 'none',
-  background: 'transparent',
   fontSize: 13,
   lineHeight: '16px',
   fontWeight: 500,
-  color: 'var(--dsw-alias-label-tertiary)',
   cursor: 'pointer',
   fontFamily: 'inherit',
 }
@@ -1051,6 +1215,24 @@ export const tab: CSSProperties = {
 /** Active-tab underline rides a pseudo-element (see global CSS). */
 export const tabActive: CSSProperties = {
   color: 'var(--dsw-alias-state-business-primary)',
+}
+
+/** Tab 内图标槽（齿轮等）：与文字基线对齐，不增加行高。 */
+export const tabIcon: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  marginRight: 5,
+  verticalAlign: '-2px',
+  color: 'inherit',
+}
+
+/** 功能 Tab 与偏好 Tab（设置）之间的发丝竖分隔线。 */
+export const tabDivider: CSSProperties = {
+  alignSelf: 'stretch',
+  width: 1,
+  margin: '2px 0',
+  background: 'var(--dsw-alias-border-l2)',
+  flex: 'none',
 }
 
 // ── History tab ───────────────────────────────────────────────────────────
@@ -1330,13 +1512,14 @@ export const paneHead: CSSProperties = {
   borderBottom: '1px solid var(--dsw-alias-border-l2)',
 }
 
-/** 左右侧栏外壳（淡底；分隔线按侧内联）。 */
+/** 左右侧栏外壳（静态轻面 bg-layer-1；分隔线按侧内联）。
+ * 语义：面层级色，而非交互态色（旧用 interactive-bg-hover 属语义误用）。 */
 export const paneSide: CSSProperties = {
   flex: 'none',
   display: 'flex',
   flexDirection: 'column',
   minWidth: 0,
-  background: 'var(--dsw-alias-interactive-bg-hover)',
+  background: 'var(--dsw-alias-bg-layer-1)',
 }
 
 /** 左栏搜索框（分支或标签）。 */
@@ -1445,10 +1628,10 @@ export const searchDot: CSSProperties = {
   justifyContent: 'center',
 }
 
-/** 装饰圆点本体：8px 直径 + 背景描边（与分支图节点圆同一视觉语言）。 */
+/** 装饰圆点本体：10px 直径 + 背景描边（与分支图节点圆同一视觉语言；选中态由行内 boxShadow 环强化）。 */
 export const searchDotInner: CSSProperties = {
-  width: 8,
-  height: 8,
+  width: 10,
+  height: 10,
   borderRadius: '50%',
   border: '1.5px solid var(--dsw-alias-bg-layer-2)',
   flex: 'none',
@@ -1456,10 +1639,12 @@ export const searchDotInner: CSSProperties = {
 
 export const historyRowSelected: CSSProperties = {
   background: 'var(--dsw-alias-interactive-bg-active)',
+  // 左侧 3px 强调条（inset 阴影不挤占 grid 布局）：与右侧详情面板的选中锚定联动。
+  boxShadow: 'inset 3px 0 0 0 var(--dsw-alias-state-business-primary)',
 }
 
 /** 表头：粘性置顶，与行共用列模板（跨行对齐的表格契约）。
- * macOS 表头规范：11px semibold 弱化色（原 400 字重过轻，列名立不住）。 */
+ * macOS 表头规范：11px semibold 弱化色 + 半透明底（blur 透出滚动内容）。 */
 export const historyHead: CSSProperties = {
   position: 'sticky',
   top: 0,
@@ -1473,7 +1658,9 @@ export const historyHead: CSSProperties = {
   height: 28,
   flexShrink: 0,
   padding: 0,
-  background: 'var(--dsw-alias-bg-layer-2)',
+  background: 'color-mix(in srgb, var(--dsw-alias-bg-layer-2) 88%, transparent)',
+  WebkitBackdropFilter: 'blur(6px)',
+  backdropFilter: 'blur(6px)',
   borderBottom: '1px solid var(--dsw-alias-border-l2)',
   fontSize: 11,
   fontWeight: 600,
@@ -1498,6 +1685,12 @@ export const commitSubjectLine: CSSProperties = {
   fontSize: 13,
   lineHeight: '20px',
   color: 'var(--dsw-alias-label-primary)',
+}
+
+/** IDEA 式 merge 提交主题：弱化三等色——多父提交不喧宾夺主。 */
+export const commitSubjectMerge: CSSProperties = {
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontWeight: 400,
 }
 
 export const historyHash: CSSProperties = {
@@ -1608,18 +1801,6 @@ export const msgBody: CSSProperties = {
   color: 'var(--dsw-alias-label-secondary)',
 }
 
-/** 右栏未选中时的占位区（IDEA 式双区居中提示）。 */
-export const rightEmptyZone: CSSProperties = {
-  flex: 1,
-  minHeight: 0,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  color: 'var(--dsw-alias-label-tertiary)',
-  fontSize: 12,
-  lineHeight: '18px',
-}
-
 /** 下占位区（提交详细信息）：固定比例 + 顶部分隔线。 */
 export const rightEmptyZoneBottom: CSSProperties = {
   flex: 'none',
@@ -1633,6 +1814,27 @@ export const commitDetailHeader: CSSProperties = {
   gap: 4,
   padding: '2px 0 10px',
   borderBottom: '1px solid var(--dsw-alias-border-l2)',
+}
+
+/** 提交详情头部元信息行（hash 徽标 · 作者 · 时间）。 */
+export const commitDetailMetaRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  flexWrap: 'wrap',
+}
+
+/** 提交详情 hash 徽标：等宽小胶囊（与 refs 胶囊/stat chips 同族）。 */
+export const commitDetailHash: CSSProperties = {
+  flex: 'none',
+  fontFamily: 'var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace)',
+  fontSize: 11,
+  lineHeight: '15px',
+  padding: '1px 6px',
+  borderRadius: 6,
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  color: 'var(--dsw-alias-label-secondary)',
 }
 
 export const commitDetailSubject: CSSProperties = {
@@ -1668,4 +1870,291 @@ export const branchMark: CSSProperties = {
   flex: 'none',
   color: 'var(--dsw-alias-state-business-primary)',
   fontSize: 12,
+}
+
+// ── Settings tab（设置模块：预览卡 / 显示模式 / 开关矩阵 / 步进器）────────────
+
+/** 预览卡：顶部高亮表面（layer-3 + 发丝边），与弹窗卡面同级。 */
+export const settingsPreview: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  borderRadius: 12,
+  background: 'var(--dsw-alias-bg-layer-3)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  overflow: 'hidden',
+}
+
+export const settingsPreviewBar: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '8px 14px 0',
+}
+
+export const settingsPreviewLabel: CSSProperties = {
+  fontSize: 11,
+  lineHeight: '16px',
+  fontWeight: 600,
+  letterSpacing: '0.4px',
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
+export const settingsPreviewNote: CSSProperties = {
+  fontSize: 11,
+  lineHeight: '16px',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+/** 预览舞台：径向弱化内嵌虚线框，示意「此为演示面」。 */
+export const settingsPreviewStage: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '14px 16px 18px',
+}
+
+/** 预览 Pill：与真实胶囊同型，但不响应交互（cursor: default）。 */
+export const settingsPreviewPill: CSSProperties = {
+  cursor: 'default',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2), 0 0 0 5px color-mix(in srgb, var(--dsw-alias-border-l2) 40%, transparent)',
+}
+
+/** 设置分组卡：layer-1 底 + 发丝边（层级低于预览卡的 layer-3 面）。 */
+export const settingsCard: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 2,
+  borderRadius: 12,
+  background: 'var(--dsw-alias-bg-layer-1)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  padding: '6px 8px 10px',
+}
+
+export const settingsCardHead: CSSProperties = {
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: 8,
+  padding: '8px 8px 6px',
+}
+
+export const settingsCardTitle: CSSProperties = {
+  fontSize: 11,
+  lineHeight: '16px',
+  fontWeight: 600,
+  letterSpacing: '0.4px',
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
+export const settingsCardNote: CSSProperties = {
+  fontSize: 11,
+  lineHeight: '16px',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+/** 设置行：40px 高，图标槽 + 双行文案 + 尾端控件（行交互态由全局 CSS 承接）。 */
+export const settingsRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  minHeight: 40,
+  padding: '5px 8px',
+  borderRadius: 8,
+}
+
+/** 行首图标槽：28px 方形 layer-2 面 + 发丝边，承载语义小图标。 */
+export const settingsRowIcon: CSSProperties = {
+  flex: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 28,
+  height: 28,
+  borderRadius: 8,
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
+export const settingsRowBody: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 1,
+  flex: 1,
+  minWidth: 0,
+}
+
+export const settingsRowName: CSSProperties = {
+  fontSize: 13,
+  lineHeight: '18px',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+export const settingsRowDesc: CSSProperties = {
+  fontSize: 11,
+  lineHeight: '16px',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+/** 尾端控件槽：右对齐、不收缩。 */
+export const settingsRowControl: CSSProperties = {
+  flex: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+}
+
+/** 行内说明（全关兜底提示等）。 */
+export const settingsRowHint: CSSProperties = {
+  margin: '2px 8px 4px',
+  fontSize: 11,
+  lineHeight: '16px',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+/** 开关轨道：40×24 胶囊；激活色经 data-on 由全局 CSS 切换。 */
+export const settingsSwitch: CSSProperties = {
+  position: 'relative',
+  width: 40,
+  height: 24,
+  padding: 0,
+  border: 'none',
+  borderRadius: 12,
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  cursor: 'pointer',
+  flex: 'none',
+}
+
+/** 开关滑钮：20px 圆片，位移经 data-on 由全局 CSS 切换（父按钮样式表中无 data 选择器）。 */
+export const settingsSwitchKnob: CSSProperties = {
+  position: 'absolute',
+  top: 2,
+  left: 2,
+  width: 20,
+  height: 20,
+  borderRadius: '50%',
+  background: 'var(--dsw-alias-bg-layer-3)',
+  boxShadow: 'var(--dsw-shadow-lv2), inset 0 0 0 1px var(--dsw-alias-border-l2)',
+}
+
+/** 分段控件容器：iOS 式轨道（layer-2 满宽胶囊，激活段内凹凸起由行内样式叠加）。 */
+export const settingsSegmented: CSSProperties = {
+  display: 'flex',
+  gap: 2,
+  padding: 3,
+  borderRadius: 10,
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  margin: '0 8px 4px',
+}
+
+export const settingsSegment: CSSProperties = {
+  flex: 1,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: 26,
+  padding: '0 6px',
+  border: 'none',
+  borderRadius: 7,
+  background: 'transparent',
+  fontSize: 12,
+  lineHeight: '18px',
+  color: 'var(--dsw-alias-label-secondary)',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  whiteSpace: 'nowrap',
+}
+
+/** 激活段：layer-3 凸起 + 阴影（与预览卡面同级，形成「抬起」层级）。 */
+export const settingsSegmentActive: CSSProperties = {
+  background: 'var(--dsw-alias-bg-layer-3)',
+  boxShadow: 'var(--dsw-shadow-lv1), inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+/** 计数三徽章容器。 */
+export const settingsCountsBadges: CSSProperties = {
+  display: 'inline-flex',
+  gap: 4,
+}
+
+/** 计数徽章：20px 高胶囊，开=语义色冲淡底色（复用 chip 语言），关=弱化描边。 */
+export const settingsCountBadge: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  height: 20,
+  padding: '0 7px',
+  border: 'none',
+  borderRadius: 10,
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontSize: 11,
+  lineHeight: '16px',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+}
+
+/** 开态：business 色前缀 + 主文本（淡晕底色随内核层注入，此处提供合语义断言底色）。 */
+export const settingsCountBadgeOn: CSSProperties = {
+  background: 'color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, transparent)',
+  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-business-primary) 35%, transparent)',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+export const settingsCountBadgeGlyph: CSSProperties = {
+  flex: 'none',
+  fontWeight: 600,
+}
+
+/** 行内小字号图形/文本槽（+/−、⇅、123 等占位图标）。 */
+export const settingsCountGlyph: CSSProperties = {
+  fontSize: 12,
+  lineHeight: '16px',
+  fontWeight: 600,
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
+/** 步进器：− 值 +（按钮复用 icon-btn 尺寸协议）。 */
+export const settingsStepper: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 2,
+}
+
+export const settingsStepperBtn: CSSProperties = {
+  ...rowIconButton,
+  width: 26,
+  height: 26,
+  fontSize: 14,
+  lineHeight: '1',
+}
+
+export const settingsStepperValue: CSSProperties = {
+  minWidth: 44,
+  textAlign: 'center',
+  fontSize: 12,
+  lineHeight: '18px',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+/** 底部行：全局生效说明 + 重置按钮。 */
+export const settingsFooter: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  padding: '2px 4px',
+}
+
+export const settingsFooterNote: CSSProperties = {
+  flex: 1,
+  fontSize: 11,
+  lineHeight: '16px',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+export const settingsResetButton: CSSProperties = {
+  ...refreshButton,
+  padding: '4px 10px',
 }

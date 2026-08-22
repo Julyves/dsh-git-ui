@@ -19,7 +19,7 @@ import { useUI } from '../contracts/ui-context.tsx'
 import type { GitObservable, GitQueryOutcome, GitView } from './controller.ts'
 import type { GitInjected } from '../contracts/client-platform.ts'
 import { GitCenter } from './GitCenter.tsx'
-import { fileIconForPath, FolderIcon, AlertIcon, CloseIcon, RollbackIcon, StageIcon, UnstageIcon } from './icons.tsx'
+import { fileIconForPath, FolderIcon, AlertIcon, CloseIcon, GearIcon, RollbackIcon, StageIcon, UnstageIcon } from './icons.tsx'
 import type { GitAction, GitActionResult, GitBranch, GitOperationErrorCode, GitQueryRequest } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import { SelectMenu } from './select-menu.tsx'
@@ -27,6 +27,9 @@ import { splitChangePath } from './file-tree.ts'
 import { shouldClosePopup } from './popup-close.ts'
 import { diffBaseOf } from './changes-diff.ts'
 import { errorText, errorAction } from './error-text.ts'
+import { useSettings } from './settings/use-settings.ts'
+import { renderPill, chipLetter, popupBadgeTexts } from './pill-segments.tsx'
+import type { GitUISettings } from '../contracts/settings.ts'
 import * as css from './styles.ts'
 
 // Inject the plugin's interaction styles once (idempotent, browser-only).
@@ -55,29 +58,8 @@ export interface GitPillProps extends GitInjected {
   readonly t: (key: GitKey) => string
 }
 
-/** 状态字符映射（配色见 styles.chipStyles，全语义 token）。 */
-
-const CHIP_LETTERS: Record<string, string> = {
-  added: 'A', modified: 'M', deleted: 'D', renamed: 'R',
-  untracked: '?', conflicted: '!', typechange: 'T',
-}
-
-/** Format a count badge like `+2 −1 ?3` (staged / modified / untracked). */
-function dirtyBadge(snapshot: GitView & { state: 'ready' }): string {
-  const parts: string[] = []
-  if (snapshot.snapshot.staged > 0) parts.push(`+${snapshot.snapshot.staged}`)
-  if (snapshot.snapshot.modified > 0) parts.push(`−${snapshot.snapshot.modified}`)
-  if (snapshot.snapshot.untracked > 0) parts.push(`?${snapshot.snapshot.untracked}`)
-  return parts.join(' ')
-}
-
-/** Format ahead/behind like `↑1 ↓2`. */
-function aheadBehind(snapshot: GitView & { state: 'ready' }): string {
-  const parts: string[] = []
-  if (snapshot.snapshot.ahead > 0) parts.push(`↑${snapshot.snapshot.ahead}`)
-  if (snapshot.snapshot.behind > 0) parts.push(`↓${snapshot.snapshot.behind}`)
-  return parts.join(' ')
-}
+/** 状态字符映射（配色见 styles.chipStyles，全语义 token）。
+ * 统一由 pill-segments.chipLetter 派生（协议单一来源）。 */
 
 /** Short relative time from an ISO date, localized through dictionary templates. */
 function timeAgo(iso: string, now: number, t: (key: GitKey) => string): string {
@@ -91,21 +73,12 @@ function timeAgo(iso: string, now: number, t: (key: GitKey) => string): string {
   return fill('time.daysAgo', Math.floor(seconds / 86_400))
 }
 
-/** The pill label parts: 分支名（可 ellipsis 收缩）+ 徽标（不截断保留）。 */
-function pillParts(view: GitView & { state: 'ready' }, t: (key: GitKey) => string): { branch: string; badges: string[] } {
-  const s = view.snapshot
-  const branch = s.branch === null
-    ? `(${t('pill.detached')}) · ${s.head ?? ''}`
-    : (s.unborn ? `${s.branch} · ${t('pill.noCommits')}` : s.branch)
-  const badges = [dirtyBadge(view), aheadBehind(view)].filter(Boolean)
-  return { branch, badges }
-}
-
-/** Dimmed pill for degraded states. */
+/** Dimmed pill for degraded states（弱化图标锚点 + 说明文字）。 */
 function DegradedPill({ label, title, t }: { label: string; title?: string; t: (key: GitKey) => string }): JSX.Element {
   void t
   return (
     <span className="dsh-git-ui__pill" style={css.pillDimmed} title={title} aria-label={label}>
+      <span style={css.pillDimmedIcon} aria-hidden="true"><AlertIcon /></span>
       {label}
     </span>
   )
@@ -115,13 +88,17 @@ function DegradedPill({ label, title, t }: { label: string; title?: string; t: (
  * Popup body (rendered inside the portaled card)。
  * 分支管理（切换/新建）已并入本组件：头部内联切换 + 新建行上提；
  * 变更行带 hover 内联操作（暂存/取消/丢弃两步）。
+ * 各区块按 `settings.popup` 设置驱动显隐；头部徽章沿 `settings.pill`。
  */
 function GitPopupBody({
-  view, refresh, openCenter, onOpenDiff, run, query, t,
+  view, settings, refresh, openCenter, openSettings, onOpenDiff, run, query, t,
 }: {
   view: GitView & { state: 'ready' }
+  settings: GitUISettings
   refresh: () => Promise<void>
   openCenter: () => void
+  /** 打开 Git 中心并定位到设置页。 */
+  openSettings: () => void
   /** 变更文件点击：打开 Git 中心并定位该文件的对照视图。 */
   onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
   run: (action: GitAction) => Promise<GitActionResult>
@@ -158,9 +135,10 @@ function GitPopupBody({
   }
 
   useEffect(() => {
-    void reload()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only
-  }, [])
+    // 分支数据仅为切换器服务：关闭时跳过查询（省一次 RPC），打开时加载。
+    if (settings.popup.branchSwitcher) void reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅随切换器开关变化
+  }, [settings.popup.branchSwitcher])
 
   useEffect(() => {
     if (armed === null) return
@@ -219,54 +197,78 @@ function GitPopupBody({
       <header style={css.popupHeader}>
         <div style={css.popupHeaderMain}>
           <span style={s.dirty ? css.dotDirty : css.dot} aria-hidden="true" />
-          {branchData === null ? (
-            <span style={css.popupHeaderBranch}>{branchLabel}</span>
-          ) : (
-            <SelectMenu
-              value={branchData.current ?? ''}
-              options={[
-                // 游离 HEAD：注入伪选项让头部显示游离标签，仍可下拉切换本地分支。
-                ...(branchData.current === null ? [{ value: '', label: branchLabel }] : []),
-                ...branchData.local.map((b) => ({ value: b.name, label: b.name })),
-              ]}
-              onSelect={(name) => void switchTo(name)}
-              ariaLabel={t('center.currentBranch')}
-              buttonStyle={css.popupBranchMenu}
-            />
-          )}
+          {settings.popup.branchSwitcher
+            ? (
+              branchData === null
+                ? <span style={css.popupHeaderBranch}>{branchLabel}</span>
+                : (
+                  <SelectMenu
+                    value={branchData.current ?? ''}
+                    options={[
+                      // 游离 HEAD：注入伪选项让头部显示游离标签，仍可下拉切换本地分支。
+                      ...(branchData.current === null ? [{ value: '', label: branchLabel }] : []),
+                      ...branchData.local.map((b) => ({ value: b.name, label: b.name })),
+                    ]}
+                    onSelect={(name) => void switchTo(name)}
+                    ariaLabel={t('center.currentBranch')}
+                    buttonStyle={css.popupBranchMenu}
+                  />
+                )
+            )
+            : <span style={css.popupHeaderBranch}>{branchLabel}</span>}
           {s.unborn && <span style={css.popupBadge}>{t('pill.noCommits')}</span>}
-          {s.dirty && <span style={css.popupBadge}>{dirtyBadge(view)}</span>}
-          {(s.ahead > 0 || s.behind > 0) && <span style={css.popupBadge}>{aheadBehind(view)}</span>}
+          {popupBadgeTexts(s, settings.pill).map((badge) => (
+            <span key={badge.key} style={css.popupBadge}>{badge.text}</span>
+          ))}
         </div>
-        <div style={css.popupHeaderRoot} title={s.root}>
-          <FolderIcon />
-          <span style={css.popupHeaderRootText}>{s.root}</span>
+        <div style={css.popupHeaderRootRow}>
+          {settings.popup.rootPath && (
+            <div style={css.popupHeaderRoot} title={s.root}>
+              <FolderIcon />
+              <span style={css.popupHeaderRootText}>{s.root}</span>
+            </div>
+          )}
+          {!settings.popup.rootPath && <span style={{ flex: 1 }} />}
+          <button
+            type="button"
+            className="dsh-git-ui__icon-btn"
+            style={css.rowIconButton}
+            title={t('settings.gear')}
+            aria-label={t('settings.gear')}
+            onClick={openSettings}
+          >
+            <GearIcon />
+          </button>
         </div>
       </header>
-      <div style={css.popupStatusBar}>
-        {([
-          ['popup.staged', s.staged], ['popup.modified', s.modified], ['popup.untracked', s.untracked],
-        ] as const).map(([key, value]) => (
-          <span key={key} style={css.popupStatItem}>
-            <span style={css.popupStatValue}>{value}</span>
-            <span style={css.popupStatLabel}>{t(key)}</span>
-          </span>
-        ))}
-      </div>
-      <div style={css.popupBranchOps}>
-        <input
-          className="dsh-git-ui__branch-input"
-          style={css.branchNameInput}
-          placeholder={t('center.branchName')}
-          value={newName}
-          disabled={busy}
-          onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') void createAndSwitch() }}
-        />
-        <Button size="sm" disabled={busy || newName.trim() === ''} onClick={() => void createAndSwitch()}>
-          {t('center.createAndSwitch')}
-        </Button>
-      </div>
+      {settings.popup.statusBar && (
+        <div style={css.popupStatusBar}>
+          {([
+            ['popup.staged', s.staged], ['popup.modified', s.modified], ['popup.untracked', s.untracked],
+          ] as const).map(([key, value]) => (
+            <span key={key} style={css.popupStatItem}>
+              <span style={css.popupStatValue}>{value}</span>
+              <span style={css.popupStatLabel}>{t(key)}</span>
+            </span>
+          ))}
+        </div>
+      )}
+      {settings.popup.branchCreate && (
+        <div style={css.popupBranchOps}>
+          <input
+            className="dsh-git-ui__branch-input"
+            style={css.branchNameInput}
+            placeholder={t('center.branchName')}
+            value={newName}
+            disabled={busy}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void createAndSwitch() }}
+          />
+          <Button size="sm" disabled={busy || newName.trim() === ''} onClick={() => void createAndSwitch()}>
+            {t('center.createAndSwitch')}
+          </Button>
+        </div>
+      )}
       {note !== null && (
         <div style={css.popupNote} role="alert">
           <span style={css.popupNoteIcon} aria-hidden="true"><AlertIcon /></span>
@@ -288,100 +290,118 @@ function GitPopupBody({
           </button>
         </div>
       )}
-      <div style={css.sectionTitle}>{t('popup.recentCommits')}</div>
-      {s.recentCommits.length === 0
-        ? <div style={css.emptyNote}>{t('popup.emptyCommits')}</div>
-        : s.recentCommits.slice(0, 3).map((commit) => (
-          <div key={commit.hash} className="dsh-git-ui__row" style={css.commitRow}>
-            <div style={css.commitSubjectPop} title={commit.subject}>{commit.subject}</div>
-            <div style={css.commitMetaLine}>
-              <span style={css.commitHash}>{commit.shortHash}</span>
-              <span style={css.commitDot}>·</span>
-              <span style={css.commitMeta}>{commit.author}</span>
-              <span style={css.commitDot}>·</span>
-              <span style={css.commitMeta}>{timeAgo(commit.dateIso, now, t)}</span>
-            </div>
-          </div>
-        ))}
-      <div style={css.sectionTitle}>{t('popup.changes')}</div>
-      {s.changes.length === 0
-        ? <div style={css.emptyNote}>{t('popup.empty')}</div>
-        : (
-          <>
-            {s.changes.map((change) => {
-              const { name, dir, isDir } = splitChangePath(change.path, change.isDirectory)
-              const untracked = change.status === 'untracked'
-              return (
-                <div key={change.path} className="dsh-git-ui__row" style={css.changeRow}>
-                  <span
-                    style={{ ...css.changeChip, ...(css.chipStyles[change.status] ?? css.chipStyles.untracked) }}
-                    title={change.status}
-                  >
-                    {CHIP_LETTERS[change.status] ?? '•'}
-                  </span>
-                  <span style={css.rowFileIcon} aria-hidden="true">
-                    {isDir ? <FolderIcon /> : fileIconForPath(change.path)}
-                  </span>
-                  {isDir ? (
-                    // 目录条目：点击打开 Git 中心变更页（目录无 diff 语义，展开后选具体文件）。
-                    <button
-                      type="button"
-                      className="dsh-git-ui__change-link"
-                      style={css.changeNamePopBtn}
-                      title={change.path}
-                      aria-label={`${name} — ${t('center.open')}`}
-                      onClick={openCenter}
-                    >
-                      {name}
-                    </button>
-                  ) : (
-                    // 文件条目：点击打开 Git 中心并直接展示该文件对照。
-                    <button
-                      type="button"
-                      className="dsh-git-ui__change-link"
-                      style={css.changeNamePopBtn}
-                      title={change.path}
-                      aria-label={`${name} — ${t('changes.actionDiff')}`}
-                      onClick={() => onOpenDiff(change.path, diffBaseOf(change))}
-                    >
-                      {name}
-                    </button>
-                  )}
-                  {dir !== '' ? <span style={css.changeDirPop}>{dir}</span> : <span style={{ flex: '1 1 0%', minWidth: 0 }} />}
-                  <span className="dsh-git-ui__row-actions" style={css.rowActions}>
-                    {change.staged
-                      ? (
-                        <button type="button" className="dsh-git-ui__icon-btn" style={css.rowIconButton} title={t('center.unstage')} aria-label={t('center.unstage')} disabled={busy} onClick={() => unstage(change.path)}>
-                          <UnstageIcon />
+      {settings.popup.recentCommits > 0 && (
+        <>
+          <div style={css.sectionTitle}>{t('popup.recentCommits')}</div>
+          {s.recentCommits.length === 0
+            ? (
+              <div style={css.emptyStateSmall}>
+                <span style={css.emptyStateDot} aria-hidden="true" />
+                {t('popup.emptyCommits')}
+              </div>
+            )
+            : s.recentCommits.slice(0, settings.popup.recentCommits).map((commit) => (
+              <div key={commit.hash} className="dsh-git-ui__row" style={css.commitRow}>
+                <div style={css.commitSubjectPop} title={commit.subject}>{commit.subject}</div>
+                <div style={css.commitMetaLine}>
+                  <span style={css.commitHash}>{commit.shortHash}</span>
+                  <span style={css.commitDot}>·</span>
+                  <span style={css.commitMeta}>{commit.author}</span>
+                  <span style={css.commitDot}>·</span>
+                  <span style={css.commitMeta}>{timeAgo(commit.dateIso, now, t)}</span>
+                </div>
+              </div>
+            ))}
+        </>
+      )}
+      {settings.popup.changesList && (
+        <>
+          <div style={css.sectionTitle}>{t('popup.changes')}</div>
+          {s.changes.length === 0
+            ? (
+              <div style={css.emptyStateSmall}>
+                <span style={css.emptyStateDot} aria-hidden="true" />
+                {t('popup.empty')}
+              </div>
+            )
+            : (
+              <>
+                {s.changes.map((change) => {
+                  const { name, dir, isDir } = splitChangePath(change.path, change.isDirectory)
+                  const untracked = change.status === 'untracked'
+                  return (
+                    <div key={change.path} className="dsh-git-ui__row" style={css.changeRow}>
+                      <span
+                        style={{ ...css.changeChip, ...(css.chipStyles[change.status] ?? css.chipStyles.untracked) }}
+                        title={change.status}
+                      >
+                        {chipLetter(change.status)}
+                      </span>
+                      <span style={css.rowFileIcon} aria-hidden="true">
+                        {isDir ? <FolderIcon /> : fileIconForPath(change.path)}
+                      </span>
+                      {isDir ? (
+                        // 目录条目：点击打开 Git 中心变更页（目录无 diff 语义，展开后选具体文件）。
+                        <button
+                          type="button"
+                          className="dsh-git-ui__change-link"
+                          style={css.changeNamePopBtn}
+                          title={change.path}
+                          aria-label={`${name} — ${t('center.open')}`}
+                          onClick={openCenter}
+                        >
+                          {name}
                         </button>
-                      )
-                      : (
-                        <button type="button" className="dsh-git-ui__icon-btn" style={css.rowIconButton} title={t('center.stage')} aria-label={t('center.stage')} disabled={busy} onClick={() => stage(change.path)}>
-                          <StageIcon />
+                      ) : (
+                        // 文件条目：点击打开 Git 中心并直接展示该文件对照。
+                        <button
+                          type="button"
+                          className="dsh-git-ui__change-link"
+                          style={css.changeNamePopBtn}
+                          title={change.path}
+                          aria-label={`${name} — ${t('changes.actionDiff')}`}
+                          onClick={() => onOpenDiff(change.path, diffBaseOf(change))}
+                        >
+                          {name}
                         </button>
                       )}
-                    {!untracked && (
-                      <button
-                        type="button"
-                        className="dsh-git-ui__icon-btn"
-                        style={armed === change.path ? { ...css.rowIconButton, color: 'var(--dsw-alias-state-error-primary)' } : css.rowIconButton}
-                        title={armed === change.path ? t('center.confirmDiscard') : t('center.discard')}
-                        aria-label={armed === change.path ? t('center.confirmDiscard') : t('center.discard')}
-                        disabled={busy}
-                        onClick={() => discard(change.path)}
-                      >
-                        <RollbackIcon />
-                      </button>
-                    )}
-                  </span>
-                </div>
-              )
-            })}
-            {s.truncated && (
-              <div style={css.emptyNote}>{t('popup.changesTruncated').replace('{count}', String(s.changes.length))}</div>
+                      {dir !== '' ? <span style={css.changeDirPop}>{dir}</span> : <span style={{ flex: '1 1 0%', minWidth: 0 }} />}
+                      <span className="dsh-git-ui__row-actions" style={css.rowActions}>
+                        {change.staged
+                          ? (
+                            <button type="button" className="dsh-git-ui__icon-btn" style={css.rowIconButton} title={t('center.unstage')} aria-label={t('center.unstage')} disabled={busy} onClick={() => unstage(change.path)}>
+                              <UnstageIcon />
+                            </button>
+                          )
+                          : (
+                            <button type="button" className="dsh-git-ui__icon-btn" style={css.rowIconButton} title={t('center.stage')} aria-label={t('center.stage')} disabled={busy} onClick={() => stage(change.path)}>
+                              <StageIcon />
+                            </button>
+                          )}
+                        {!untracked && (
+                          <button
+                            type="button"
+                            className="dsh-git-ui__icon-btn"
+                            style={armed === change.path ? { ...css.rowIconButton, color: 'var(--dsw-alias-state-error-primary)' } : css.rowIconButton}
+                            title={armed === change.path ? t('center.confirmDiscard') : t('center.discard')}
+                            aria-label={armed === change.path ? t('center.confirmDiscard') : t('center.discard')}
+                            disabled={busy}
+                            onClick={() => discard(change.path)}
+                          >
+                            <RollbackIcon />
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                  )
+                })}
+                {s.truncated && (
+                  <div style={css.emptyNote}>{t('popup.changesTruncated').replace('{count}', String(s.changes.length))}</div>
+                )}
+              </>
             )}
-          </>
-        )}
+        </>
+      )}
       <div style={css.footerRow}>
         <span style={css.checkedAt}>{t('popup.checkedAt').replace('{time}', new Date(s.checkedAt).toLocaleTimeString())}</span>
         <span style={css.footerActions}>
@@ -454,10 +474,31 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   /** 从 pill 变更行点击「打开 Git 中心并定位该文件 diff」的请求。 */
   const [centerRequest, setCenterRequest] = useState<{ path: string; base: 'worktree' | 'staged' } | null>(null)
+  /** Git 中心初始 Tab：常规打开 = 变更；齿轮打开 = 设置。 */
+  const [centerTab, setCenterTab] = useState<'changes' | 'settings'>('changes')
+  /** 设置（插件级全局）；Pill 与弹窗展示按此切片。 */
+  const uiSettings = useSettings()
 
   /** 打开 Git 中心并直接定位到该文件的对照视图（关 popup、切 changes 标签、查询 diff）。 */
   const openDiffInCenter = (path: string, base: 'worktree' | 'staged'): void => {
+    setCenterTab('changes')
     setCenterRequest({ path, base })
+    setOpen(false)
+    setPos(null)
+    setCenterOpen(true)
+  }
+
+  /** 打开 Git 中心（默认变更页）。 */
+  const openCenter = (): void => {
+    setCenterTab('changes')
+    setOpen(false)
+    setPos(null)
+    setCenterOpen(true)
+  }
+
+  /** 打开 Git 中心并定位设置页（弹窗齿轮入口）。 */
+  const openSettingsInCenter = (): void => {
+    setCenterTab('settings')
     setOpen(false)
     setPos(null)
     setCenterOpen(true)
@@ -542,8 +583,7 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
     )
   }
 
-  const dirty = display.snapshot.dirty
-  const parts = pillParts(display, t)
+  const render = renderPill(display, uiSettings.pill, t)
   return (
     <span ref={wrapRef} style={{ display: 'inline-flex' }}>
       <button
@@ -553,11 +593,9 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
         onClick={() => setOpen(!open)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title={`${display.snapshot.root}\n${[parts.branch, ...parts.badges].filter(Boolean).join(' · ')}`}
+        title={`${display.snapshot.root}\n${render.summary}`}
       >
-        <span style={dirty ? css.dotDirty : css.dot} aria-hidden="true" />
-        <span style={css.pillBranch}>{parts.branch}</span>
-        {parts.badges.length > 0 && <span style={css.pillBadges}>{parts.badges.join(' · ')}</span>}
+        {render.nodes}
       </button>
       {open && pos !== null && createPortal(
         <div
@@ -569,8 +607,10 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
         >
           <GitPopupBody
             view={display}
+            settings={uiSettings}
             refresh={refresh}
-            openCenter={() => { setOpen(false); setPos(null); setCenterOpen(true) }}
+            openCenter={openCenter}
+            openSettings={openSettingsInCenter}
             onOpenDiff={openDiffInCenter}
             run={run}
             query={query}
@@ -582,6 +622,7 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
       <GitCenter
         open={centerOpen}
         onClose={() => setCenterOpen(false)}
+        initialTab={centerTab}
         snapshot={display.snapshot}
         run={run}
         query={query}

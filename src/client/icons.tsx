@@ -261,11 +261,46 @@ export function PrevIcon(): JSX.Element {
   )
 }
 
+/** 设置（齿轮）。 */
+export function GearIcon(): JSX.Element {
+  return (
+    <svg width={14} height={14} viewBox="0 0 14 14" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <circle cx={7} cy={7} r={2.2} fill="none" stroke="currentColor" strokeWidth={1.3} />
+      <path
+        d="M7 1.4 V3 M7 11 V12.6 M1.4 7 H3 M11 7 H12.6 M2.56 2.56 L3.7 3.7 M10.3 10.3 L11.44 11.44 M11.44 2.56 L10.3 3.7 M3.7 10.3 L2.56 11.44"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.3}
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 /** 下一个（右箭头）。 */
 export function NextIcon(): JSX.Element {
   return (
     <svg width={14} height={14} viewBox="0 0 14 14" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
       <path d="M5.5 3 L9.5 7 L5.5 11" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** 对勾（干净空状态 / 完成语义）。 */
+export function CheckIcon(): JSX.Element {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <path d="M3.5 8.5 L6.5 11.5 L12.5 4.5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** 提交（空历史语义）：节点 + 连接线。 */
+export function CommitIcon(): JSX.Element {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <circle cx={8} cy={8} r={2.4} fill="none" stroke="currentColor" strokeWidth={1.4} />
+      <path d="M2.5 8 H5.6 M10.4 8 H13.5" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
     </svg>
   )
 }

@@ -34,9 +34,10 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plug
 
   <img src="docs/screenshots/02-面板选择切换分支.png" alt="Inline branch switching in the detail popover" width="720">
 
-- **Git center** (management panel opened from the popover): two tabs — **Changes** and **History**.
+- **Git center** (management panel opened from the popover): three tabs — **Changes**, **History** and **Settings**.
   - *Changes*: IDE-style grouped lists (staged / unstaged / untracked), per-file and bulk stage / unstage / discard (two-step confirm), a commit box (selected files or everything staged), and an inline side-by-side diff for the selected file with prev/next navigation.
   - *History*: a paginated commit list with a rendered branch graph, per-commit details (subject · body · changed-file tree), and filters by branch / tag / author / date / text-or-hash, plus a fetch-remote button.
+  - *Settings*: **configurable pill information components** — a live preview, four display presets (minimal / standard / full / custom, purely derived so any manual tweak snaps back when it matches a preset again), and per-component switches (status dot, branch name, the three change-count badges, ahead/behind; plus popup blocks: repository path, status bar, branch switcher, new-branch row, recent-commit count, changed-file list). Also reachable via the gear icon in the popup header:
 
   Every operation refreshes the status instantly:
 
