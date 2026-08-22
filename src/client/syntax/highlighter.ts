@@ -23,7 +23,7 @@
  */
 
 import { createHighlighterCoreSync, createCssVariablesTheme } from 'shiki/core'
-import { createJavaScriptRegexEngine, defaultJavaScriptRegexConstructor } from 'shiki/engine/javascript'
+import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
 import type { HighlighterCore } from 'shiki/core'
 import langTs from '@shikijs/langs/typescript'
 import langJson from '@shikijs/langs/json'
@@ -76,15 +76,18 @@ const theme = createCssVariablesTheme({
 })
 
 /**
- * 正则引擎：与 platform 同源配置（forgiving + eager compile）。
- * lazyCompileLength 置 Infinity：shiki 默认对超长 pattern 惰性编译，时机
- * 落在用户内容扫描中；eager 编译把成本挪到构造阶段，扫描预算全部留给内容。
+ * 正则引擎：**惰性编译**（shiki 默认，不覆盖 regexConstructor）。
+ *
+ * 与 platform 的取舍不同——platform 用 eager（lazyCompileLength: Infinity）
+ * 把编译挪到预热，因为它的 boot grammar 只有 3 个；我们注册 18 个 grammar，
+ * **eager 会在首次扫描时一次性编译全部 pattern（实测 Node 284ms；用户浏览器
+ * 慢 3-5 倍 → 渲染关键路径上 1s+ 的集中长任务——这是插件导致 dsh「加载卡死」
+ * 的根因之一）**。惰性编译把成本**按语言、按首次使用**分散：
+ * 单语言首次扫描 1-30ms（Node 实测），渲染路径可接受。
+ * `forgiving: true` 保留：无效 pattern 不抛错（回退占位），高亮永不崩。
  */
 const engine = createJavaScriptRegexEngine({
   forgiving: true,
-  regexConstructor: (pattern) => defaultJavaScriptRegexConstructor(pattern, {
-    lazyCompileLength: Number.POSITIVE_INFINITY,
-  }),
 })
 
 let singleton: HighlighterCore | undefined
@@ -94,6 +97,10 @@ let constructing = false
 const readyListeners = new Set<() => void>()
 /** 每次构造完成递增；组件以它为 useMemo 依赖触发重算。 */
 let readyCount = 0
+/** 构造失败原因（最后一次；诊断与测试用）。 */
+let lastFailure: string | undefined
+/** 失败是否已上报（每个失败原因只 console.warn 一次——防刷屏）。 */
+let warnedFailure: string | undefined
 
 /**
  * 订阅高亮就绪（构造完成）；返回取消订阅函数。
@@ -109,7 +116,23 @@ export function highlightReadyCount(): number {
   return readyCount
 }
 
-/** 异步触发构造（幂等，让出当前帧）；构造失败保持未就绪（纯文本）。 */
+/**
+ * 显式启动构造（幂等；供订阅方调用）。
+ *
+ * 组件层在 ready 前**不调用** `highlightLines`（`ready>0` 短路），因此构造
+ * 不能只由高亮调用触发——订阅方（useHighlightReady）挂载时调用本入口启动，
+ * 否则就绪事件永不到来（蛋鸡死锁：未就绪 → 不调用 → 永不就绪）。
+ */
+export function ensureHighlightInit(): void {
+  ensureConstructing()
+}
+
+/** 构造失败原因（undefined = 未曾失败或已就绪）；诊断/测试用。 */
+export function highlightFailureReason(): string | undefined {
+  return singleton !== undefined ? undefined : lastFailure
+}
+
+/** 异步触发构造（幂等，让出当前帧）；失败自动重试（下次调用再触发）。 */
 function ensureConstructing(): void {
   if (singleton !== undefined || constructing) return
   constructing = true
@@ -118,9 +141,18 @@ function ensureConstructing(): void {
     try {
       singleton = createHighlighterCoreSync({ themes: [theme], langs: LANGS, engine })
       readyCount += 1
+      lastFailure = undefined
+      // 一次性就绪日志：环境异常定位用，成功路径仅一条。
+      if (typeof console !== 'undefined') console.info('[dsh-git-ui] syntax highlight ready')
       for (const listener of [...readyListeners]) listener()
-    } catch {
-      // 构造失败（环境异常）：保持未就绪，渲染恒为纯文本——永不抛、永不阻塞。
+    } catch (error) {
+      // 构造失败（环境异常/版本问题）：保持未就绪 → 渲染恒为纯文本。
+      // 原因上报一次（同类错误不刷屏）；下次调用自动重试。
+      lastFailure = error instanceof Error ? error.message : String(error)
+      if (lastFailure !== warnedFailure) {
+        warnedFailure = lastFailure
+        if (typeof console !== 'undefined') console.warn('[dsh-git-ui] syntax highlight init failed:', lastFailure)
+      }
     } finally {
       constructing = false
     }
