@@ -483,7 +483,9 @@ const globalCss = [
   '.dsh-git-ui__commit-row { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), box-shadow 220ms var(--ds-ease-in-out); }',
   '.dsh-git-ui__refresh { transition: transform var(--ds-transition-duration-fast) ease-out, color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   // 提交行入场：仅首次挂载（增量追加/过滤切换）淡入微上移一次，fill-mode both
-  // 保持最终态；reduced-motion 下禁用（见下）。
+  // 保持最终态；reduced-motion 下禁用（见下）。虚拟化后只触发窗口行（~60），安全。
+  '@keyframes dsh-git-row-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }',
+  '.dsh-git-ui__commit-row { animation: dsh-git-row-in 160ms ease-out both; }',
   // 输入框 hover 反馈：边框由 l2 加深至 l1（聚焦环由 focus-visible 承担）。
   '.dsh-git-ui__branch-input, .dsh-git-ui__commit-input { transition: border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   // System tab underline: 2px bar below the active tab.
