@@ -39,6 +39,15 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plug
   - *History*: a paginated commit list with a rendered branch graph, per-commit details (subject · body · changed-file tree), and filters by branch / tag / author / date / text-or-hash, plus a fetch-remote button.
   - *Settings*: **configurable pill information components** — a live preview, four display presets (minimal / standard / full / custom, purely derived so any manual tweak snaps back when it matches a preset again), and per-component switches (status dot, branch name, the three change-count badges, ahead/behind; plus popup blocks: repository path, status bar, branch switcher, new-branch row, recent-commit count, changed-file list). Also reachable via the gear icon in the popup header:
 
+- **Polished diff viewer** (Changes tab side-by-side):
+  - **New files shown directly**: a pure-add diff (`--- /dev/null` shape) no longer renders an empty comparison column — the created file's full content is displayed single-column with line numbers; 0-byte empty files show "file is empty" instead of a meaningless empty diff.
+  - **Syntax highlighting**: per file type (shiki TextMate grammars, JS regex engine — no WASM) with keyword/string/comment/number coloring; the whole file is tokenized once and rendered line-by-line, so multi-line comments and strings stay correct. Colors reuse the host theme's `--shiki-*` tokens (auto light/dark); the highlight switch and code font size are configurable. The language subset and approximation mapping (C++→C, HTML→XML, SCSS/LESS→CSS) under the bundle budget are listed under [Known Limitations](#known-limitations).
+  - **Context folding**: runs of 12+ unchanged lines collapse into an expandable "… N unchanged lines" strip (click to expand/collapse); can be disabled in settings.
+  - **Bug fix**: the `\ No newline at end of file` marker no longer shifts line-number alignment.
+  - **Settings**: a diff-viewer group — code font size (10–16px), syntax-highlight switch, context-folding switch; independent of the display presets (adjusting them does not flip the preset back to "custom").
+
+- **Settings persisted on the host disk (v2)**: settings no longer live in localStorage — they are stored under the dsh Harness home at `plugin-data/dsh-git-ui/settings.json` (`$DSH_HOME` → `~/.dsh`, overridable via `dshHome` in the profile config), written atomically (temp file + rename) and surviving restarts across devices. The browser only reads/writes through host RPC (strict file-name whitelist); on initialization, v1 localStorage settings are migrated once to disk (the key is not read anymore afterwards).
+
   Every operation refreshes the status instantly:
 
   <img src="docs/screenshots/03-Git中心统一阅览文件变更.png" alt="Git center — Changes tab (grouped file changes)" width="720">
@@ -101,6 +110,8 @@ All defaults work out of the box. Advanced users may override the plugin config 
     maxChanges: 200                   # max changed-file entries in a snapshot
     timeoutMs: 3000                   # per git-command timeout (ms)
     maxStatusBytes: 8388608           # status-output cap before truncation
+    dshHome: /path/to/harness-home    # optional: Harness home (default $DSH_HOME → ~/.dsh)
+                                      # plugin data lives under <home>/plugin-data/dsh-git-ui/
 ```
 
 ## Requirements
@@ -115,6 +126,8 @@ All defaults work out of the box. Advanced users may override the plugin config 
 - Polling-based refresh (default 30s); file-watcher event push is a planned extension.
 - Changed-file list is capped (`maxChanges`); untracked-directory contents are enumerated individually. When status output overflows the in-memory cap (default 4 MiB) it is recovered from a private spill file so counts stay exact — only if the spill cap (64 MiB) also overflows does the snapshot fall back to approximate (`truncated: true`).
 - Browser never sends paths — only a `sessionId`; the host resolves the authoritative cwd and runs git commands (write operations use `--` path separation and reject absolute / `..` escapes).
+- Syntax highlighting ships a bundle-budget language subset (TypeScript/JS family, JSON/YAML/TOML/INI, Markdown, XML/HTML, CSS/SCSS/LESS, Python, Shell, Java, Go, Rust, C, C#, Kotlin, SQL, Makefile). C++ is approximated with the C grammar, HTML with XML, and SCSS/LESS with CSS (core tokens correct; language-specific constructs fall back to plain text); unregistered languages such as PHP, Swift, Ruby and Lua fall back to plain text wholesale (still monospace, never an error).
+- After the v2 storage migration, settings no longer write to localStorage; if the host RPC is unreachable (degraded mode), settings stay in memory only (valid for the session).
 
 ## Development
 

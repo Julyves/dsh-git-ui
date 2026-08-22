@@ -53,12 +53,13 @@ export interface PluginDependencies {
  * @param platform 宿主平台能力
  * @param deps 插件依赖（由调用方提供）
  * @param component 要注册的 UI 组件（已包裹 UI 基础组件上下文）
+ * @returns gitInfo Remote 服务句柄（供调用方做设置持久化等初始化）
  */
 export async function activatePlugin(
   platform: ClientPlatform,
   deps: PluginDependencies,
   component: unknown,
-): Promise<void> {
+): Promise<GitRemoteLike> {
   // 1. 注册国际化字典
   platform.effect(
     () => platform.registerLocale(LOCALE_NS, deps.locales),
@@ -126,4 +127,6 @@ export async function activatePlugin(
   platform.onEvent('connection/reset', () => {
     for (const controller of controllers.values()) controller.resync()
   })
+
+  return gitInfoService
 }

@@ -2,7 +2,7 @@
  * 左右对照构建测试：上下文对齐、删增配对、空位补齐、行号起算、全增文件。
  */
 import { describe, expect, it } from 'vitest'
-import { buildSideBySide, capSideBySideRows, foldContext, isBinaryDiff, summarizeChanges } from '../../src/client/side-by-side.ts'
+import { buildSideBySide, capSideBySideRows, extractAddedContent, foldContext, foldMarkerLines, isAddOnlyDiff, isBinaryDiff, summarizeChanges, type DiffBlock, type SideBySideRow } from '../../src/client/side-by-side.ts'
 
 describe('buildSideBySide', () => {
   it('returns an empty list for empty input', () => {
@@ -169,5 +169,161 @@ describe('isBinaryDiff', () => {
   it('returns false for ordinary diffs', () => {
     expect(isBinaryDiff('@@ -1,1 +1,1 @@\n-old\n+new\n')).toBe(false)
     expect(isBinaryDiff('')).toBe(false)
+  })
+})
+
+describe('\\ No newline at end of file marker (line-number fix)', () => {
+  it('skips the marker without advancing either side line number', () => {
+    const rows = buildSideBySide([
+      '@@ -1 +1,2 @@',
+      '-x',
+      '+line1',
+      '+line2',
+      '\\ No newline at end of file',
+    ].join('\n'))
+    // 删/增配对：2 行（左 1 / 右 1、2）；marker 若被当作 context 会多出
+    // 一行且行号整体 +1——此处行号精确即证明被跳过。
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.left.num).toBe(1)
+    expect(rows[0]?.right.num).toBe(1)
+    expect(rows[1]?.right.num).toBe(2)
+    expect(rows[1]?.left.kind).toBe('empty')
+    for (const row of rows) {
+      expect(row.left.text).not.toContain('No newline')
+      expect(row.right.text).not.toContain('No newline')
+    }
+  })
+
+  it('keeps the numbers correct when the marker follows a context hunk', () => {
+    const rows = buildSideBySide([
+      '@@ -1,2 +1,3 @@',
+      ' one',
+      '+two',
+      '+three',
+      '\\ No newline at end of file',
+    ].join('\n'))
+    expect(rows).toHaveLength(3)
+    expect(rows[0]?.left.kind).toBe('context')
+    expect(rows[2]?.right.num).toBe(3)
+    expect(rows[2]?.right.kind).toBe('add')
+  })
+})
+
+describe('isAddOnlyDiff（纯新增判定）', () => {
+  const newFileDiff = [
+    'diff --git a/new.txt b/new.txt',
+    'new file mode 100644',
+    'index 0000000..3e75765',
+    '--- /dev/null',
+    '+++ b/new.txt',
+    '@@ -0,0 +1,2 @@',
+    '+aaa',
+    '+bbb',
+  ].join('\n')
+
+  it('detects a new-file diff (--- /dev/null + add-only rows)', () => {
+    expect(isAddOnlyDiff(newFileDiff)).toBe(true)
+  })
+
+  it('detects --no-index output for untracked files', () => {
+    const noIndex = [
+      'diff --git a/a.txt b/a.txt',
+      'new file mode 100644',
+      'index 0000000..dbee026',
+      '--- /dev/null',
+      '+++ b/a.txt',
+      '@@ -0,0 +1,2 @@',
+      '+aaa',
+      '+bbb',
+    ].join('\n')
+    expect(isAddOnlyDiff(noIndex)).toBe(true)
+  })
+
+  it('returns false for a modified file', () => {
+    const modified = [
+      'diff --git a/x.txt b/x.txt',
+      'index 111..222 100644',
+      '--- a/x.txt',
+      '+++ b/x.txt',
+      '@@ -1 +1 @@',
+      '-old',
+      '+new',
+    ].join('\n')
+    expect(isAddOnlyDiff(modified)).toBe(false)
+  })
+
+  it('returns false for a deletion / rename / empty input', () => {
+    const deleted = [
+      'diff --git a/x.txt b/x.txt',
+      'deleted file mode 100644',
+      '--- a/x.txt',
+      '+++ /dev/null',
+    ].join('\n')
+    expect(isAddOnlyDiff(deleted)).toBe(false)
+    const renamed = 'diff --git a/a.txt b/b.txt\nrename from a.txt\nrename to b.txt'
+    expect(isAddOnlyDiff(renamed)).toBe(false)
+    expect(isAddOnlyDiff('')).toBe(false)
+  })
+})
+
+describe('extractAddedContent（纯新增内容提取）', () => {
+  it('extracts the full file content without the diff wrapper', () => {
+    const text = [
+      'diff --git a/new.txt b/new.txt',
+      'new file mode 100644',
+      '--- /dev/null',
+      '+++ b/new.txt',
+      '@@ -0,0 +1,2 @@',
+      '+aaa',
+      '+bbb',
+    ].join('\n')
+    expect(extractAddedContent(text)).toBe('aaa\nbbb')
+  })
+
+  it('drops the no-newline marker and returns empty for an empty file', () => {
+    const text = [
+      '--- /dev/null',
+      '+++ b/e.txt',
+      '@@ -0,0 +1 @@',
+      '+',
+      '\\ No newline at end of file',
+    ].join('\n')
+    expect(extractAddedContent(text)).toBe('')
+    expect(extractAddedContent('')).toBe('')
+  })
+})
+
+describe('foldMarkerLines（可见流坐标）', () => {
+  const row = (kind: 'context' | 'add' | 'del' | 'empty'): SideBySideRow => ({
+    left: { num: 1, text: '', kind: kind === 'del' ? 'del' : 'context' },
+    right: { num: 1, text: '', kind: kind === 'add' ? 'add' : 'context' },
+  })
+  const fold = (count: number): DiffBlock => ({ kind: 'fold', count, rows: Array.from({ length: count }, () => row('context')) })
+
+  it('places markers at their visible-flow position (unfolded rows do not occupy stream height)', () => {
+    // blocks: [row, fold(5), row] → 折叠条在可见流的第 1 行之后（line=1）
+    const blocks: readonly DiffBlock[] = [
+      { kind: 'row', row: row('context') },
+      fold(5),
+      { kind: 'row', row: row('context') },
+    ]
+    const markers = foldMarkerLines(blocks, new Set())
+    expect(markers).toEqual([{ index: 1, line: 1, count: 5 }])
+  })
+
+  it('advances the line offset past expanded folds', () => {
+    const blocks: readonly DiffBlock[] = [
+      { kind: 'row', row: row('context') },
+      fold(5),
+      fold(3),
+    ]
+    // 第一个折叠展开（占 5 行）→ 第二个折叠条位于可见流的 1+5=6 行处
+    const markers = foldMarkerLines(blocks, new Set([1]))
+    expect(markers).toEqual([{ index: 2, line: 6, count: 3 }])
+  })
+
+  it('returns empty when every fold is expanded', () => {
+    const blocks: readonly DiffBlock[] = [fold(5), fold(2)]
+    expect(foldMarkerLines(blocks, new Set([0, 1]))).toEqual([])
   })
 })

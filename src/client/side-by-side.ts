@@ -57,6 +57,12 @@ export function buildSideBySide(unified: string): readonly SideBySideRow[] {
       flush()
       continue
     }
+    // `\ No newline at end of file`：随被改行之后的**文件尾标记**，不是内容
+    // 行——跳过且不得计入行号（旧实现会把它当上下文行使两侧行号整体 +1，错位）。
+    if (line.startsWith('\\')) {
+      flush()
+      continue
+    }
     if (line.startsWith('-')) {
       if (adds.length > 0) flush()
       dels.push(line.slice(1))
@@ -144,7 +150,78 @@ export function summarizeChanges(rows: readonly SideBySideRow[]): { readonly add
   return { add, del }
 }
 
+/**
+ * 折叠标记在**可见渲染流**中的坐标：未展开折叠块不占流（其后行自动上移），
+ * 标记的 `line` 是其逻辑插入点之前的可见行数——渲染层按 `line × 行高`
+ * 绝对定位，精确落在被剔除行的空档处：不遮挡任何内容、多折叠各自就位。
+ * 展开的折叠块按全量行数推进（其行真实渲染）。纯函数，可单元测试。
+ */
+export function foldMarkerLines(
+  blocks: readonly DiffBlock[],
+  expanded: ReadonlySet<number>,
+): readonly { readonly index: number; readonly line: number; readonly count: number }[] {
+  const out: Array<{ index: number; line: number; count: number }> = []
+  let visible = 0
+  blocks.forEach((block, index) => {
+    if (block.kind === 'fold') {
+      if (expanded.has(index)) {
+        visible += block.rows.length
+      } else {
+        out.push({ index, line: visible, count: block.rows.length })
+      }
+    } else {
+      visible += 1
+    }
+  })
+  return out
+}
+
+/**
+ * 从纯新增差异中提取创建后的完整文件内容（去掉 diff 包装与元信息行）。
+ * 仅对 `isAddOnlyDiff` 成立的文本调用；`\ No newline at end of file`
+ * 标记行被跳过（它不是内容）。空文件返回 ''。
+ */
+export function extractAddedContent(unified: string): string {
+  const out: string[] = []
+  for (const line of unified.split('\n')) {
+    if (line.startsWith('+++')) continue
+    if (line.startsWith('+')) out.push(line.slice(1))
+  }
+  return out.join('\n')
+}
+
 /** 判定二进制差异（git 输出 "Binary files … differ"，buildSideBySide 会跳过→空）。 */
 export function isBinaryDiff(unified: string): boolean {
   return /^Binary files /m.test(unified)
+}
+
+/**
+ * 判定一次差异为「纯新增」（文件创建，无任何历史侧内容）。
+ *
+ * 依据（git 输出的权威形态）：
+ *   - 元信息含 `--- /dev/null`（new file / --no-index 与 /dev/null 对比均为
+ *     此形态）且无 `deleted file mode` / `rename from`；
+ *   - 不存在任何内容删除行（`-` 前缀且非 `---` 元信息）；
+ *   - 所有 hunk 旧侧均为 `-0,0`（起始 0 且行数 0）。
+ *
+ * 满足时 UI 无需并排对照——直接展示创建后的完整文件内容（单栏全宽）。
+ */
+export function isAddOnlyDiff(unified: string): boolean {
+  if (unified === '') return false
+  let sawNullSource = false
+  for (const line of unified.split('\n')) {
+    if (line.startsWith('deleted file mode') || line.startsWith('rename from') || line.startsWith('rename to')) return false
+    if (line.startsWith('--- /dev/null')) {
+      sawNullSource = true
+      continue
+    }
+    if (line.startsWith('-') && !line.startsWith('---')) return false
+  }
+  if (!sawNullSource) return false
+  for (const match of unified.matchAll(/^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/gm)) {
+    const oldStart = match[1]
+    const oldCount = match[2]
+    if (oldStart !== '0' || oldCount !== '0') return false
+  }
+  return true
 }

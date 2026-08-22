@@ -69,10 +69,12 @@
     "@deepseek-ai/dsh-typert-protocol": ">=0.0.1-rc.1 <0.2.0"
   },
   "devDependencies": {
+    "@shikijs/langs": "^4.4.3",
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "esbuild": "^0.27.0",
     "jsdom": "^27.0.0",
+    "shiki": "^4.4.3",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10",
     "zod": "^4.4.3"

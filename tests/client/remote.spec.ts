@@ -3,8 +3,9 @@ import {
   gitActionResultSchema, gitActionRequestSchema, gitActionSchema,
   gitInfoRemote, gitQueryResultSchema, gitQueryRequestSchema,
   gitSnapshotFailureSchema, gitSnapshotResultSchema, gitSnapshotSchema,
+  gitStorageReadRequestSchema, gitStorageReadResultSchema, gitStorageWriteRequestSchema, gitStorageWriteResultSchema,
 } from '../../src/client/remote.ts'
-import type { GitAction, GitActionResult, GitSnapshot, GitSnapshotResult, GraphCommit } from '../../src/host/types.ts'
+import type { GitAction, GitActionResult, GitSnapshot, GitSnapshotResult, GitStorageReadResult, GitStorageWriteResult, GraphCommit } from '../../src/host/types.ts'
 
 /** A host-typed sample snapshot — the hand-written schemas must accept it. */
 function sampleSnapshot(overrides: Partial<GitSnapshot> = {}): GitSnapshot {
@@ -89,7 +90,7 @@ describe('git snapshot schemas', () => {
 describe('gitInfoRemote contribution', () => {
   it('declares the gitInfo/snapshot endpoint with strict codecs', () => {
     expect(gitInfoRemote.package).toBe('dsh-git-ui')
-    expect(gitInfoRemote.descriptors).toHaveLength(3)
+    expect(gitInfoRemote.descriptors).toHaveLength(5)
     const descriptor = gitInfoRemote.descriptors[0]
     expect(descriptor).toMatchObject({
       service: 'gitInfo', namespace: 'gitInfo', method: 'snapshot',
@@ -101,6 +102,15 @@ describe('gitInfoRemote contribution', () => {
     if (descriptor === undefined) throw new Error('missing descriptor')
     expect(descriptor.parameters[0]?.codec.mode).toBe('strict')
     expect(descriptor.result.mode).toBe('strict')
+  })
+
+  it('declares the storageRead / storageWrite endpoints', () => {
+    const read = gitInfoRemote.descriptors.find((d) => d.method === 'storageRead')
+    const write = gitInfoRemote.descriptors.find((d) => d.method === 'storageWrite')
+    expect(read).toMatchObject({ service: 'gitInfo', namespace: 'gitInfo', method: 'storageRead' })
+    expect(write).toMatchObject({ service: 'gitInfo', namespace: 'gitInfo', method: 'storageWrite' })
+    expect(read?.result.mode).toBe('strict')
+    expect(write?.result.mode).toBe('strict')
   })
 
   it('round-trips a snapshot through the wire codecs', () => {
@@ -213,5 +223,39 @@ describe('gitInfoRemote query endpoint', () => {
   it('rejects a graph commit missing refs (strict mirror)', () => {
     const incomplete = { hash: 'h', shortHash: 'h', subject: 's', author: 'a', dateIso: 'd', parents: [] }
     expect(() => gitQueryResultSchema.parse({ kind: 'history', commits: [incomplete], total: 1 })).toThrow()
+  })
+})
+
+describe('git storage schemas', () => {
+  it('accepts every host-typed storage result shape', () => {
+    const reads: readonly GitStorageReadResult[] = [
+      { ok: true, value: '{"v":2}' },
+      { ok: true, value: null },
+      { ok: false, error: { code: 'invalid-file', message: 'bad name' } },
+      { ok: false, error: { code: 'io-error', message: 'disk full' } },
+    ]
+    for (const result of reads) {
+      expect(() => gitStorageReadResultSchema.parse(result)).not.toThrow()
+    }
+    const writes: readonly GitStorageWriteResult[] = [
+      { ok: true },
+      { ok: false, error: { code: 'io-error', message: 'denied' } },
+    ]
+    for (const result of writes) {
+      expect(() => gitStorageWriteResultSchema.parse(result)).not.toThrow()
+    }
+  })
+
+  it('rejects unknown failure codes and malformed requests', () => {
+    expect(() => gitStorageReadResultSchema.parse({ ok: false, error: { code: 'forbidden', message: 'x' } })).toThrow()
+    expect(() => gitStorageWriteResultSchema.parse({ ok: 'yes' })).toThrow()
+    expect(() => gitStorageReadRequestSchema.parse({ file: 42 })).toThrow()
+    expect(() => gitStorageWriteRequestSchema.parse({ file: 'a.json' })).toThrow()
+  })
+
+  it('round-trips request shapes', () => {
+    expect(gitStorageReadRequestSchema.parse({ file: 'settings.json' })).toEqual({ file: 'settings.json' })
+    const write = gitStorageWriteRequestSchema.parse({ file: 'settings.json', data: '{}' })
+    expect(write).toMatchObject({ file: 'settings.json', data: '{}' })
   })
 })

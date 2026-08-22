@@ -14,6 +14,11 @@ export interface GitStatusConfig {
   readonly maxStatusBytes: number
   readonly maxChanges: number
   readonly defaultRefreshIntervalMs: number
+  /**
+   * Harness home 显式覆盖（dsh 惯例：`$DSH_HOME` → `~/.dsh` 之上的最高优先级）。
+   * 插件数据存放于 `<home>/plugin-data/dsh-git-ui/`。
+   */
+  readonly dshHome?: string
 }
 
 /** Session identity lookup: live first, persisted fallback. */
@@ -66,6 +71,9 @@ export function normalizeConfig(raw: unknown): GitStatusConfig {
     maxStatusBytes: numberOr('maxStatusBytes', DEFAULT_CONFIG.maxStatusBytes) || DEFAULT_CONFIG.maxStatusBytes,
     maxChanges: Math.floor(numberOr('maxChanges', DEFAULT_CONFIG.maxChanges) || DEFAULT_CONFIG.maxChanges),
     defaultRefreshIntervalMs: numberOr('defaultRefreshIntervalMs', DEFAULT_CONFIG.defaultRefreshIntervalMs),
+    ...(typeof value.dshHome === 'string' && value.dshHome !== ''
+      ? { dshHome: value.dshHome }
+      : {}),
   }
 }
 

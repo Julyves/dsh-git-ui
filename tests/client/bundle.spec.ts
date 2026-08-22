@@ -48,6 +48,9 @@ function loadBundle(): Captured {
     module: { exports: {} },
     exports: {},
     console,
+    // 浏览器常备定时器：bundle 顶层（语法高亮预热等）会在 factory 执行时用到。
+    setTimeout,
+    clearTimeout,
   })
   if (captured === undefined) throw new Error('bundle did not register a ModuleLoader handoff')
   return captured

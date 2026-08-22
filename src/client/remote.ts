@@ -151,6 +151,27 @@ export const gitQueryRequestSchema = z.object({
   query: gitQuerySchema,
 })
 
+// ── Plugin data storage（镜像 src/host/types.ts 的存储端点） ────────────────
+
+export const gitStorageReadRequestSchema = z.object({
+  file: z.string(),
+})
+
+export const gitStorageReadResultSchema = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true), value: z.string().nullable() }),
+  z.object({ ok: z.literal(false), error: z.object({ code: z.enum(['invalid-file', 'io-error']), message: z.string() }) }),
+])
+
+export const gitStorageWriteRequestSchema = z.object({
+  file: z.string(),
+  data: z.string(),
+})
+
+export const gitStorageWriteResultSchema = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true) }),
+  z.object({ ok: z.literal(false), error: z.object({ code: z.enum(['invalid-file', 'io-error']), message: z.string() }) }),
+])
+
 /** The contribution mounted into `ctx.remote` by the client plugin body. */
 export const gitInfoRemote: RemoteContribution = {
   package: 'dsh-git-ui',
@@ -231,6 +252,54 @@ export const gitInfoRemote: RemoteContribution = {
         mode: 'strict',
         typeSymbol: 'dsh-git-ui/types#GitQueryResponse',
         schema: gitQueryResponseSchema,
+      },
+    },
+    {
+      id: 'dsh-git-ui#gitInfo/storageRead',
+      service: 'gitInfo',
+      namespace: 'gitInfo',
+      method: 'storageRead',
+      invocation: { kind: 'direct' },
+      parameters: [
+        {
+          name: 'request',
+          wire: 'request',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-git-ui/types#GitStorageReadRequest',
+            schema: gitStorageReadRequestSchema,
+          },
+        },
+      ],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-git-ui/types#GitStorageReadResult',
+        schema: gitStorageReadResultSchema,
+      },
+    },
+    {
+      id: 'dsh-git-ui#gitInfo/storageWrite',
+      service: 'gitInfo',
+      namespace: 'gitInfo',
+      method: 'storageWrite',
+      invocation: { kind: 'direct' },
+      parameters: [
+        {
+          name: 'request',
+          wire: 'request',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-git-ui/types#GitStorageWriteRequest',
+            schema: gitStorageWriteRequestSchema,
+          },
+        },
+      ],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-git-ui/types#GitStorageWriteResult',
+        schema: gitStorageWriteResultSchema,
       },
     },
   ],

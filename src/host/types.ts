@@ -215,3 +215,30 @@ export interface GitQueryRequest {
   readonly sessionId: string
   readonly query: GitQuery
 }
+
+// ── Plugin data storage endpoint ────────────────────────────────────────────
+
+/**
+ * 插件数据目录的存储请求。
+ * 浏览器永不发送路径——只发白名单校验通过的单文件名
+ * （`plugin-data/dsh-git-ui/<file>` 之下，禁止目录穿越）。
+ */
+export interface GitStorageReadRequest {
+  readonly file: string
+}
+
+/** 读取结果：文件不存在 → value: null（非错误）；IO 失败 → io-error。 */
+export type GitStorageReadResult =
+  | { readonly ok: true; readonly value: string | null }
+  | { readonly ok: false; readonly error: { readonly code: 'invalid-file' | 'io-error'; readonly message: string } }
+
+/** 写入请求：data 为原始文本（原子写：临时文件 + rename）。 */
+export interface GitStorageWriteRequest {
+  readonly file: string
+  readonly data: string
+}
+
+/** 写入结果：成功仅 ok（无负载）；失败同上。 */
+export type GitStorageWriteResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly error: { readonly code: 'invalid-file' | 'io-error'; readonly message: string } }

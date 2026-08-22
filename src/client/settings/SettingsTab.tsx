@@ -13,8 +13,9 @@
  */
 import type { JSX } from 'react'
 import {
-  DEFAULT_SETTINGS, MAX_RECENT_COMMITS, PRESETS, applyPreset, patchPill, patchPopup,
-  presetOf, settingsEqual, type GitUISettings, type PillPatch, type PopupPatch, type PresetId,
+  DEFAULT_SETTINGS, MAX_DIFF_FONT_SIZE, MAX_RECENT_COMMITS, MIN_DIFF_FONT_SIZE, PRESETS,
+  applyPreset, patchDiff, patchPill, patchPopup, presetOf, settingsEqualAll,
+  type DiffPatch, type GitUISettings, type PillPatch, type PopupPatch, type PresetId,
 } from '../../contracts/settings.ts'
 import { settingsStore } from './store.ts'
 import { useSettings } from './use-settings.ts'
@@ -110,6 +111,7 @@ export function SettingsTab({
 
   const applyPill = (patch: PillPatch): void => settingsStore.setSettings(patchPill(settings, patch))
   const applyPopup = (patch: PopupPatch): void => settingsStore.setSettings(patchPopup(settings, patch))
+  const applyDiff = (patch: DiffPatch): void => settingsStore.setSettings(patchDiff(settings, patch))
 
   const toggleCount = (key: 'staged' | 'modified' | 'untracked'): void => {
     applyPill({ counts: { [key]: !settings.pill.counts[key] } })
@@ -221,13 +223,46 @@ export function SettingsTab({
         />
       </section>
 
+      <section style={css.settingsCard}>
+        <div style={css.settingsCardHead}>
+          <span style={css.settingsCardTitle}>{t('settings.group.diff')}</span>
+          <span style={css.settingsCardNote}>{t('settings.group.diff.note')}</span>
+        </div>
+        <SettingsRow
+          icon={<span style={css.settingsCountGlyph} aria-hidden="true">Aa</span>}
+          name={t('settings.diff.fontSize')}
+          desc={t('settings.diff.fontSize.desc')}
+          control={(
+            <Stepper
+              value={settings.diff.fontSize}
+              min={MIN_DIFF_FONT_SIZE}
+              max={MAX_DIFF_FONT_SIZE}
+              ariaLabel={t('settings.diff.fontSize')}
+              onChange={(next) => applyDiff({ fontSize: next })}
+            />
+          )}
+        />
+        <SettingsRow
+          icon={<span style={css.settingsCountGlyph} aria-hidden="true">{'</>'}</span>}
+          name={t('settings.diff.syntaxHighlight')}
+          desc={t('settings.diff.syntaxHighlight.desc')}
+          control={<Switch checked={settings.diff.syntaxHighlight} label={t('settings.diff.syntaxHighlight')} onChange={(next) => applyDiff({ syntaxHighlight: next })} />}
+        />
+        <SettingsRow
+          icon={<span style={css.settingsCountGlyph} aria-hidden="true">⇕</span>}
+          name={t('settings.diff.foldContext')}
+          desc={t('settings.diff.foldContext.desc')}
+          control={<Switch checked={settings.diff.foldContext} label={t('settings.diff.foldContext')} onChange={(next) => applyDiff({ foldContext: next })} />}
+        />
+      </section>
+
       <div style={css.settingsFooter}>
         <span style={css.settingsFooterNote}>{t('settings.subtitle')}</span>
         <button
           type="button"
           className="dsh-git-ui__refresh"
           style={css.settingsResetButton}
-          disabled={settingsEqual(settings, DEFAULT_SETTINGS)}
+          disabled={settingsEqualAll(settings, DEFAULT_SETTINGS)}
           onClick={() => {
             settingsStore.setSettings(DEFAULT_SETTINGS)
             notify(t('settings.reset.done'))

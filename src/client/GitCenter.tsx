@@ -26,13 +26,19 @@ import type { GitQueryOutcome } from './controller.ts'
 import { colorOf, createGraphBuilder, graphWidth, markFilterEnds, GRAPH_COLORS, type GraphRow, type GraphRowMarker } from './git-graph.ts'
 import { buildFileTree, splitChangePath, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
-import { buildSideBySide, capSideBySideRows, isBinaryDiff, summarizeChanges, type SideCell } from './side-by-side.ts'
+import { buildSideBySide, capSideBySideRows, extractAddedContent, foldContext, foldMarkerLines, isAddOnlyDiff, isBinaryDiff, summarizeChanges, type SideCell } from './side-by-side.ts'
 import { diffBaseOf, reconcileDiffSelection, stepDiffSelection, type DiffSelection } from './changes-diff.ts'
+import { highlightLines } from './syntax/highlighter.ts'
+import { useHighlightReady } from './syntax/use-highlight-ready.ts'
+import { langOfPath } from './syntax/lang-map.ts'
 import { BranchIcon, CheckIcon, ChevronIcon, CloseIcon, CollapseAllIcon, CommitIcon, DiffIcon, ExpandAllIcon, FileIcon, fileIconForPath, FolderIcon, GearIcon, NextIcon, PrevIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
 import { errorText } from './error-text.ts'
 import { SelectMenu } from './select-menu.tsx'
 import { SettingsTab } from './settings/SettingsTab.tsx'
+import { useSettings } from './settings/use-settings.ts'
+import { NewFileView } from './new-file-view.tsx'
+import { DIFF_FOLD_THRESHOLD, type DiffSettings } from '../contracts/settings.ts'
 import * as css from './styles.ts'
 
 export interface GitCenterProps {
@@ -253,6 +259,7 @@ function ChangesTab({
   openRequest: { path: string; base: 'worktree' | 'staged' } | null
 }): JSX.Element {
   const { Button } = useUI()
+  const settings = useSettings()
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [message, setMessage] = useState('')
   const [armed, setArmed] = useState<string | 'all' | null>(null)
@@ -391,6 +398,23 @@ function ChangesTab({
     [diffText],
   )
 
+  /**
+   * 纯新增判定（新增文件视图开关）：
+   *   - diff 文本为「纯新增」（--- /dev/null + 全增行）；
+   *   - 或 diff 为空且该文件在变更清单中本就是新增/未跟踪——这是
+   *     0 字节未跟踪文件（git --no-index 对空文件输出空文本），
+   *     同样直接展示（空文件提示）而非无意义的「无差异」空态。
+   */
+  const isNewFile = useMemo(() => {
+    if (diffText === null) return false
+    if (diffText === '') {
+      return diffSel !== null && snapshot.changes.some(
+        (c) => c.path === diffSel.path && (c.status === 'untracked' || c.status === 'added'),
+      )
+    }
+    return !isBinaryDiff(diffText) && isAddOnlyDiff(diffText)
+  }, [diffText, diffSel, snapshot.changes])
+
   return (
     <div style={css.changesLayout}>
       <div style={{ ...css.changesLeft, width: leftW }}>
@@ -527,6 +551,9 @@ function ChangesTab({
                     </>
                   )
                 })()}
+                {isNewFile && (
+                  <span style={{ ...css.diffBaseBadge, ...css.diffNewBadge }}>{t('diff.badgeNew')}</span>
+                )}
                 {diffSummary !== null && (diffSummary.add > 0 || diffSummary.del > 0) && (
                   <span style={css.diffSummary}>
                     {diffSummary.add > 0 && <span style={css.diffSummaryAdd}>+{diffSummary.add}</span>}
@@ -568,7 +595,26 @@ function ChangesTab({
               </div>
               {diffLoading
                 ? <div style={css.emptyNote}>{t('center.loading')}</div>
-                : <DiffSideBySide text={diffText ?? ''} t={t} />}
+                : diffText === null
+                  ? <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
+                  : isNewFile
+                    ? (
+                      <NewFileView
+                        content={diffText === '' ? '' : extractAddedContent(diffText)}
+                        path={diffSel.path}
+                        fontSize={settings.diff.fontSize}
+                        highlight={settings.diff.syntaxHighlight}
+                        t={t}
+                      />
+                    )
+                    : (
+                      <DiffSideBySide
+                        text={diffText}
+                        path={diffSel.path}
+                        diff={settings.diff}
+                        t={t}
+                      />
+                    )}
             </>
           )}
       </div>
@@ -737,39 +783,164 @@ function ChangeRow({
 }
 
 /** 并排差异对照查看器（IDEA 式：左变更前/右变更后，行号 + 状态着色）。
- * 超大差异仅渲染前 MAX_DIFF_ROWS 行，防止万行级 diff 卡死渲染。 */
+ * 超大差异仅渲染前 MAX_DIFF_ROWS 行，防止万行级 diff 卡死渲染。
+ * 增强：按设置折叠长冗余上下文（foldContext）、按文件类型语法高亮
+ * （整块 tokenize 后按行索引用——跨行 token 正确）、字号可配置。
+ * 纯新增差异不进入本组件（由 ChangesTab 分流到 NewFileView）。 */
 const MAX_DIFF_ROWS = 2000
 
-function DiffSideBySide({ text, t }: { text: string; t: (key: GitKey) => string }): JSX.Element {
+/** 差异行固定高度（px）：与 sbsContainer.lineHeight 一致——折叠标记按
+ * 「已渲染行数 × 行高」绝对定位，展开/收起不产生布局抖动。 */
+const FOLD_ROW_H = 18
+
+function DiffSideBySide({
+  text, path, diff, t,
+}: {
+  text: string
+  path: string
+  diff: DiffSettings
+  t: (key: GitKey) => string
+}): JSX.Element {
+  const highlightReady = useHighlightReady()
   const rows = useMemo(() => buildSideBySide(text), [text])
   const capped = useMemo(() => capSideBySideRows(rows, MAX_DIFF_ROWS), [rows])
+  // 折叠块（默认开）：>DIFF_FOLD_THRESHOLD 的连续上下文段折叠为「… N 行」。
+  const blocks = useMemo(() => (
+    diff.foldContext ? foldContext(capped, DIFF_FOLD_THRESHOLD) : undefined
+  ), [capped, diff.foldContext])
+  /** 已展开的 fold 块索引（点击标记展开；再次点击收起）。 */
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set())
+
+  // 行 → 高亮 token 行索引对齐（跳过 empty 位；与整块 tokenize 的行序一致）。
+  const allIndexed = useMemo(() => {
+    let li = 0
+    let ri = 0
+    return capped.map((row) => ({
+      row,
+      left: row.left.kind === 'empty' ? null : { cell: row.left, ti: li++ },
+      right: row.right.kind === 'empty' ? null : { cell: row.right, ti: ri++ },
+    }))
+  }, [capped])
+
+  /** 实际渲染行（折叠行跳过）；ti 在折叠时仍推进，故行号与 token 索引恒对齐。 */
+  const rendered = useMemo(() => {
+    if (blocks === undefined) return allIndexed
+    const out: typeof allIndexed = []
+    let cursor = 0
+    blocks.forEach((block, index) => {
+      const count = block.kind === 'fold' ? block.rows.length : 1
+      if (block.kind === 'fold' && !expanded.has(index)) {
+        cursor += count
+        return
+      }
+      for (let i = 0; i < count; i += 1) {
+        const entry = allIndexed[cursor + i]
+        if (entry !== undefined) out.push(entry)
+      }
+      cursor += count
+    })
+    return out
+  }, [blocks, allIndexed, expanded])
+
+  // 整块高亮（每列一份；跨行注释/字符串保持正确）。构造完成前为纯文本。
+  const lang = useMemo(() => langOfPath(path), [path])
+  const highlightOn = diff.syntaxHighlight && highlightReady > 0 && lang !== undefined
+  const leftTokens = useMemo(
+    () => (highlightOn ? highlightLines(capped.filter((r) => r.left.kind !== 'empty').map((r) => r.left.text).join('\n'), lang!) : undefined),
+    [capped, highlightOn, lang],
+  )
+  const rightTokens = useMemo(
+    () => (highlightOn ? highlightLines(capped.filter((r) => r.right.kind !== 'empty').map((r) => r.right.text).join('\n'), lang!) : undefined),
+    [capped, highlightOn, lang],
+  )
+
+  /** 未展开的折叠标记元数据：line = 可见流中的逻辑插入点（渲染层乘行高定位）。 */
+  const foldBlocks = useMemo(() => {
+    if (blocks === undefined) return []
+    return foldMarkerLines(blocks, expanded).map(({ index, line, count }) => ({
+      index,
+      top: line * FOLD_ROW_H,
+      count,
+    }))
+  }, [blocks, expanded])
+
+  // 展开态随内容变化重置：expanded 存放 fold 块序号，文件切换（blocks 内容
+  // 变化）后旧序号会「按编号误用」新 diff 的块——重置防止跨文件泄漏。
+  useEffect(() => {
+    setExpanded(new Set())
+  }, [blocks])
+
+  /** 展开 / 收起一个折叠块（expanded 按 fold 块在 blocks 中的序号管理）。 */
+  const toggleFold = (index: number): void => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  }
+
   if (isBinaryDiff(text)) return <div style={css.emptyNote}>{t('diff.binary')}</div>
   if (rows.length === 0) return <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
 
   const colorOf = (kind: SideCell['kind']): CSSProperties =>
     kind === 'del' ? css.sbsDel : kind === 'add' ? css.sbsAdd : kind === 'empty' ? css.sbsEmpty : {}
 
-  const renderCell = (cell: SideCell, key: string): JSX.Element => (
-    <div key={key} style={{ ...css.sbsCell, ...colorOf(cell.kind) }}>
-      <span style={css.sbsNum}>{cell.num ?? ''}</span>
-      <span style={css.sbsCode}>{cell.text}</span>
-    </div>
+  const renderCode = (text: string, tokens: readonly { text: string; style: { readonly color?: string } }[] | undefined): JSX.Element => (
+    <>
+      {tokens === undefined || tokens.length === 0 ? text : tokens.map((span, i) => (
+        <span key={i} style={span.style}>{span.text}</span>
+      ))}
+    </>
   )
 
-  // 全量平铺文档（不折叠上下文）：每列各渲染一份完整行序列。
-  // 双列独立横向滚动 + 容器统一纵向滚动（长文档可上下滚动浏览）。
+  const renderCell = (entry: (typeof allIndexed)[number], side: 'left' | 'right', key: string): JSX.Element => {
+    const meta = side === 'left' ? entry.left : entry.right
+    if (meta === null) {
+      return (
+        <div key={key} style={{ ...css.sbsCell, ...css.sbsEmpty }}>
+          <span style={css.sbsNum} />
+          <span style={css.sbsCode} />
+        </div>
+      )
+    }
+    const { cell, ti } = meta
+    const tokens = (side === 'left' ? leftTokens : rightTokens)?.[ti]
+    return (
+      <div key={key} style={{ ...css.sbsCell, ...colorOf(cell.kind) }}>
+        <span style={css.sbsNum}>{cell.num ?? ''}</span>
+        <span style={css.sbsCode}>{renderCode(cell.text, tokens)}</span>
+      </div>
+    )
+  }
+
+  /** 折叠标记（覆盖层）：absolute 横跨双列，top 按已渲染行数 × 固定行高对齐。 */
+  const foldMarkers: readonly JSX.Element[] = foldBlocks.map(({ index, top, count }) => (
+    <button
+      key={index}
+      type="button"
+      className="dsh-git-ui__fold-overlay"
+      style={{ ...css.diffFoldOverlay, top }}
+      onClick={() => toggleFold(index)}
+    >
+      {t('diff.foldCollapsed').replace('{n}', String(count))}
+    </button>
+  ))
+
+  // 每列各渲染一份完整行序列；双列独立横向滚动 + 容器统一纵向滚动。
   const renderColumn = (side: 'left' | 'right'): readonly JSX.Element[] =>
-    capped.map((row, i) => renderCell(side === 'left' ? row.left : row.right, String(i)))
+    rendered.map((entry, i) => renderCell(entry, side, String(i)))
 
   return (
     <>
-      <div style={css.sbsContainer}>
+      <div style={{ ...css.sbsContainer, position: 'relative', fontSize: diff.fontSize }}>
         <div style={css.sbsCol}>
           <div style={css.sbsColInner}>{renderColumn('left')}</div>
         </div>
         <div style={{ ...css.sbsCol, ...css.sbsColRight }}>
           <div style={css.sbsColInner}>{renderColumn('right')}</div>
         </div>
+        {foldMarkers}
       </div>
       {rows.length > MAX_DIFF_ROWS && (
         <div style={css.emptyNote}>{t('diff.truncated').replace('{count}', String(MAX_DIFF_ROWS))}</div>

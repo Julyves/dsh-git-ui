@@ -39,6 +39,15 @@
   - *历史*：分页提交列表 + 分支图渲染，每条提交详情（主题·正文·变更文件树），按分支/标签/作者/日期/文本或哈希过滤，以及拉取远程按钮。
   - *设置*：**Pill 信息组件可配置化**——实时预览 + 四档显示模式（极简/标准/完整/自定义，纯派生、可一键回位）+ 逐项开关（状态点、分支名、变更计数三子项、领先/落后；弹窗的仓库路径、状态统计条、分支切换器、新建分支、最近提交条数、变更文件列表）。点击键盘齿轮图标（弹窗头部）可直达：
 
+- **差异对照增强**（变更标签的并排查看）：
+  - **新增文件直接展示**：纯新增（`--- /dev/null` 形态）不再渲染左侧空白对照列——单栏全宽直接展示创建后的完整文件内容（含行号）；0 字节空文件显示「文件为空」而非无意义的空差异。
+  - **语法高亮**：按文件类型（shiki TextMate grammar，JS 引擎无 WASM）着色关键字/字符串/注释/数字等；整块 tokenize 后按行渲染，跨行注释与多行字符串保持正确。颜色复用宿主主题的 `--shiki-*` token（亮/暗自适应）；高亮开关与代码字号可在设置中调整。bundle 预算约束下的语言子集与近似映射（C++→C、HTML→XML、SCSS/LESS→CSS）见[已知限制](#已知限制)。
+  - **上下文折叠**：连续 12 行以上未变更的上下文段折叠为「… N 行未变更」横条（点击展开/收起），长 diff 导航更省屏；可在设置关闭。
+  - **缺陷修复**：`\ No newline at end of file` 标记不再破坏行号对齐。
+  - **设置项**：差异查看组——代码字号（10–16px）、语法高亮开关、上下文折叠开关；独立于显示模式档位（调它们不把档位打回「自定义」）。
+
+- **数据持久化于宿主磁盘（v2）**：设置不再存 localStorage——全部落盘于 dsh Harness home 下的 `plugin-data/dsh-git-ui/settings.json`（`$DSH_HOME` → `~/.dsh`，可在 profile 配置中覆盖 `dshHome`），原子写入（临时文件 + rename）、跨设备重启存活。浏览器仅经 host RPC 读写（严格文件名白名单）；初始化时自动将 v1 的 localStorage 旧设置一次性迁移并写回磁盘（后续不再读取该键）。
+
   每次操作即时刷新状态：
 
   <img src="docs/screenshots/03-Git中心统一阅览文件变更.png" alt="Git 中心——变更标签（分组文件变更）" width="720">
@@ -99,6 +108,8 @@ dsh plugin --profile web remove dsh-git-ui
     maxChanges: 200                   # 快照中变更文件条数上限
     timeoutMs: 3000                   # 单条 git 命令超时（毫秒）
     maxStatusBytes: 8388608           # status 输出上限，超出截断
+    dshHome: /path/to/harness-home    # 可选：Harness home（默认 $DSH_HOME → ~/.dsh）
+                                      # 插件数据存放于 <home>/plugin-data/dsh-git-ui/
 ```
 
 ## 环境要求
@@ -113,6 +124,8 @@ dsh plugin --profile web remove dsh-git-ui
 - 轮询式刷新（默认 30s）；基于文件监听的事件推送为规划中的扩展。
 - 变更文件列表有上限（`maxChanges`）；未跟踪目录内部文件逐个枚举。status 输出超过内存上限（默认 4 MiB）时会从私有 spill 文件恢复完整输出，**计数保持精确**——仅当 spill 上限（64 MiB）也被突破时才回退为近似（`truncated: true`）。
 - 浏览器只传 `sessionId`，不传路径；主机解析权威 cwd 并执行 git 命令（写操作用 `--` 路径分隔、拒绝绝对路径与 `..` 逃逸）。
+- 语法高亮为 bundle 预算裁剪的语言子集（TypeScript/JS 族、JSON/YAML/TOML/INI、Markdown、XML/HTML、CSS/SCSS/LESS、Python、Shell、Java、Go、Rust、C、C#、Kotlin、SQL、Makefile）。C++ 以 C grammar 近似、HTML 以 XML grammar 近似、SCSS/LESS 以 CSS grammar 近似（基础 token 正确，语言特有结构回落纯文本）；PHP、Swift、Ruby、Lua 等未注册语言**整体回落纯文本**（仍为等宽字体、不报错）。
+- 设置存储（v2）迁移到宿主磁盘后不再写入 localStorage；若 host RPC 不可达（降级），设置仅停留在内存态（本次会话有效）。
 
 ## 开发
 

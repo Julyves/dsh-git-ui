@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GitController, type GitRemoteEnvelope, type GitRemoteLike } from '../../src/client/controller.ts'
-import type { GitActionResult, GitQueryResponse, GitSnapshot, GitSnapshotResult } from '../../src/host/types.ts'
+import type { GitActionResult, GitQueryResponse, GitSnapshot, GitSnapshotResult, GitStorageReadResult, GitStorageWriteResult } from '../../src/host/types.ts'
 
 /** Business-result helpers wrapped in the RPC envelope the gateway returns. */
 const ok = (value: GitSnapshotResult): GitRemoteEnvelope<GitSnapshotResult> => ({ ok: true, value })
@@ -51,6 +51,15 @@ class FakeRemote implements GitRemoteLike {
     if (next instanceof Error) return Promise.reject(next)
     if (next === undefined) return Promise.reject(new Error('FakeRemote: query queue exhausted'))
     return Promise.resolve(next)
+  }
+
+  /** Storage stubs: no-op success（控制器不消费；存储行为由 settings 测试覆盖）。 */
+  storageRead(): Promise<GitRemoteEnvelope<GitStorageReadResult>> {
+    return Promise.resolve({ ok: true, value: { ok: true, value: null } })
+  }
+
+  storageWrite(): Promise<GitRemoteEnvelope<GitStorageWriteResult>> {
+    return Promise.resolve({ ok: true, value: { ok: true } })
   }
 }
 

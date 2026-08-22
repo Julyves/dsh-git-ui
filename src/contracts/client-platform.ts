@@ -4,7 +4,7 @@
  * 当 dsh 升级导致 Cordis / typert / slot API 变更时，只需更新
  * `adapters/dsh/client-adapter.ts`，本文件及业务代码零改动。
  */
-import type { GitAction, GitActionResult, GitActionRequest, GitQueryRequest, GitQueryResponse, GitSnapshotRequest, GitSnapshotResult } from '../host/types.ts'
+import type { GitAction, GitActionResult, GitActionRequest, GitQueryRequest, GitQueryResponse, GitSnapshotRequest, GitSnapshotResult, GitStorageReadRequest, GitStorageReadResult, GitStorageWriteRequest, GitStorageWriteResult } from '../host/types.ts'
 
 /** 国际化字典：中英双语。 */
 export interface LocaleDicts {
@@ -22,6 +22,10 @@ export interface GitRemoteLike {
   snapshot(request: GitSnapshotRequest): Promise<RemoteEnvelope<GitSnapshotResult>>
   run(request: GitActionRequest): Promise<RemoteEnvelope<GitActionResult>>
   query(request: GitQueryRequest): Promise<RemoteEnvelope<GitQueryResponse>>
+  /** 读取插件数据文件（磁盘 `~/.dsh/plugin-data/dsh-git-ui/<file>`）。 */
+  storageRead(request: GitStorageReadRequest): Promise<RemoteEnvelope<GitStorageReadResult>>
+  /** 原子写入插件数据文件。 */
+  storageWrite(request: GitStorageWriteRequest): Promise<RemoteEnvelope<GitStorageWriteResult>>
 }
 
 /** 简化的查询结果：解包 RPC 信封和业务错误。 */

@@ -4,8 +4,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  DEFAULT_SETTINGS, MAX_RECENT_COMMITS, PRESETS, applyPreset, clampRecents, patchPill,
-  patchPopup, presetOf, settingsEqual, type GitUISettings, type SettingsStorageLike,
+  DEFAULT_DIFF_SETTINGS, DEFAULT_SETTINGS, MAX_RECENT_COMMITS, PRESETS, applyPreset, clampFontSize, clampRecents,
+  migrateSettings, patchDiff, patchPill, patchPopup, presetOf, settingsEqual, settingsEqualAll,
+  type GitUISettings, type SettingsPersistence, type SettingsStorageLike,
 } from '../../src/contracts/settings.ts'
 import { settingsEnvelopeSchema } from '../../src/client/settings/schema.ts'
 import { createSettingsStore } from '../../src/client/settings/store.ts'
@@ -83,37 +84,111 @@ describe('patchPill / patchPopup（不可变补丁）', () => {
 
 describe('settingsEnvelopeSchema（持久化校验）', () => {
   it('parses a valid envelope', () => {
-    const raw = JSON.stringify({ v: 1, settings: DEFAULT_SETTINGS })
+    const raw = JSON.stringify({ v: 2, settings: DEFAULT_SETTINGS })
     const parsed = settingsEnvelopeSchema.parse(JSON.parse(raw))
     expect(parsed.settings.pill.dot).toBe(true)
   })
 
+  it('accepts a v1 envelope without the diff dimension', () => {
+    const v1 = { pill: DEFAULT_SETTINGS.pill, popup: DEFAULT_SETTINGS.popup }
+    const parsed = settingsEnvelopeSchema.parse(JSON.parse(JSON.stringify({ v: 1, settings: v1 })))
+    expect(parsed.settings.diff).toBeUndefined()
+  })
+
   it('strips unknown fields (forward compatibility tolerance)', () => {
-    const raw = JSON.stringify({ v: 1, settings: { ...DEFAULT_SETTINGS, future: true } })
+    const raw = JSON.stringify({ v: 2, settings: { ...DEFAULT_SETTINGS, future: true } })
     const parsed = settingsEnvelopeSchema.parse(JSON.parse(raw))
     expect('future' in parsed.settings).toBe(false)
   })
 
   it('rejects malformed shapes (bad types, out-of-range commits)', () => {
-    expect(settingsEnvelopeSchema.safeParse({ v: 1, settings: { ...DEFAULT_SETTINGS, pill: { ...DEFAULT_SETTINGS.pill, dot: 'yes' } } }).success).toBe(false)
-    expect(settingsEnvelopeSchema.safeParse({ v: 1, settings: { ...DEFAULT_SETTINGS, popup: { ...DEFAULT_SETTINGS.popup, recentCommits: 99 } } }).success).toBe(false)
-    expect(settingsEnvelopeSchema.safeParse({ v: 1, settings: { ...DEFAULT_SETTINGS, popup: { ...DEFAULT_SETTINGS.popup, recentCommits: -1 } } }).success).toBe(false)
+    expect(settingsEnvelopeSchema.safeParse({ v: 2, settings: { ...DEFAULT_SETTINGS, pill: { ...DEFAULT_SETTINGS.pill, dot: 'yes' } } }).success).toBe(false)
+    expect(settingsEnvelopeSchema.safeParse({ v: 2, settings: { ...DEFAULT_SETTINGS, popup: { ...DEFAULT_SETTINGS.popup, recentCommits: 99 } } }).success).toBe(false)
+    expect(settingsEnvelopeSchema.safeParse({ v: 2, settings: { ...DEFAULT_SETTINGS, diff: { ...DEFAULT_SETTINGS.diff, fontSize: 99 } } }).success).toBe(false)
   })
 })
 
-describe('createSettingsStore（存储生命周期）', () => {
-  it('starts from DEFAULT_SETTINGS when storage is empty', () => {
+describe('migrateSettings（v1 → v2 差异维度补齐）', () => {
+  it('fills the diff dimension with defaults and keeps pill/popup intact', () => {
+    const v1 = { pill: patchPill(DEFAULT_SETTINGS, { sync: false }).pill, popup: patchPopup(DEFAULT_SETTINGS, { recentCommits: 0 }).popup }
+    const migrated = migrateSettings(v1)
+    expect(migrated.pill.sync).toBe(false)
+    expect(migrated.popup.recentCommits).toBe(0)
+    expect(migrated.diff).toEqual(DEFAULT_DIFF_SETTINGS)
+  })
+
+  it('keeps a partial diff dimension (forward partial writes)', () => {
+    const v1 = { pill: DEFAULT_SETTINGS.pill, popup: DEFAULT_SETTINGS.popup, diff: { fontSize: 14 } }
+    const migrated = migrateSettings(v1)
+    expect(migrated.diff.fontSize).toBe(14)
+    expect(migrated.diff.syntaxHighlight).toBe(true)
+  })
+})
+
+/** 内存持久化桩：模拟 host 磁盘通道（settings.json）。 */
+function memoryPersistence(initial: string | null = null): SettingsPersistence & { dump(): string | null } {
+  let value = initial
+  let writes = 0
+  return {
+    read: async () => value,
+    write: async (raw) => { value = raw; writes += 1 },
+    dump: () => value,
+  }
+}
+
+describe('createSettingsStore（存储生命周期：host 主存储 + 迁移）', () => {
+  it('starts from DEFAULT_SETTINGS when no legacy payload is present', () => {
     const store = createSettingsStore(memoryStorage())
+    expect(store.get()).toEqual(DEFAULT_SETTINGS)
+    expect(createSettingsStore(null).get()).toEqual(DEFAULT_SETTINGS)
+  })
+
+  it('initialize loads from the host persistence and persists updates (debounced flush)', async () => {
+    const persistence = memoryPersistence(JSON.stringify({ v: 2, settings: { ...DEFAULT_SETTINGS, pill: { ...DEFAULT_SETTINGS.pill, dot: false } } }))
+    const store = createSettingsStore(null)
+    await store.initialize(persistence)
+    expect(store.get().pill.dot).toBe(false)
+    const next = patchPill(store.get(), { sync: false })
+    store.setSettings(next)
+    await store.flush()
+    expect(persistence.dump()).toContain('"sync":false')
+    expect(persistence.dump()).toContain('"v":2')
+  })
+
+  it('migrates the v1 legacy localStorage payload when host has no data (and writes it back)', async () => {
+    const legacy = memoryStorage(JSON.stringify({ v: 1, settings: { pill: { ...DEFAULT_SETTINGS.pill, dot: false }, popup: DEFAULT_SETTINGS.popup } }))
+    const persistence = memoryPersistence(null)
+    const store = createSettingsStore(legacy)
+    await store.initialize(persistence)
+    expect(store.get().pill.dot).toBe(false)
+    expect(store.get().diff).toEqual(DEFAULT_DIFF_SETTINGS) // v1 补齐
+    expect(persistence.dump()).toContain('"diff"') // 写回 host
+  })
+
+  it('ignores host read failures (keeps the in-memory state)', async () => {
+    const store = createSettingsStore(null)
+    await store.initialize({
+      read: async () => { throw new Error('rpc down') },
+      write: async () => {},
+    })
     expect(store.get()).toEqual(DEFAULT_SETTINGS)
   })
 
-  it('loads persisted settings and persists updates', () => {
-    const storage = memoryStorage()
-    const store = createSettingsStore(storage)
-    const next = patchPill(store.get(), { dot: false })
-    store.setSettings(next)
-    expect(store.get()).toEqual(next)
-    expect(storage.dump()).toContain('"dot":false')
+  it('does not clobber user edits made while the host load is in flight', async () => {
+    let resolveRead!: (value: string | null) => void
+    const persistence = {
+      read: () => new Promise<string | null>((resolve) => { resolveRead = resolve }),
+      write: async () => {},
+    }
+    const store = createSettingsStore(null)
+    const pending = store.initialize(persistence)
+    // 加载未完成时用户已修改
+    store.setSettings(patchPill(store.get(), { sync: false }))
+    resolveRead(JSON.stringify({ v: 2, settings: patchPill(DEFAULT_SETTINGS, { dot: false }) }))
+    await pending
+    // 用户修改保留（不被磁盘旧值覆盖）
+    expect(store.get().pill.sync).toBe(false)
+    expect(store.get().pill.dot).toBe(true) // 磁盘值未采用
   })
 
   it('falls back to defaults for corrupted or version-mismatched payloads', () => {
