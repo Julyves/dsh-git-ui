@@ -305,6 +305,16 @@ export function CommitIcon(): JSX.Element {
   )
 }
 
+/** 记录（时钟）——turn 工作记录 Tab 语义图标。 */
+export function RecordIcon(): JSX.Element {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
+      <circle cx={8} cy={8} r={5.6} fill="none" stroke="currentColor" strokeWidth={1.3} />
+      <path d="M8 5.2 V8 L10.2 9.4" fill="none" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 /** 关闭（叉号）。 */
 export function CloseIcon(): JSX.Element {
   return (

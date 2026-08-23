@@ -188,6 +188,12 @@ export function SettingsTab({
           desc={t('settings.sync.desc')}
           control={<Switch checked={settings.pill.sync} label={t('settings.sync')} onChange={(next) => applyPill({ sync: next })} />}
         />
+        <SettingsRow
+          icon={<span style={css.settingsCountGlyph} aria-hidden="true">⟳</span>}
+          name={t('settings.workRecord')}
+          desc={t('settings.workRecord.desc')}
+          control={<Switch checked={settings.pill.workRecord} label={t('settings.workRecord')} onChange={(next) => applyPill({ workRecord: next })} />}
+        />
         {pillFullyOff(settings) && (
           <div style={css.settingsRowHint}>{t('settings.allOffHint')}</div>
         )}

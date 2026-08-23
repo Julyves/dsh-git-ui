@@ -42,10 +42,111 @@ export const pillBranch: CSSProperties = {
   flexShrink: 1,
 }
 
-/** 徽标段：不截断，始终完整展示（+2 −1 ?3 / ↑1 ↓2）。 */
+/** 徽标段:不截断,始终完整展示(+2 −1 ?3 / ↑1 ↓2)。 */
 export const pillBadges: CSSProperties = {
   flexShrink: 0,
   whiteSpace: 'nowrap',
+}
+
+/** 工作记录徽章组(本会话/外部计数;胶囊内紧凑段)。 */
+export const workBadges: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  flexShrink: 0,
+  whiteSpace: 'nowrap',
+  fontSize: 11,
+  lineHeight: '16px',
+}
+
+/** 工作记录徽章(本会话):品牌蓝点 + 计数。 */
+export const workBadgeInternal: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 3,
+  padding: '0 5px',
+  borderRadius: 8,
+  color: 'var(--dsw-alias-brand-blue-strong, var(--dsw-alias-label-primary))',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+}
+
+/** 工作记录徽章(外部):灰点 + 计数。 */
+export const workBadgeExternal: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 3,
+  padding: '0 5px',
+  borderRadius: 8,
+  color: 'var(--dsw-alias-label-tertiary)',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+}
+
+/** 工作记录徽章小圆点(本会话=蓝 / 外部=灰)。 */
+export const workBadgeDot: CSSProperties = {
+  width: 6,
+  height: 6,
+  borderRadius: 3,
+  display: 'inline-block',
+  flex: 'none',
+}
+
+export const workBadgeDotInternal: CSSProperties = {
+  ...workBadgeDot,
+  background: 'var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary))',
+}
+
+export const workBadgeDotExternal: CSSProperties = {
+  ...workBadgeDot,
+  background: 'var(--dsw-alias-label-tertiary)',
+}
+
+/** 工作记录弹窗/中心条目行(路径 + 状态徽章)。 */
+export const workRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  minWidth: 0,
+}
+
+/** 工作记录条目状态徽章(仍变更/已提交/已还原)。 */
+export const workStateBadge: CSSProperties = {
+  flexShrink: 0,
+  fontSize: 10,
+  lineHeight: '14px',
+  padding: '0 4px',
+  borderRadius: 5,
+  color: 'var(--dsw-alias-label-tertiary)',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+}
+
+/** 工作记录 turn 行(中心 Tab)。 */
+export const workTurnRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '6px 8px',
+  borderRadius: 8,
+  cursor: 'pointer',
+  width: '100%',
+  textAlign: 'left',
+  border: 0,
+  font: 'inherit',
+  color: 'var(--dsw-alias-label-primary)',
+  background: 'transparent',
+}
+
+/** 工作记录分组标题(中心 Tab:本会话/外部)。 */
+export const workGroupTitle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  fontSize: 11,
+  lineHeight: '16px',
+  color: 'var(--dsw-alias-label-secondary)',
+  margin: '8px 8px 4px',
 }
 
 /** Dimmed pill for degraded states (no repo / unavailable).

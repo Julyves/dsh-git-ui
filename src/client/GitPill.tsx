@@ -20,7 +20,7 @@ import type { GitObservable, GitQueryOutcome, GitView } from './controller.ts'
 import type { GitInjected } from '../contracts/client-platform.ts'
 import { GitCenter } from './GitCenter.tsx'
 import { fileIconForPath, FolderIcon, AlertIcon, CloseIcon, GearIcon, RollbackIcon, StageIcon, UnstageIcon } from './icons.tsx'
-import type { GitAction, GitActionResult, GitBranch, GitOperationErrorCode, GitQueryRequest } from '../host/types.ts'
+import type { GitAction, GitActionResult, GitBranch, GitOperationErrorCode, GitQueryRequest, WorkEntry } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import { SelectMenu } from './select-menu.tsx'
 import { splitChangePath } from './file-tree.ts'
@@ -29,7 +29,11 @@ import { diffBaseOf } from './changes-diff.ts'
 import { errorText, errorAction } from './error-text.ts'
 import { useSettings } from './settings/use-settings.ts'
 import { renderPill, chipLetter, popupBadgeTexts } from './pill-segments.tsx'
+import { useTurnRecords } from './use-turn-records.ts'
+import { latestWorkTurn, turnEntryCounts } from './work-record-meta.ts'
 import type { GitUISettings } from '../contracts/settings.ts'
+import type { GitCenterTab } from './GitCenter.tsx'
+import type { TurnWorkRecord } from '../host/types.ts'
 import * as css from './styles.ts'
 
 // Inject the plugin's interaction styles once (idempotent, browser-only).
@@ -91,18 +95,22 @@ function DegradedPill({ label, title, t }: { label: string; title?: string; t: (
  * 各区块按 `settings.popup` 设置驱动显隐；头部徽章沿 `settings.pill`。
  */
 function GitPopupBody({
-  view, settings, refresh, openCenter, openSettings, onOpenDiff, run, query, t,
+  view, settings, refresh, openCenter, openRecords, openSettings, onOpenDiff, run, query, records, t,
 }: {
   view: GitView & { state: 'ready' }
   settings: GitUISettings
   refresh: () => Promise<void>
   openCenter: () => void
+  /** 打开 Git 中心并定位到「记录」Tab。 */
+  openRecords: () => void
   /** 打开 Git 中心并定位到设置页。 */
   openSettings: () => void
   /** 变更文件点击：打开 Git 中心并定位该文件的对照视图。 */
   onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
   run: (action: GitAction) => Promise<GitActionResult>
   query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
+  /** turn 工作记录(最近窗口用于徽章与分组);null = 未就绪。 */
+  records: readonly TurnWorkRecord[] | null
   t: (key: GitKey) => string
 }): JSX.Element {
   const { Button } = useUI()
@@ -414,6 +422,52 @@ function GitPopupBody({
             )}
         </>
       )}
+      {settings.pill.workRecord && records !== null && (() => {
+        const windowTurn = latestWorkTurn(records)
+        if (windowTurn === undefined) return null
+        const { internal, external } = turnEntryCounts(windowTurn)
+        if (internal === 0 && external === 0) return null
+        const entryRow = (entry: WorkEntry, key: string): JSX.Element => (
+          <div key={key} style={css.workRow}>
+            <span
+              style={{ ...css.changeChip, ...(css.chipStyles[entry.state === 'reverted' ? 'modified' : entry.status] ?? css.chipStyles.untracked) }}
+              title={entry.status}
+            >
+              {chipLetter(entry.status)}
+            </span>
+            <span style={css.changeNamePopBtn} title={entry.path}>{entry.path}</span>
+            <span style={{ flex: 1 }} />
+            <span style={css.workStateBadge}>{entry.state === 'dirty' ? t('work.state.dirty') : entry.state === 'committed' ? t('work.state.committed') : t('work.state.reverted')}</span>
+          </div>
+        )
+        return (
+          <>
+            <div style={css.sectionTitle}>{t('work.section')}</div>
+            {internal > 0 && (
+              <div style={css.workGroupTitle}>
+                <span style={css.workBadgeDotInternal} aria-hidden="true" />
+                {t('work.group.internal')} {internal}
+              </div>
+            )}
+            {windowTurn.internal.map((entry) => entryRow({ ...entry, status: entry.status }, `pi-${entry.path}`))}
+            {external > 0 && (
+              <div style={css.workGroupTitle}>
+                <span style={css.workBadgeDotExternal} aria-hidden="true" />
+                {t('work.group.external')} {external}
+              </div>
+            )}
+            {windowTurn.external.map((entry) => entryRow({ ...entry, status: entry.status }, `pe-${entry.path}`))}
+            <button
+              type="button"
+              className="dsh-git-ui__change-link"
+              style={css.popupNoteAction}
+              onClick={openRecords}
+            >
+              {t('work.all')} →
+            </button>
+          </>
+        )
+      })()}
       <div style={css.footerRow}>
         <span style={css.checkedAt}>{t('popup.checkedAt').replace('{time}', new Date(s.checkedAt).toLocaleTimeString())}</span>
         <span style={css.footerActions}>
@@ -465,6 +519,14 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
   if (view.state === 'ready') lastReady.current = view
   const display: GitView = view.state === 'loading' && lastReady.current !== null ? lastReady.current : view
 
+  // Turn 工作记录:按快照刷新键拉取(轮询/手动刷新/操作后自动重拉)。
+  // 拉取失败或未就绪 → records=null → 徽章与弹窗分组静默隐藏(确定降级)。
+  // Hook 必须位于所有早退 return 之前(规则的 hooks)。
+  const { records } = useTurnRecords(
+    (q) => query(q),
+    display.state === 'ready' ? display.snapshot.checkedAt : 0,
+  )
+
   // Best-effort activity trigger: an agent turn completing is the most
   // likely moment the working tree changed, so refresh right away instead of
   // waiting for the next poll. Polling stays the fallback (external edits,
@@ -486,10 +548,18 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   /** 从 pill 变更行点击「打开 Git 中心并定位该文件 diff」的请求。 */
   const [centerRequest, setCenterRequest] = useState<{ path: string; base: 'worktree' | 'staged' } | null>(null)
-  /** Git 中心初始 Tab：常规打开 = 变更；齿轮打开 = 设置。 */
-  const [centerTab, setCenterTab] = useState<'changes' | 'settings'>('changes')
+  /** Git 中心初始 Tab：常规打开 = 变更；齿轮打开 = 设置；记录入口 = 记录。 */
+  const [centerTab, setCenterTab] = useState<GitCenterTab>('changes')
   /** 设置（插件级全局）；Pill 与弹窗展示按此切片。 */
   const uiSettings = useSettings()
+
+  /** 打开 Git 中心并定位到「记录」Tab（弹窗工作记录「全部 turn 记录」入口）。 */
+  const openRecordsInCenter = (): void => {
+    setCenterTab('records')
+    setOpen(false)
+    setPos(null)
+    setCenterOpen(true)
+  }
 
   /** 打开 Git 中心并直接定位到该文件的对照视图（关 popup、切 changes 标签、查询 diff）。 */
   const openDiffInCenter = (path: string, base: 'worktree' | 'staged'): void => {
@@ -596,6 +666,19 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
   }
 
   const render = renderPill(display, uiSettings.pill, t)
+
+  const workWindow = latestWorkTurn(records)
+  const { internal: internalCount, external: externalCount } = turnEntryCounts(workWindow)
+  const showWorkBadge = uiSettings.pill.workRecord && (internalCount > 0 || externalCount > 0)
+  const workBadgeTitle = () => {
+    const lines = [t('work.badge').replace('{internal}', String(internalCount)).replace('{external}', String(externalCount))]
+    if (workWindow !== undefined) {
+      if (workWindow.internal.length > 0) lines.push(`${t('work.group.internal')}: ${workWindow.internal.map((e) => e.path).join(', ')}`)
+      if (workWindow.external.length > 0) lines.push(`${t('work.group.external')}: ${workWindow.external.map((e) => e.path).join(', ')}`)
+    }
+    return lines.join('\n')
+  }
+
   return (
     <span ref={wrapRef} style={{ display: 'inline-flex' }}>
       <button
@@ -605,9 +688,25 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
         onClick={() => setOpen(!open)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title={`${display.snapshot.root}\n${render.summary}`}
+        title={`${display.snapshot.root}\n${render.summary}${showWorkBadge ? `\n${workBadgeTitle()}` : ''}`}
       >
         {render.nodes}
+        {showWorkBadge && (
+          <span style={css.workBadges} aria-label={workBadgeTitle()}>
+            {internalCount > 0 && (
+              <span style={css.workBadgeInternal}>
+                <span style={css.workBadgeDotInternal} aria-hidden="true" />
+                {internalCount}
+              </span>
+            )}
+            {externalCount > 0 && (
+              <span style={css.workBadgeExternal}>
+                <span style={css.workBadgeDotExternal} aria-hidden="true" />
+                {externalCount}
+              </span>
+            )}
+          </span>
+        )}
       </button>
       {open && pos !== null && createPortal(
         <div
@@ -622,10 +721,12 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
             settings={uiSettings}
             refresh={refresh}
             openCenter={openCenter}
+            openRecords={openRecordsInCenter}
             openSettings={openSettingsInCenter}
             onOpenDiff={openDiffInCenter}
             run={run}
             query={query}
+            records={records}
             t={t}
           />
         </div>,

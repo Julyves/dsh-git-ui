@@ -31,12 +31,13 @@ import { diffBaseOf, reconcileDiffSelection, stepDiffSelection, type DiffSelecti
 import { highlightLines } from './syntax/highlighter.ts'
 import { useHighlightReady } from './syntax/use-highlight-ready.ts'
 import { langOfPath } from './syntax/lang-map.ts'
-import { BranchIcon, CheckIcon, ChevronIcon, CloseIcon, CollapseAllIcon, CommitIcon, DiffIcon, ExpandAllIcon, FileIcon, fileIconForPath, FolderIcon, GearIcon, NextIcon, PrevIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
+import { BranchIcon, CheckIcon, ChevronIcon, CloseIcon, CollapseAllIcon, CommitIcon, DiffIcon, ExpandAllIcon, FileIcon, fileIconForPath, FolderIcon, GearIcon, NextIcon, PrevIcon, RecordIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
 import { errorText } from './error-text.ts'
 import { SelectMenu } from './select-menu.tsx'
 import { SettingsTab } from './settings/SettingsTab.tsx'
 import { useSettings } from './settings/use-settings.ts'
+import { RecordsTab } from './RecordsTab.tsx'
 import { NewFileView } from './new-file-view.tsx'
 import { DIFF_FOLD_THRESHOLD, type DiffSettings } from '../contracts/settings.ts'
 import * as css from './styles.ts'
@@ -55,7 +56,10 @@ export interface GitCenterProps {
 }
 
 /** Tab 键：设置 Tab 与功能 Tab 并列（信息架构：工作区 + 偏好区）。 */
-type TabKey = 'changes' | 'history' | 'settings'
+type TabKey = 'changes' | 'history' | 'records' | 'settings'
+
+/** GitCenter 的 Tab 键(供 GitPill 等调用方定位初始标签)。 */
+export type GitCenterTab = TabKey
 
 /** 反馈条：text 为展示文案（业务错误经 i18n 友好化）；detail 保留原始信息供 title。 */
 type Feedback = { readonly text: string; readonly detail?: string } | null
@@ -93,6 +97,8 @@ export function GitCenter({
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState<Feedback>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
+  /** 记录 Tab 跳转 Changes 的打开请求(仍变更条目点击)。 */
+  const [recordOpenRequest, setRecordOpenRequest] = useState<{ path: string; base: 'worktree' | 'staged' } | null>(null)
 
   // 打开即定位（pill 齿轮 / 常规打开 / 变更文件直达）：open 上升沿重设 tab，
   // 而非依赖 initialTab 引用变化——连续两次齿轮打开时引用不变，需以 open 为触发。
@@ -127,6 +133,7 @@ export function GitCenter({
   const tabs: Array<{ key: TabKey; label: string; icon?: JSX.Element; dividerBefore?: boolean }> = [
     { key: 'changes', label: t('center.changes') },
     { key: 'history', label: t('center.history') },
+    { key: 'records', label: t('work.tab'), icon: <RecordIcon /> },
     // 偏好区：与功能 Tab 用发丝分隔线轻隔离（设置 = 非仓库操作）。
     { key: 'settings', label: t('settings.title'), icon: <GearIcon />, dividerBefore: true },
   ]
@@ -134,11 +141,17 @@ export function GitCenter({
   /** Toast 通知通道：设置 Tab 的重置反馈等复用统一 toast。 */
   const notify = (text: string): void => setToast({ text, seq: Date.now() })
 
+  /** 关闭:清空记录跳转请求,避免再次打开时残留定位。 */
+  const closeCenter = (): void => {
+    setRecordOpenRequest(null)
+    onClose()
+  }
+
   /** 顶栏右端的分支上下文胶囊：承接被移除标题行的分支信息（title 显示仓库根）。 */
   const branchLabel = snapshot.branch !== null ? snapshot.branch : `(${t('pill.detached')})`
 
   return (
-    <Modal open={open} onClose={onClose} title={t('center.title')} closeLabel={t('center.close')} headless className="dsh-git-ui__center">
+    <Modal open={open} onClose={closeCenter} title={t('center.title')} closeLabel={t('center.close')} headless className="dsh-git-ui__center">
       <div style={css.centerShell}>
         {/* 顶栏 = 功能域：左 tab 组 + 右工具组（分支上下文 + 关闭），标题行已移除以让出内容区 */}
         <div style={css.topBar}>
@@ -199,7 +212,7 @@ export function GitCenter({
             aria-labelledby="dsh-git-ui-tab-changes"
             style={tab === 'changes' ? { display: 'contents' } : { display: 'none' }}
           >
-            <ChangesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} openRequest={openRequest} />
+            <ChangesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} openRequest={recordOpenRequest ?? openRequest} />
           </div>
           <div
             role="tabpanel"
@@ -208,6 +221,22 @@ export function GitCenter({
             style={tab === 'history' ? { display: 'contents' } : { display: 'none' }}
           >
             <HistoryTab query={query} run={run} t={t} />
+          </div>
+          <div
+            role="tabpanel"
+            id="dsh-git-ui-panel-records"
+            aria-labelledby="dsh-git-ui-tab-records"
+            style={tab === 'records' ? { display: 'contents' } : { display: 'none' }}
+          >
+            <RecordsTab
+              snapshot={snapshot}
+              query={(q) => query(q)}
+              t={t}
+              onOpenDiff={(path, base) => {
+                setRecordOpenRequest({ path, base })
+                setTab('changes')
+              }}
+            />
           </div>
           <div
             role="tabpanel"
