@@ -30,7 +30,7 @@ import { errorText, errorAction } from './error-text.ts'
 import { useSettings } from './settings/use-settings.ts'
 import { renderPill, chipLetter, popupBadgeTexts } from './pill-segments.tsx'
 import { useTurnRecords } from './use-turn-records.ts'
-import { latestWorkTurn, relativeTimeLabel, turnEntryCounts, workStateLabel } from './work-record-meta.ts'
+import { latestWorkTurn, turnEntryCounts, workStateLabel } from './work-record-meta.ts'
 import type { GitUISettings } from '../contracts/settings.ts'
 import type { GitCenterTab } from './GitCenter.tsx'
 import type { TurnWorkRecord } from '../host/types.ts'
@@ -342,7 +342,6 @@ function GitPopupBody({
               </span>
               <span style={css.changeNamePop} title={entry.path}>{name}</span>
               {dir !== '' && <span style={css.changeDirPop}>{dir}</span>}
-              <span style={css.workEntryTime}>{relativeTimeLabel(entry.firstSeenAt, t)}</span>
               <span style={css.workStateBadgeStyle(entry.state)}>{workStateLabel(entry.state, t)}</span>
             </div>
           )
@@ -365,7 +364,7 @@ function GitPopupBody({
                 {internal > 0 && (
                   <div style={css.workGroupTitle}>
                     <span style={css.workBadgeDotInternal} aria-hidden="true" />
-                    {t('work.group.internal')} {internal}
+                    {t('work.group.turnInternal')} {internal}
                   </div>
                 )}
                 {windowTurn !== undefined && windowTurn.internal.map((entry) => entryRow(entry, `pi-${entry.path}`))}
@@ -714,7 +713,7 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
   const workBadgeTitle = () => {
     const lines = [t('work.badge').replace('{internal}', String(internalCount)).replace('{external}', String(externalCount))]
     if (workWindow !== undefined) {
-      if (workWindow.internal.length > 0) lines.push(`${t('work.group.internal')}: ${workWindow.internal.map((e) => e.path).join(', ')}`)
+      if (workWindow.internal.length > 0) lines.push(`${t('work.group.turnInternal')}: ${workWindow.internal.map((e) => e.path).join(', ')}`)
       if (workWindow.external.length > 0) lines.push(`${t('work.group.external')}: ${workWindow.external.map((e) => e.path).join(', ')}`)
     }
     return lines.join('\n')
@@ -735,7 +734,7 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
         {showWorkBadge && (
           <span style={css.workBadges}>
             {internalCount > 0 && (
-              <span style={css.workBadgeInternal} title={t('work.group.internal')}>
+              <span style={css.workBadgeInternal} title={t('work.group.turnInternal')}>
                 <span style={css.workBadgeDotInternal} aria-hidden="true" />
                 {t('work.badgeInternalShort').replace('{n}', String(internalCount))}
               </span>

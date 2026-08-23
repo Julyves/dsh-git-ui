@@ -47,7 +47,11 @@ export function relativeTimeLabel(epochMs: number, t: (key: GitKey) => string, n
 
 // ── 记录中心概览与时间线行(纯派生,无 react 依赖) ──────────────────────────
 
-/** 概览统计(唯一路径去重:同一文件跨 turn 写入只计一次)。 */
+/**
+ * 概览统计(对齐 pill 徽章语义:内部/外部/仍变更均取**最近工作 Turn**窗口,
+ * 而非全会话累计——用户关注的"最近这轮"与徽章数字一致;turn.internal 在
+ * 组装层已按路径去重,length 即唯一路径数;工作轮次为全会话总数)。
+ */
 export interface WorkSummary {
   readonly turns: number
   readonly internal: number
@@ -56,24 +60,25 @@ export interface WorkSummary {
 }
 
 export function summarizeWork(records: readonly TurnWorkRecord[]): WorkSummary {
-  const internalPaths = new Set<string>()
-  const externalPaths = new Set<string>()
-  const dirtyPaths = new Set<string>()
-  for (const turn of records) {
-    for (const entry of turn.internal) {
-      internalPaths.add(entry.path)
-      if (entry.state === 'dirty') dirtyPaths.add(entry.path)
+  const latest = latestWorkTurn(records)
+  let internal = 0
+  let external = 0
+  let dirty = 0
+  if (latest !== undefined) {
+    internal = latest.internal.length
+    external = latest.external.length
+    for (const entry of latest.internal) {
+      if (entry.state === 'dirty') dirty += 1
     }
-    for (const entry of turn.external) {
-      externalPaths.add(entry.path)
-      if (entry.state === 'dirty') dirtyPaths.add(entry.path)
+    for (const entry of latest.external) {
+      if (entry.state === 'dirty') dirty += 1
     }
   }
   return {
     turns: records.filter((turn) => turn.hasWork).length,
-    internal: internalPaths.size,
-    external: externalPaths.size,
-    dirty: dirtyPaths.size,
+    internal,
+    external,
+    dirty,
   }
 }
 

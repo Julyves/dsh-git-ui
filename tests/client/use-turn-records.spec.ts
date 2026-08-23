@@ -70,17 +70,31 @@ describe('relativeTimeLabel', () => {
 })
 
 describe('summarizeWork', () => {
-  it('counts unique paths across turns (no double counting)', () => {
+  it('reflects only the latest working turn for internal/external/dirty', () => {
     const records = [
-      turn({ turn: 1, internal: [{ path: 'a.ts', status: 'modified', state: 'dirty', firstSeenAt: 1 }] }),
-      turn({ turn: 2, internal: [{ path: 'a.ts', status: 'modified', state: 'committed', firstSeenAt: 2 }], external: [{ path: 'b.md', status: 'added', state: 'dirty', firstSeenAt: 3 }] }),
+      turn({ turn: 1, internal: [{ path: 'old.ts', status: 'modified', state: 'dirty', firstSeenAt: 1 }] }),
+      turn({ turn: 2, internal: [{ path: 'new.ts', status: 'modified', state: 'dirty', firstSeenAt: 2 }], external: [{ path: 'b.md', status: 'added', state: 'dirty', firstSeenAt: 3 }] }),
     ]
+    // 最近工作 turn = turn 2:internal 1(仅 new.ts)、external 1、dirty 2;
+    // 历史 turn 的 old.ts 不计入(窗口语义,与 pill 徽章同源)。
     expect(summarizeWork(records)).toEqual({ turns: 2, internal: 1, external: 1, dirty: 2 })
+  })
+
+  it('skips idle trailing turns when picking the latest working turn', () => {
+    const records = [
+      turn({ turn: 1, internal: [{ path: 'a.ts', status: 'added', state: 'dirty', firstSeenAt: 1 }] }),
+      turn({ turn: 2, hasWork: false }),
+    ]
+    expect(summarizeWork(records)).toEqual({ turns: 1, internal: 1, external: 0, dirty: 1 })
   })
 
   it('counts only working turns', () => {
     const records = [turn({ turn: 1, hasWork: false }), turn({ turn: 2, hasWork: true })]
     expect(summarizeWork(records).turns).toBe(1)
+  })
+
+  it('returns zeros when no turn has work', () => {
+    expect(summarizeWork([turn({ turn: 1, hasWork: false })])).toEqual({ turns: 0, internal: 0, external: 0, dirty: 0 })
   })
 })
 

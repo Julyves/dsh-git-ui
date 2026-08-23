@@ -345,6 +345,72 @@ export const recordsTimeline: CSSProperties = {
   gap: 0,
 }
 
+// ── 记录中心:条目状态图例 ────────────────────────────────────────────────
+
+/** 状态图例卡:解释条目四态的含义(弱化卡片,置顶可见)。 */
+export const recordsLegend: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+  padding: '8px 12px',
+  borderRadius: 10,
+  background: 'color-mix(in srgb, var(--dsw-alias-bg-layer-2) 55%, transparent)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  fontSize: 11,
+  lineHeight: '16px',
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
+/** 图例标题。 */
+export const recordsLegendTitle: CSSProperties = {
+  fontSize: 10,
+  fontWeight: 600,
+  lineHeight: '14px',
+  color: 'var(--dsw-alias-label-tertiary)',
+  marginBottom: 2,
+}
+
+/** 单条状态解释:色点 + 名称(加粗) + 说明。 */
+export const recordsLegendItem: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'flex-start',
+  gap: 6,
+  minWidth: 0,
+}
+
+/** 状态图例色点(复用语义色)。 */
+export const recordsLegendDot: CSSProperties = {
+  flex: 'none',
+  width: 7,
+  height: 7,
+  borderRadius: 999,
+  marginTop: 5,
+}
+
+export const recordsLegendDotDirty: CSSProperties = {
+  ...recordsLegendDot,
+  background: 'var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary))',
+}
+
+export const recordsLegendDotCommitted: CSSProperties = {
+  ...recordsLegendDot,
+  background: 'var(--dsw-alias-state-success-primary)',
+}
+
+export const recordsLegendDotReverted: CSSProperties = {
+  ...recordsLegendDot,
+  background: 'var(--dsw-alias-state-warn-primary)',
+}
+
+export const recordsLegendDotGone: CSSProperties = {
+  ...recordsLegendDot,
+  background: 'var(--dsw-alias-label-tertiary)',
+}
+
+export const recordsLegendText: CSSProperties = {
+  minWidth: 0,
+}
+
 /** 时间线行:左轴槽 + 内容槽。 */
 export const recordsTimelineRow: CSSProperties = {
   display: 'flex',

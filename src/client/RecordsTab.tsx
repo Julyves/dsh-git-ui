@@ -5,10 +5,12 @@
  * 避免每会话双查询风暴(RecordsTab 恒挂载于 GitCenter)。
  *
  * 结构(重设计):
- *   - 顶部**概览卡**:Turn 总数 / 本会话 / 外部 / 仍变更 四格统计,页面级视觉重心;
+ *   - 顶部**概览卡**:工作轮次 / 最近 Turn / 外部 / 仍变更 四格统计
+ *     (后三格取**最近工作 Turn**窗口,与 pill 徽章同源),页面级视觉重心;
+ *   - **状态图例**:四态含义解释(dirty/committed/reverted/gone);
  *   - 主体**时间线**:左轴(节点 + 竖线) + 右 turn 卡片;有工作 turn 为可展开卡片,
  *     连续空闲 turn 聚合为一条弱化行(不再独立占位——截图噪音根因);
- *   - turn 卡片头:`Turn {n}` + 时间窗(HH:mm 区间)+ 计数徽章(本会话蓝/外部灰);
+ *   - turn 卡片头:`Turn {n}` + 时间窗(HH:mm 区间)+ 变更计数(变更 N/无变更 + 外部 N);
  *     展开显两组条目(状态 chip + 路径拆分 + 相对时刻 + 状态四色徽章);
  *   - 仍变更条目可点击 → 跳转 Changes 标签打开该文件对照(worktree 基线)。
  */
@@ -54,6 +56,27 @@ function EmptyNote({ text }: { text: string }): JSX.Element {
     <div style={css.workEmptyState}>
       <span style={css.workEmptyIcon} aria-hidden="true"><RecordIcon /></span>
       <span style={css.workEmptyText}>{text}</span>
+    </div>
+  )
+}
+
+/** 条目状态图例:解释四态含义(dirty/committed/reverted/gone)。 */
+function StateLegend({ t }: { readonly t: (key: GitKey) => string }): JSX.Element {
+  const items = [
+    { key: 'work.legend.dirty', dot: css.recordsLegendDotDirty },
+    { key: 'work.legend.committed', dot: css.recordsLegendDotCommitted },
+    { key: 'work.legend.reverted', dot: css.recordsLegendDotReverted },
+    { key: 'work.legend.gone', dot: css.recordsLegendDotGone },
+  ] as const
+  return (
+    <div style={css.recordsLegend} aria-label={t('work.legend.title')}>
+      <div style={css.recordsLegendTitle}>{t('work.legend.title')}</div>
+      {items.map((item) => (
+        <div key={item.key} style={css.recordsLegendItem}>
+          <span style={item.dot} aria-hidden="true" />
+          <span style={css.recordsLegendText}>{t(item.key)}</span>
+        </div>
+      ))}
     </div>
   )
 }
@@ -120,10 +143,15 @@ function TurnCard({ turn, onOpenDiff, t }: {
         <span style={css.recordsTurnTitle}>{t('work.turn').replace('{n}', String(turn.turn))}</span>
         <span style={css.recordsTurnWindow}>{windowText(turn.startAt, turn.endAt, t)}</span>
         <span style={css.recordsTurnCounts}>
-          {turn.internal.length > 0 && (
-            <span style={css.workBadgeInternal} title={t('work.group.internal')}>
+          {turn.internal.length > 0 ? (
+            <span style={css.workBadgeInternal} title={t('work.group.turnInternal')}>
               <span style={css.workBadgeDotInternal} aria-hidden="true" />
-              {t('work.group.internal')} {turn.internal.length}
+              {t('work.changesBadge').replace('{n}', String(turn.internal.length))}
+            </span>
+          ) : (
+            // 无本 Turn 变更时给出显式「无变更」弱化徽章——空白徽章区会被误读为数据缺失。
+            <span style={css.workBadgeExternal} title={t('work.noChanges')}>
+              {t('work.noChanges')}
             </span>
           )}
           {turn.external.length > 0 && (
@@ -207,7 +235,7 @@ export function RecordsTab({ records, t, onOpenDiff }: RecordsTabProps): JSX.Ele
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* 概览卡 */}
+      {/* 概览卡(第二格为最近工作 Turn 窗口统计,与 pill 徽章同源) */}
       <div style={css.recordsSummary}>
         <div style={css.recordsSummaryItem}>
           <span style={css.recordsSummaryValue}>{summary.turns}</span>
@@ -218,7 +246,7 @@ export function RecordsTab({ records, t, onOpenDiff }: RecordsTabProps): JSX.Ele
             <span style={css.recordsSummaryDotInternal} aria-hidden="true" />
             {summary.internal}
           </span>
-          <span style={css.recordsSummaryLabel}>{t('work.summaryInternal')}</span>
+          <span style={css.recordsSummaryLabel}>{t('work.summaryRecentTurn')}</span>
         </div>
         <div style={css.recordsSummaryItem}>
           <span style={css.recordsSummaryValue}>
@@ -235,6 +263,9 @@ export function RecordsTab({ records, t, onOpenDiff }: RecordsTabProps): JSX.Ele
           <span style={css.recordsSummaryLabel}>{t('work.summaryDirty')}</span>
         </div>
       </div>
+
+      {/* 条目状态图例:解释四态含义 */}
+      <StateLegend t={t} />
 
       {/* 时间线 */}
       <div style={css.recordsTimeline}>
