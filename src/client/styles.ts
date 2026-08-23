@@ -2106,15 +2106,17 @@ export const settingsSwitch: CSSProperties = {
   padding: 0,
   border: 'none',
   borderRadius: 12,
-  background: 'color-mix(in srgb, var(--dsw-alias-state-business-primary) 20%, var(--dsw-alias-bg-layer-2))',
-  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-business-primary) 38%, transparent)',
+  background: 'color-mix(in srgb, var(--dsw-alias-button-primary-fill) 20%, var(--dsw-alias-bg-layer-2))',
+  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-button-primary-fill) 38%, transparent)',
   cursor: 'pointer',
   flex: 'none',
 }
 
-/** 开关激活态：饱和业务蓝轨道（去描边，饱满）。 */
+/** 开关激活态：饱和按钮蓝轨道（去描边，饱满）。
+ * 用 button-primary-fill（= brand-primary = bluish 蓝）而非 state-business-primary
+ * （DeepSeek 品牌紫粉）——后者非用户期望的「常规按钮蓝」。 */
 export const settingsSwitchOn: CSSProperties = {
-  background: 'var(--dsw-alias-state-business-primary)',
+  background: 'var(--dsw-alias-button-primary-fill)',
   boxShadow: 'inset 0 0 0 1px transparent',
 }
 
@@ -2168,8 +2170,8 @@ export const settingsSegment: CSSProperties = {
  * color-mix 相对宿主语义 token 派生，亮/暗主题均保持强对比。
  */
 export const settingsSegmentActive: CSSProperties = {
-  background: 'color-mix(in srgb, var(--dsw-alias-state-business-primary) 16%, transparent)',
-  boxShadow: 'var(--dsw-shadow-lv1), inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-business-primary) 40%, transparent)',
+  background: 'color-mix(in srgb, var(--dsw-alias-button-primary-fill) 16%, transparent)',
+  boxShadow: 'var(--dsw-shadow-lv1), inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-button-primary-fill) 40%, transparent)',
   color: 'var(--dsw-alias-label-primary)',
   fontWeight: 500,
 }
@@ -2198,10 +2200,10 @@ export const settingsCountBadge: CSSProperties = {
   fontFamily: 'inherit',
 }
 
-/** 开态：business 色前缀 + 主文本（淡晕底色随内核层注入，此处提供合语义断言底色）。 */
+/** 开态：按钮蓝前缀 + 主文本（淡晕底色，亮/暗主题均强对比）。 */
 export const settingsCountBadgeOn: CSSProperties = {
-  background: 'color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, transparent)',
-  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-business-primary) 35%, transparent)',
+  background: 'color-mix(in srgb, var(--dsw-alias-button-primary-fill) 14%, transparent)',
+  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-button-primary-fill) 35%, transparent)',
   color: 'var(--dsw-alias-label-primary)',
 }
 
