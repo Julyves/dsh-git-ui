@@ -275,7 +275,7 @@ export const workAllLink: CSSProperties = {
 
 // ── 记录中心:概览卡 + 时间线 ──────────────────────────────────────────────
 
-/** 概览卡:四格统计 + 弱化说明,页面级视觉重心。 */
+/** 概览卡:四格统计条(紧凑),页面级视觉重心但不过度占高。 */
 export const recordsSummary: CSSProperties = {
   display: 'flex',
   alignItems: 'stretch',
@@ -286,14 +286,14 @@ export const recordsSummary: CSSProperties = {
   boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
 }
 
-/** 单个统计格:大数字 + 标签 + 可选语义点。 */
+/** 单个统计格:数字 + 标签(收紧 padding,数字降至 16px)。 */
 export const recordsSummaryItem: CSSProperties = {
   flex: 1,
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
-  gap: 2,
-  padding: '10px 6px',
+  gap: 1,
+  padding: '7px 6px 8px',
   minWidth: 0,
   background: 'color-mix(in srgb, var(--dsw-alias-bg-layer-2) 60%, transparent)',
 }
@@ -302,10 +302,15 @@ export const recordsSummaryValue: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 5,
-  fontSize: 18,
+  fontSize: 16,
   fontWeight: 650,
-  lineHeight: '22px',
+  lineHeight: '20px',
   color: 'var(--dsw-alias-label-primary)',
+}
+
+/** 统计值为 0 时弱化(冷清数字不抢视觉)。 */
+export const recordsSummaryValueZero: CSSProperties = {
+  opacity: 0.45,
 }
 
 export const recordsSummaryLabel: CSSProperties = {
@@ -345,14 +350,15 @@ export const recordsTimeline: CSSProperties = {
   gap: 0,
 }
 
-// ── 记录中心:条目状态图例 ────────────────────────────────────────────────
+// ── 记录中心:条目状态图例(紧凑横排) ──────────────────────────────────────
 
-/** 状态图例卡:解释条目四态的含义(弱化卡片,置顶可见)。 */
+/** 状态图例条:一行横排四态(色点 + 短名),完整解释在 title。 */
 export const recordsLegend: CSSProperties = {
   display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-  padding: '8px 12px',
+  alignItems: 'center',
+  gap: 14,
+  flexWrap: 'wrap',
+  padding: '6px 12px',
   borderRadius: 10,
   background: 'color-mix(in srgb, var(--dsw-alias-bg-layer-2) 55%, transparent)',
   boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
@@ -361,21 +367,23 @@ export const recordsLegend: CSSProperties = {
   color: 'var(--dsw-alias-label-secondary)',
 }
 
-/** 图例标题。 */
+/** 图例标题(弱化,与条目并列而非换行堆叠)。 */
 export const recordsLegendTitle: CSSProperties = {
+  flex: 'none',
   fontSize: 10,
   fontWeight: 600,
   lineHeight: '14px',
   color: 'var(--dsw-alias-label-tertiary)',
-  marginBottom: 2,
+  marginRight: 2,
 }
 
-/** 单条状态解释:色点 + 名称(加粗) + 说明。 */
+/** 单条状态项:色点 + 短名(悬停显示完整解释)。 */
 export const recordsLegendItem: CSSProperties = {
   display: 'inline-flex',
-  alignItems: 'flex-start',
-  gap: 6,
+  alignItems: 'center',
+  gap: 5,
   minWidth: 0,
+  cursor: 'default',
 }
 
 /** 状态图例色点(复用语义色)。 */
@@ -384,7 +392,6 @@ export const recordsLegendDot: CSSProperties = {
   width: 7,
   height: 7,
   borderRadius: 999,
-  marginTop: 5,
 }
 
 export const recordsLegendDotDirty: CSSProperties = {
@@ -409,6 +416,7 @@ export const recordsLegendDotGone: CSSProperties = {
 
 export const recordsLegendText: CSSProperties = {
   minWidth: 0,
+  whiteSpace: 'nowrap',
 }
 
 /** 时间线行:左轴槽 + 内容槽。 */
@@ -420,46 +428,46 @@ export const recordsTimelineRow: CSSProperties = {
 /** 左侧时间线轴槽:节点 + 竖线(除首尾)。 */
 export const recordsTimelineRail: CSSProperties = {
   flex: 'none',
-  width: 28,
+  width: 32,
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
 }
 
-/** 轴线节点(有工作):语义色实心圆点。 */
+/** 轴线节点(有工作):语义色实心圆点 + 外层光晕(时间线视觉锚点,加大提亮)。 */
 export const recordsTimelineDot: CSSProperties = {
   flex: 'none',
-  width: 9,
-  height: 9,
+  width: 10,
+  height: 10,
   borderRadius: 999,
-  marginTop: 15,
+  marginTop: 14,
   background: 'var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary))',
-  boxShadow: '0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary)) 18%, transparent)',
+  boxShadow: '0 0 0 2px color-mix(in srgb, var(--dsw-alias-bg-layer-3) 90%, transparent), 0 0 0 4px color-mix(in srgb, var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary)) 26%, transparent)',
 }
 
 /** 轴线节点(空闲 turn):空心弱化圈。 */
 export const recordsTimelineDotIdle: CSSProperties = {
   flex: 'none',
-  width: 7,
-  height: 7,
+  width: 8,
+  height: 8,
   borderRadius: 999,
-  marginTop: 11,
+  marginTop: 12,
   background: 'transparent',
   boxShadow: 'inset 0 0 0 1.5px var(--dsw-alias-border-l2)',
 }
 
-/** 轴线竖线(连接上下节点;首行/末行按需 trimmed)。 */
+/** 轴线竖线(连接上下节点;首行/末行按需 trimmed)。更实——时间线叙事的存在感。 */
 export const recordsTimelineLine: CSSProperties = {
   flex: 1,
   width: 2,
   borderRadius: 1,
-  background: 'color-mix(in srgb, var(--dsw-alias-border-l2) 70%, transparent)',
+  background: 'color-mix(in srgb, var(--dsw-alias-border-l2) 90%, transparent)',
 }
 
 /** 轴线竖线(有工作节点间:语义色弱化)。 */
 export const recordsTimelineLineActive: CSSProperties = {
   ...recordsTimelineLine,
-  background: 'color-mix(in srgb, var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary)) 22%, transparent)',
+  background: 'color-mix(in srgb, var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary)) 30%, transparent)',
 }
 
 /** turn 卡片:圆角 + hover 淡底,头部可点。 */
@@ -480,7 +488,7 @@ export const recordsTurnHead: CSSProperties = {
   alignItems: 'center',
   gap: 8,
   width: '100%',
-  padding: '8px 10px',
+  padding: '9px 12px',
   borderRadius: 10,
   border: 0,
   textAlign: 'left',
@@ -488,6 +496,14 @@ export const recordsTurnHead: CSSProperties = {
   cursor: 'pointer',
   color: 'var(--dsw-alias-label-primary)',
   boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+}
+
+/** 「无变更」turn 卡片头弱化变体:无描边、整体降透明——不可展开,不抢视觉。
+ * 内联覆盖全局 base background 是可接受的:该类卡片无 hover/展开交互。 */
+export const recordsTurnHeadEmpty: CSSProperties = {
+  cursor: 'default',
+  opacity: 0.65,
+  boxShadow: 'none',
 }
 
 /** turn 标题:加粗大字号。 */
@@ -1041,6 +1057,8 @@ const globalCss = [
   '.dsh-git-ui__work-turn { background: var(--dsw-alias-bg-layer-2); }',
   '.dsh-git-ui__work-turn:active { background: var(--dsw-alias-interactive-bg-active); }',
   '.dsh-git-ui__work-turn:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
+  // 展开态:当前展开的 turn 卡片头轻微语义高亮(与 hover 区分)。
+  '.dsh-git-ui__work-turn[aria-expanded="true"] { background: color-mix(in srgb, var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary)) 8%, var(--dsw-alias-bg-layer-2)); }',
 
   // ── 悬停态（仅指针设备，触屏 tap 不误激活——emil/apple 闸控规则）──────
   '@media (hover: hover) and (pointer: fine) {',

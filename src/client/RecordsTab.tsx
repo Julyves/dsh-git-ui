@@ -6,12 +6,13 @@
  *
  * 结构(重设计):
  *   - 顶部**概览卡**:工作轮次 / 最近 Turn / 外部 / 仍变更 四格统计
- *     (后三格取**最近工作 Turn**窗口,与 pill 徽章同源),页面级视觉重心;
- *   - **状态图例**:四态含义解释(dirty/committed/reverted/gone);
+ *     (后三格取**最近工作 Turn**窗口,与 pill 徽章同源;0 值弱化),页面级视觉重心;
+ *   - **状态图例**:紧凑横排四态(色点 + 短名),完整含义收进 title 悬停可见;
  *   - 主体**时间线**:左轴(节点 + 竖线) + 右 turn 卡片;有工作 turn 为可展开卡片,
  *     连续空闲 turn 聚合为一条弱化行(不再独立占位——截图噪音根因);
  *   - turn 卡片头:`Turn {n}` + 时间窗(HH:mm 区间)+ 变更计数(变更 N/无变更 + 外部 N);
- *     展开显两组条目(状态 chip + 路径拆分 + 相对时刻 + 状态四色徽章);
+ *     无条目的「无变更」卡片弱化(不可展开);展开态头部轻微语义高亮;
+ *     展开后显两组条目(状态 chip + 路径拆分 + 相对时刻 + 状态四色徽章);
  *   - 仍变更条目可点击 → 跳转 Changes 标签打开该文件对照(worktree 基线)。
  */
 import { useState } from 'react'
@@ -60,22 +61,22 @@ function EmptyNote({ text }: { text: string }): JSX.Element {
   )
 }
 
-/** 条目状态图例:解释四态含义(dirty/committed/reverted/gone)。 */
+/** 条目状态图例:紧凑横排四态(色点 + 短名),完整解释收进 title。 */
 function StateLegend({ t }: { readonly t: (key: GitKey) => string }): JSX.Element {
   const items = [
-    { key: 'work.legend.dirty', dot: css.recordsLegendDotDirty },
-    { key: 'work.legend.committed', dot: css.recordsLegendDotCommitted },
-    { key: 'work.legend.reverted', dot: css.recordsLegendDotReverted },
-    { key: 'work.legend.gone', dot: css.recordsLegendDotGone },
+    { name: 'work.legendName.dirty', hint: 'work.legend.dirty', dot: css.recordsLegendDotDirty },
+    { name: 'work.legendName.committed', hint: 'work.legend.committed', dot: css.recordsLegendDotCommitted },
+    { name: 'work.legendName.reverted', hint: 'work.legend.reverted', dot: css.recordsLegendDotReverted },
+    { name: 'work.legendName.gone', hint: 'work.legend.gone', dot: css.recordsLegendDotGone },
   ] as const
   return (
     <div style={css.recordsLegend} aria-label={t('work.legend.title')}>
-      <div style={css.recordsLegendTitle}>{t('work.legend.title')}</div>
+      <span style={css.recordsLegendTitle} aria-hidden="true">{t('work.legend.title')}</span>
       {items.map((item) => (
-        <div key={item.key} style={css.recordsLegendItem}>
+        <span key={item.name} style={css.recordsLegendItem} title={t(item.hint)}>
           <span style={item.dot} aria-hidden="true" />
-          <span style={css.recordsLegendText}>{t(item.key)}</span>
-        </div>
+          <span style={css.recordsLegendText}>{t(item.name)}</span>
+        </span>
       ))}
     </div>
   )
@@ -134,7 +135,7 @@ function TurnCard({ turn, onOpenDiff, t }: {
       <button
         type="button"
         className="dsh-git-ui__work-turn"
-        style={css.recordsTurnHead}
+        style={hasEntries ? css.recordsTurnHead : { ...css.recordsTurnHead, ...css.recordsTurnHeadEmpty }}
         onClick={() => { if (hasEntries) setOpen(!open) }}
         aria-expanded={hasEntries ? open : undefined}
         aria-label={t('work.turnMeta').replace('{n}', String(turn.turn)).replace('{time}', windowText(turn.startAt, turn.endAt, t))}
@@ -235,28 +236,28 @@ export function RecordsTab({ records, t, onOpenDiff }: RecordsTabProps): JSX.Ele
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* 概览卡(第二格为最近工作 Turn 窗口统计,与 pill 徽章同源) */}
+      {/* 概览卡(第二格为最近工作 Turn 窗口统计,与 pill 徽章同源);0 值弱化 */}
       <div style={css.recordsSummary}>
         <div style={css.recordsSummaryItem}>
-          <span style={css.recordsSummaryValue}>{summary.turns}</span>
+          <span style={summary.turns === 0 ? { ...css.recordsSummaryValue, ...css.recordsSummaryValueZero } : css.recordsSummaryValue}>{summary.turns}</span>
           <span style={css.recordsSummaryLabel}>{t('work.summaryTurns')}</span>
         </div>
         <div style={css.recordsSummaryItem}>
-          <span style={css.recordsSummaryValue}>
+          <span style={summary.internal === 0 ? { ...css.recordsSummaryValue, ...css.recordsSummaryValueZero } : css.recordsSummaryValue}>
             <span style={css.recordsSummaryDotInternal} aria-hidden="true" />
             {summary.internal}
           </span>
           <span style={css.recordsSummaryLabel}>{t('work.summaryRecentTurn')}</span>
         </div>
         <div style={css.recordsSummaryItem}>
-          <span style={css.recordsSummaryValue}>
+          <span style={summary.external === 0 ? { ...css.recordsSummaryValue, ...css.recordsSummaryValueZero } : css.recordsSummaryValue}>
             <span style={css.recordsSummaryDotExternal} aria-hidden="true" />
             {summary.external}
           </span>
           <span style={css.recordsSummaryLabel}>{t('work.summaryExternal')}</span>
         </div>
         <div style={css.recordsSummaryItem}>
-          <span style={css.recordsSummaryValue}>
+          <span style={summary.dirty === 0 ? { ...css.recordsSummaryValue, ...css.recordsSummaryValueZero } : css.recordsSummaryValue}>
             <span style={css.recordsSummaryDotDirty} aria-hidden="true" />
             {summary.dirty}
           </span>
