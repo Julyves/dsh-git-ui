@@ -669,21 +669,26 @@ export const popupBranchMenu: CSSProperties = {
   borderRadius: 4,
 }
 
-/** 紧凑状态条：发丝边 stat chips（与 diff 基线徽章同族），横排计数。 */
+/** 紧凑状态条:发丝边 stat chips 横排,**约束在一行内**(nowrap + 弹性收缩),
+ * 5 格(已暂存/已修改/未跟踪/已领先/已落后)在窄弹窗(340px)内可挤一行。 */
 export const popupStatusBar: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 6,
-  flexWrap: 'wrap',
+  gap: 4,
+  flexWrap: 'nowrap',
   marginBottom: 10,
 }
 
-/** 状态 chip：layer-2 底 + 发丝边 + 圆角 6（与 changeChip/行圆角同族）。 */
+/** 状态 chip:layer-2 底 + 发丝边 + 圆角 6(与 changeChip/行圆角同族)。
+ * flex 弹性收缩 + minWidth:0:窄弹窗下各格按需收窄,文字 nowrap 不内部换行。 */
 export const popupStatItem: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'baseline',
-  gap: 4,
-  padding: '2px 8px',
+  gap: 3,
+  flex: '1 1 auto',
+  minWidth: 0,
+  justifyContent: 'center',
+  padding: '3px 6px',
   borderRadius: 6,
   background: 'var(--dsw-alias-bg-layer-2)',
   boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
@@ -694,11 +699,15 @@ export const popupStatValue: CSSProperties = {
   fontSize: 12,
   color: 'var(--dsw-alias-label-primary)',
   fontVariantNumeric: 'tabular-nums',
+  whiteSpace: 'nowrap',
 }
 
 export const popupStatLabel: CSSProperties = {
   fontSize: 11,
   color: 'var(--dsw-alias-label-tertiary)',
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
 }
 
 /** 分支操作行（新建分支，上提至头部区下方）。 */
