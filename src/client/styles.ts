@@ -2095,8 +2095,12 @@ export const settingsRowHint: CSSProperties = {
 }
 
 /** 开关轨道：40×24 胶囊。
- * 关闭态也落在业务蓝家族（20% 淡晕 + 38% 同源描边）——取代 layer-2 灰色，
- * 灰白轨道在亮/暗主题下均显寡淡、与「常规按钮蓝」不符。
+ * 蓝色 token 选型依据（宿主 design-platform.css 实测）：alias 层的
+ * button-primary-fill → brand-primary → neutral-bluish-1000/50 是「主按钮
+ * 黑白灰阶」，并非蓝色——此前三轮「选 token 修复」全部错在这里，开态轨道
+ * 因此渲染为黑色。真正的蓝色在静态色板 --dsw-static-blue-*（#3B82F6 标准
+ * 蓝，最贴近 iOS/macOS 开关蓝），static 值不随亮暗主题变化，两主题观感一致。
+ * 关闭态 = 浅蓝轨道（14% 蓝 × layer-2 底）+ 同源蓝描边——明显可辨、带品牌蓝调。
  * 激活态经 inline 合并 settingsSwitchOn 饱和蓝色（勿依赖全局 CSS data-on
  * 覆盖背景——inline style 优先级更高会压住它，本项目此前的隐形缺陷）。 */
 export const settingsSwitch: CSSProperties = {
@@ -2106,22 +2110,23 @@ export const settingsSwitch: CSSProperties = {
   padding: 0,
   border: 'none',
   borderRadius: 12,
-  background: 'color-mix(in srgb, var(--dsw-alias-button-primary-fill) 20%, var(--dsw-alias-bg-layer-2))',
-  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-button-primary-fill) 38%, transparent)',
+  background: 'color-mix(in srgb, var(--dsw-static-blue-500) 14%, var(--dsw-alias-bg-layer-2))',
+  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--dsw-static-blue-500) 40%, transparent)',
   cursor: 'pointer',
   flex: 'none',
 }
 
-/** 开关激活态：饱和按钮蓝轨道（去描边，饱满）。
- * 用 button-primary-fill（= brand-primary = bluish 蓝）而非 state-business-primary
- * （DeepSeek 品牌紫粉）——后者非用户期望的「常规按钮蓝」。 */
+/** 开关激活态：饱和标准蓝轨道（去描边，饱满）。
+ * static-blue-500 = rgb(59,130,246) #3B82F6——iOS/macOS 标准开关蓝；
+ * 固定色值使亮/暗主题下同样清晰饱满。 */
 export const settingsSwitchOn: CSSProperties = {
-  background: 'var(--dsw-alias-button-primary-fill)',
+  background: 'var(--dsw-static-blue-500)',
   boxShadow: 'inset 0 0 0 1px transparent',
 }
 
-/** 开关滑钮：20px 圆片，位移经 data-on 由全局 CSS 切换（inline 不含 transform，
- * CSS 可正常接管位移）。白滑钮在浅蓝/饱和蓝轨道上均清晰可辨。 */
+/** 开关滑钮：20px 纯白圆片（iOS 标准），位移经 data-on 由全局 CSS 切换
+ * （inline 不含 transform，CSS 可正常接管位移）。锁定 #fff 不随主题变化——
+ * 在浅蓝（关）/饱和蓝（开）两种轨道上均清晰可辨，lv2 投影提供浮起边界。 */
 export const settingsSwitchKnob: CSSProperties = {
   position: 'absolute',
   top: 2,
@@ -2129,9 +2134,8 @@ export const settingsSwitchKnob: CSSProperties = {
   width: 20,
   height: 20,
   borderRadius: '50%',
-  background: 'var(--dsw-alias-bg-layer-3)',
-  // 白滑钮 + 阴影浮起；去掉灰色内描边（灰边在蓝轨道上破坏蓝色调）。
-  boxShadow: 'var(--dsw-shadow-lv2), inset 0 0 0 1px rgba(255, 255, 255, 0.35)',
+  background: '#ffffff',
+  boxShadow: 'var(--dsw-shadow-lv2)',
 }
 
 /** 分段控件容器：iOS 式轨道（layer-2 满宽胶囊，激活段内凹凸起由行内样式叠加）。 */
@@ -2164,14 +2168,14 @@ export const settingsSegment: CSSProperties = {
 }
 
 /**
- * 激活段：业务色淡晕 + 同源描边（与计数徽章开态同语言）。
+ * 激活段：标准蓝淡晕 + 同源描边（与开关/计数徽章同语言）。
  * 旧实现用 layer-3 + border-l2 描边——亮色主题下 layer-2（轨道）与
  * layer-3（激活段）同为浅灰、border-l2 更浅，选中态几乎融入轨道、不可分辨。
- * color-mix 相对宿主语义 token 派生，亮/暗主题均保持强对比。
+ * color-mix 相对 static-blue-500 派生，亮/暗主题均保持强对比。
  */
 export const settingsSegmentActive: CSSProperties = {
-  background: 'color-mix(in srgb, var(--dsw-alias-button-primary-fill) 16%, transparent)',
-  boxShadow: 'var(--dsw-shadow-lv1), inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-button-primary-fill) 40%, transparent)',
+  background: 'color-mix(in srgb, var(--dsw-static-blue-500) 16%, transparent)',
+  boxShadow: 'var(--dsw-shadow-lv1), inset 0 0 0 1px color-mix(in srgb, var(--dsw-static-blue-500) 40%, transparent)',
   color: 'var(--dsw-alias-label-primary)',
   fontWeight: 500,
 }
@@ -2200,10 +2204,10 @@ export const settingsCountBadge: CSSProperties = {
   fontFamily: 'inherit',
 }
 
-/** 开态：按钮蓝前缀 + 主文本（淡晕底色，亮/暗主题均强对比）。 */
+/** 开态：标准蓝淡晕底色 + 同源描边（亮/暗主题均强对比）。 */
 export const settingsCountBadgeOn: CSSProperties = {
-  background: 'color-mix(in srgb, var(--dsw-alias-button-primary-fill) 14%, transparent)',
-  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-button-primary-fill) 35%, transparent)',
+  background: 'color-mix(in srgb, var(--dsw-static-blue-500) 14%, transparent)',
+  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--dsw-static-blue-500) 35%, transparent)',
   color: 'var(--dsw-alias-label-primary)',
 }
 
