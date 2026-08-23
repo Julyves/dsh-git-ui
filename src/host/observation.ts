@@ -99,11 +99,14 @@ export class ObservationLog {
     }
   }
 
-  /** 恢复:以持久化条目重建(不做任何 git 对账;对账由调用方按需执行)。 */
+  /**
+   * 以持久化条目恢复。**合并语义**:本会话运行期间(读盘前)已观测到的
+   * 条目优先级更高(更新鲜),磁盘条目只补缺口——避免 ensure→restore
+   * 异步窗口内 observe 的数据被清空(竞态)。
+   */
   restore(entries: readonly PathObservation[]): void {
-    this.map.clear()
     for (const entry of entries) {
-      if (isSafeObservationPath(entry.path)) {
+      if (isSafeObservationPath(entry.path) && !this.map.has(entry.path)) {
         this.map.set(entry.path, entry)
       }
     }

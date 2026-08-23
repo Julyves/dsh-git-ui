@@ -58,16 +58,18 @@ describe('ObservationLog', () => {
     expect(log.get('f0020.ts')).toBeDefined()
   })
 
-  it('restore replaces the whole log and validates paths', () => {
+  it('restore merges disk entries without clobbering newer in-memory ones', () => {
     const log = new ObservationLog()
-    log.update([change('a.ts')], 1000)
+    log.update([change('a.ts')], 1000) // 读盘前已观测(更新鲜)
     log.restore([
       { path: 'b.ts', status: 'modified', firstSeenAt: 500, lastSeenAt: null, committedAt: null },
+      { path: 'a.ts', status: 'added', firstSeenAt: 400, lastSeenAt: 900, committedAt: null },
       { path: '../evil.ts', status: 'modified', firstSeenAt: 500, lastSeenAt: null, committedAt: null },
     ])
-    expect(log.entries()).toHaveLength(1)
+    // 内存条目胜出(更新鲜);磁盘条目补缺口;非法路径拒绝。
+    expect(log.get('a.ts')).toEqual({ path: 'a.ts', status: 'modified', firstSeenAt: 1000, lastSeenAt: null, committedAt: null })
     expect(log.get('b.ts')).toBeDefined()
-    expect(log.get('a.ts')).toBeUndefined()
+    expect(log.get('../evil.ts')).toBeUndefined()
   })
 
   it('works without a persistence channel (in-memory only)', () => {

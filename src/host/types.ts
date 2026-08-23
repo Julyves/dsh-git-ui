@@ -132,6 +132,7 @@ export type GitOperationErrorCode =
   | 'cwd-unavailable'
   | 'path-not-found'
   | 'not-a-git-repo'
+  | 'git-unavailable'
   | 'invalid-path'
   | 'invalid-name'
   | 'git-error'
@@ -173,11 +174,38 @@ export type GitQuery =
   | { readonly kind: 'branches' }
   | { readonly kind: 'tags' }
   | { readonly kind: 'authors' }
+  | { readonly kind: 'turn-records' }
 
-/** 提交变更文件行（`--name-status` 源：状态 + 路径，不再携带 +/- 行数）。 */
+/** 提交变更文件行(`--name-status` 源:状态 + 路径,不再携带 +/- 行数)。 */
 export interface GitFileStat {
   readonly path: string
   readonly status: GitChangeStatus
+}
+
+// ── Turn 工作记录(turn-records 查询) ──────────────────────────────────────
+
+/** 记录条目状态:仍在工作区 / 提交后离开 / 还原后消失。 */
+export type WorkEntryState = 'dirty' | 'committed' | 'reverted'
+
+/** 一条对外展示的工作记录条目。 */
+export interface WorkEntry {
+  readonly path: string
+  readonly status: GitChangeStatus
+  readonly state: WorkEntryState
+  /** 首见/写入时刻(Unix ms;internal 取自日志,external 取自观测)。 */
+  readonly firstSeenAt: number
+}
+
+/** 一个 turn 的对外工作记录。 */
+export interface TurnWorkRecord {
+  readonly turn: number
+  readonly startAt: number
+  /** 窗口截止;null = 进行中(截止 = 客户端渲染时的 now)。 */
+  readonly endAt: number | null
+  /** 是否含工具调用(空 turn 折叠展示用)。 */
+  readonly hasWork: boolean
+  readonly internal: readonly WorkEntry[]
+  readonly external: readonly WorkEntry[]
 }
 
 /** One branch row from `git branch --format`. Local branches may carry
@@ -205,6 +233,7 @@ export type GitQueryResult =
   | { readonly kind: 'branches'; readonly current: string | null; readonly defaultBranch: string | null; readonly local: readonly GitBranch[]; readonly remote: readonly GitBranch[] }
   | { readonly kind: 'tags'; readonly tags: readonly GitBranch[] }
   | { readonly kind: 'authors'; readonly authors: readonly string[] }
+  | { readonly kind: 'turn-records'; readonly turns: readonly TurnWorkRecord[] }
 
 export type GitQueryResponse =
   | { readonly ok: true; readonly value: GitQueryResult }

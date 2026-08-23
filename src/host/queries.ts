@@ -36,6 +36,11 @@ export async function runQuery(
   request: GitQueryRequest,
 ): Promise<GitQueryResponse> {
   void config
+  // turn-records 由宿主编排层(host/index.ts 的 TurnRecordsBackend)处理;
+  // 本文件只负责 git 只读查询——此分支是穷尽性安全网,正常不会到达。
+  if (request.query.kind === 'turn-records') {
+    return { ok: false, error: { code: 'git-error', message: 'turn-records handled by the record backend' } }
+  }
   const workspace = await resolveWorkspace(deps, request.sessionId)
   if (!workspace.ok) return { ok: false, error: operationError(workspace.error).error }
   const root = workspace.root

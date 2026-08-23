@@ -99,11 +99,11 @@ export const gitActionSchema = z.discriminatedUnion('kind', [
 ])
 
 export const gitOperationErrorSchema = z.object({
-  // 与 host GitOperationErrorCode 保持一致：zod z.enum 手工镜像枚举，缺一项
-  // 会在 strict 解码时 reject，把可预期业务错误改写为晦涩的 git-error。
+  // 与 host GitOperationErrorCode 保持一致:zod z.enum 手工镜像枚举,缺一项
+  // 会在 strict 解码时 reject,把可预期业务错误改写为晦涩的 git-error。
   code: z.enum([
     'session-not-found', 'cwd-unavailable', 'path-not-found',
-    'not-a-git-repo', 'invalid-path', 'invalid-name', 'git-error', 'timeout',
+    'not-a-git-repo', 'git-unavailable', 'invalid-path', 'invalid-name', 'git-error', 'timeout',
     'local-changes-block',
   ]),
   message: z.string().optional(),
@@ -127,10 +127,34 @@ export const gitQuerySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('branches') }),
   z.object({ kind: z.literal('tags') }),
   z.object({ kind: z.literal('authors') }),
+  z.object({ kind: z.literal('turn-records') }),
 ])
+
+/** Turn 工作记录(wire 镜像 host/types.ts 的 TurnWorkRecord/WorkEntry)。 */
+export const turnWorkRecordSchema = z.object({
+  turn: z.number().int(),
+  startAt: z.number(),
+  endAt: z.number().nullable(),
+  hasWork: z.boolean(),
+  internal: z.array(z.object({
+    path: z.string(),
+    status: z.enum(['added', 'modified', 'deleted', 'renamed', 'untracked', 'conflicted', 'typechange']),
+    state: z.enum(['dirty', 'committed', 'reverted']),
+    firstSeenAt: z.number(),
+  })),
+  external: z.array(z.object({
+    path: z.string(),
+    status: z.enum(['added', 'modified', 'deleted', 'renamed', 'untracked', 'conflicted', 'typechange']),
+    state: z.enum(['dirty', 'committed', 'reverted']),
+    firstSeenAt: z.number(),
+  })),
+})
 
 const gitFileStatSchema = z.object({ path: z.string(), status: z.enum(['added', 'modified', 'deleted', 'renamed', 'untracked', 'conflicted', 'typechange']) })
 const gitBranchSchema = z.object({ name: z.string(), shortHash: z.string().nullable(), ahead: z.number().optional(), behind: z.number().optional() })
+
+/** 工作记录条目(复用 host WorkEntry 形状;供 client 类型引用)。 */
+export const workEntrySchema = turnWorkRecordSchema.shape.internal.element
 
 export const gitQueryResultSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('history'), commits: z.array(gitGraphCommitSchema), total: z.number() }),
@@ -139,6 +163,7 @@ export const gitQueryResultSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('branches'), current: z.string().nullable(), defaultBranch: z.string().nullable(), local: z.array(gitBranchSchema), remote: z.array(gitBranchSchema) }),
   z.object({ kind: z.literal('tags'), tags: z.array(gitBranchSchema) }),
   z.object({ kind: z.literal('authors'), authors: z.array(z.string()) }),
+  z.object({ kind: z.literal('turn-records'), turns: z.array(turnWorkRecordSchema) }),
 ])
 
 export const gitQueryResponseSchema = z.discriminatedUnion('ok', [

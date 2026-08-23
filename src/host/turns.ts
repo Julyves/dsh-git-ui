@@ -23,6 +23,7 @@ export type TurnEventSlice =
   | { readonly type: 'turn/end'; readonly seq: number; readonly time: number; readonly data: { readonly turn: number } }
   | { readonly type: 'tool/call'; readonly seq: number; readonly time: number; readonly data: { readonly turn: number; readonly step?: number; readonly callId: string; readonly name: string; readonly arguments: string } }
   | { readonly type: 'tool/result'; readonly seq: number; readonly time: number; readonly data: { readonly turn: number; readonly step?: number; readonly callId?: string; readonly meta?: unknown } }
+  | { readonly type: 'session/end-seed'; readonly seq: number; readonly time: number; readonly data: Record<string, never> }
 
 /** 一条 turn 内的工具调用记录(写路径提取的输入)。 */
 export interface ToolCallRecord {
