@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PathStateTracker, UPGRADE_BUDGET_PER_QUERY, PATH_STATE_CAP } from '../src/host/path-state.ts'
+import { PathStateTracker, UPGRADE_BUDGET_PER_QUERY, PATH_STATE_CAP, PROBE_COOLDOWN_MS } from '../src/host/path-state.ts'
 import { RecordStore } from '../src/host/record-store.ts'
 import { runTurnRecords, type TurnRecordSources } from '../src/host/turn-records.ts'
 import type { GitChange, GitSnapshot } from '../src/host/types.ts'
@@ -23,26 +23,73 @@ describe('PathStateTracker', () => {
 
   it('enforces per-cycle acquisition budget (storm guard)', () => {
     const tracker = new PathStateTracker()
-    tracker.beginCycle()
+    expect(tracker.beginCycle(10_000)).toBe(true)
     let acquired = 0
     for (let index = 0; index < UPGRADE_BUDGET_PER_QUERY + 10; index += 1) {
       if (tracker.tryAcquire(`f${index}.ts`)) acquired += 1
     }
     expect(acquired).toBe(UPGRADE_BUDGET_PER_QUERY)
     expect(tracker.remainingBudget()).toBe(0)
-    // 新一轮重置配额
-    tracker.beginCycle()
+    // 新一轮重置配额(越过冷却窗口)
+    expect(tracker.beginCycle(70_000)).toBe(true)
     expect(tracker.tryAcquire('f0.ts')).toBe(true) // 新轮可重新探测(attempted 也重置)
     expect(tracker.remainingBudget()).toBe(UPGRADE_BUDGET_PER_QUERY - 1)
   })
 
   it('does not double-acquire the same path within a cycle', () => {
     const tracker = new PathStateTracker()
-    tracker.beginCycle()
+    expect(tracker.beginCycle(10_000)).toBe(true)
     expect(tracker.tryAcquire('a.ts')).toBe(true)
     expect(tracker.tryAcquire('a.ts')).toBe(false)
     expect(tracker.tryAcquire('a.ts')).toBe(false)
     expect(tracker.remainingBudget()).toBe(UPGRADE_BUDGET_PER_QUERY - 1)
+  })
+
+  it('cooldowns only after an actual probe cycle (rebuild-convergence storm guard)', () => {
+    const tracker = new PathStateTracker()
+    // 空轮(无 gone 条目):beginCycle 允许,但不启动冷却。
+    expect(tracker.beginCycle(10_000)).toBe(true)
+    expect(tracker.beginCycle(30_000)).toBe(true) // 无探测轮 → 不冷却
+    // 实际探测轮:领取名额并 noteProbeCycle 后,冷却窗口启动。
+    expect(tracker.tryAcquire('a.ts')).toBe(true)
+    tracker.noteProbeCycle(30_000)
+    // 冷却窗口内(20s < 60s):配额归零,探测被抑制。
+    expect(tracker.beginCycle(50_000)).toBe(false)
+    expect(tracker.tryAcquire('b.ts')).toBe(false)
+    expect(tracker.remainingBudget()).toBe(0)
+    // 越过冷却(30_000 + 60_100):配额恢复。
+    expect(tracker.beginCycle(90_100)).toBe(true)
+    expect(tracker.tryAcquire('b.ts')).toBe(true)
+  })
+
+  it('restores persisted verdicts without marking dirty; exports entries', () => {
+    const tracker = new PathStateTracker()
+    tracker.set('a.ts', 'committed')
+    tracker.set('b.ts', 'reverted')
+    expect(tracker.isDirty).toBe(true)
+    // 导出 → 落盘。
+    const exported = tracker.entries()
+    expect(exported).toContainEqual(['a.ts', 'committed'])
+    expect(exported).toContainEqual(['b.ts', 'reverted'])
+    tracker.clearDirty()
+    expect(tracker.isDirty).toBe(false)
+    // 新实例恢复:判定命中、不触发 dirty(恢复不是新判定)。
+    const restored = new PathStateTracker()
+    restored.restore(exported)
+    expect(restored.get('a.ts')).toBe('committed')
+    expect(restored.get('b.ts')).toBe('reverted')
+    expect(restored.isDirty).toBe(false)
+  })
+
+  it('no-ops when re-setting an existing verdict (zero-write discipline)', () => {
+    const tracker = new PathStateTracker()
+    tracker.set('a.ts', 'committed')
+    tracker.clearDirty()
+    tracker.set('a.ts', 'committed') // 无变化
+    expect(tracker.isDirty).toBe(false)
+    tracker.set('b.ts', 'reverted')
+    tracker.set('b.ts', 'reverted') // 无变化
+    expect(tracker.isDirty).toBe(true) // 仅首个 b.ts 判定置脏
   })
 
   it('caps stored verdicts (bounded memory)', () => {
@@ -123,6 +170,9 @@ describe('runTurnRecords path-state upgrade (progressive convergence)', () => {
   it('defers beyond-budget probes to later queries (storm guard at integration level)', async () => {
     const pipeline = new RecordStore(memoryPersistenceFactory(), 0)
     const tracker = new PathStateTracker()
+    // 递增时钟:每轮查询越过探测冷却窗口(PROBE_COOLDOWN_MS),聚焦配额本身。
+    let now = NOW
+    const clock = (): number => { now += PROBE_COOLDOWN_MS + 1; return now }
     const manyCalls: TurnEventSlice[] = Array.from({ length: 40 }, (_, index) => ({
       type: 'tool/call',
       seq: events.length + index + 1,
@@ -140,14 +190,15 @@ describe('runTurnRecords path-state upgrade (progressive convergence)', () => {
       probe: () => ({ isCommitted: async () => false }),
       pathStates: () => tracker,
       finalStateProbe: () => ({ finalState: async (path) => { probedPaths.push(path); return 'committed' } }),
-      now: () => NOW,
+      now: clock,
     }, 's1')
     const first = await call()
     if (!first.ok) throw new Error('failed')
     if (first.value.kind !== 'turn-records') throw new Error('wrong kind')
     // 首轮只探测配额内路径;其余保持 gone。
     const states = new Map(first.value.turns[0]?.internal.map((e) => [e.path, e.state]) ?? [])
-    expect(probedPaths.length).toBeLessThanOrEqual(25)
+    expect(probedPaths.length).toBeLessThanOrEqual(UPGRADE_BUDGET_PER_QUERY)
+    expect(probedPaths.length).toBe(UPGRADE_BUDGET_PER_QUERY)
     const probed = new Set(probedPaths)
     const stillGone = [...states.entries()].filter(([, state]) => state === 'gone').map(([path]) => path)
     expect(stillGone.length).toBeGreaterThan(0)

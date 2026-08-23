@@ -4,6 +4,11 @@
  * 流程:会话事件折叠(增量)→ 快照(观测已在适配层随快照更新)→
  * mtime 精修 → 子会话写路径归并 → RecordStore 组装。快照失败时
  * 镜像其错误(统计严格基于 git:git 不可用即无记录可谈)。
+ *
+ * 去向升级(URL 配额护栏):对 gone 条目按 `UPGRADE_BUDGET_PER_QUERY` 配额、
+ * `PROBE_COOLDOWN_MS` 冷却做顺序权威探测,探测结果写缓存并**持久化**
+ * (`ensurePathStates`/`persistPathStates`)——宿主重启/插件更新后不再从头
+ * 收敛,从根源消除"安装即命令风暴"复发(incident 488f678 同款)。
  */
 
 import type { RecordStore } from './record-store.ts'
@@ -33,6 +38,10 @@ export interface TurnRecordSources {
   pathStates(sessionId: string): PathStateTracker | undefined
   /** 去向权威探针(git log;可缺省 = 不升级)。 */
   finalStateProbe(sessionId: string): PathStateProbe | undefined
+  /** 恢复判定缓存(宿主重启后从磁盘载入;可缺省 = 不恢复,从头收敛)。 */
+  ensurePathStates?(sessionId: string): Promise<unknown>
+  /** 持久化判定缓存(有新判定才写;可缺省 = 不落盘)。 */
+  persistPathStates?(sessionId: string): Promise<void>
   /** 可注入时钟(测试)。 */
   now(): number
 }
@@ -47,6 +56,10 @@ export async function runTurnRecords(
   const events = sources.sessionEvents(sessionId)
   if (events === undefined) {
     return { ok: false, error: { code: 'session-not-found', message: sessionId } }
+  }
+  // 宿主重启后可恢复已持久化的去向判定——避免"每次更新插件=重新收敛=命令风暴"。
+  if (sources.ensurePathStates !== undefined) {
+    await sources.ensurePathStates(sessionId)
   }
   pipeline.ensure(sessionId, sources.probe(sessionId))
   pipeline.fold(sessionId, events)
@@ -68,10 +81,14 @@ export async function runTurnRecords(
   })
   const records = assembleTurns()
 
-  // 去向升级:对 gone 条目按配额做权威探测(顺序、有界、防重),
+  // 去向升级:对 gone 条目按配额做权威探测(顺序、有界、防重、冷却),
   // 探测完成后**二次组装**——本次查询即可返回升级后的状态(渐进收敛)。
   const upgraded = await upgradeGonePaths(records, sources, sessionId, signal)
   const finalRecords = upgraded > 0 ? assembleTurns() : records
+  // 有新判定才落盘(变化判定;R3 纪律)。
+  if (upgraded > 0 && sources.persistPathStates !== undefined) {
+    await sources.persistPathStates(sessionId)
+  }
   return { ok: true, value: { kind: 'turn-records', turns: finalRecords } }
 }
 
@@ -98,12 +115,15 @@ async function upgradeGonePaths(
       if (entry.state === 'gone') gone.add(entry.path)
     }
   }
-  tracker.beginCycle()
+  tracker.beginCycle(sources.now())
+  if (tracker.remainingBudget() <= 0) return 0 // 冷却期(距上次实际探测 < PROBE_COOLDOWN_MS)
   let upgraded = 0
+  let probedAny = false
   for (const path of gone) {
     if (signal?.aborted === true) break
     if (tracker.get(path) !== undefined) continue
     if (!tracker.tryAcquire(path)) break // 配额耗尽
+    probedAny = true
     let state: 'committed' | 'reverted' | null = null
     try {
       state = await probe.finalState(path)
@@ -115,6 +135,8 @@ async function upgradeGonePaths(
       upgraded += 1
     }
   }
+  // 本轮确实做过探测 → 启动冷却窗口(空轮不启动,避免无谓延迟)。
+  if (probedAny) tracker.noteProbeCycle(sources.now())
   return upgraded
 }
 

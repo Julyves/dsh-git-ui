@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { RecordStore } from '../src/host/record-store.ts'
 import { runTurnRecords, type TurnRecordSources } from '../src/host/turn-records.ts'
+import { PathStateTracker } from '../src/host/path-state.ts'
 import type { GitSnapshot, GitSnapshotResult } from '../src/host/types.ts'
 import type { TurnEventSlice } from '../src/host/turns.ts'
 import type { MtimeSource } from '../src/host/record-assembly.ts'
@@ -120,5 +121,41 @@ describe('runTurnRecords', () => {
     if (second.value.kind !== 'turn-records') return
     expect(second.value.turns).toHaveLength(1)
     expect(second.value.turns[0]?.internal).toHaveLength(1)
+  })
+
+  it('restored verdicts skip probing (no rebuild-convergence storm after restart)', async () => {
+    // 事故场景:宿主重启/插件更新后判定从磁盘恢复(git 历史可达性跨重启成立),
+    // 已判定条目不再触发 git log 探测——零探测即本轮命令量归零。
+    const pipeline = new RecordStore(memoryPersistenceFactory(), 0)
+    const tracker = new PathStateTracker()
+    tracker.restore([['a.txt', 'committed']])
+    let probed = 0
+    let persisted = 0
+    const result = await runTurnRecords(pipeline, sources({
+      pathStates: () => tracker,
+      ensurePathStates: async () => { tracker.restored = true },
+      persistPathStates: async () => { persisted += 1 },
+      finalStateProbe: () => ({ finalState: async (path) => { probed += 1; return 'committed' } }),
+    }), 's1')
+    if (!result.ok || result.value.kind !== 'turn-records') throw new Error('failed')
+    expect(tracker.get('a.txt')).toBe('committed')
+    const states = new Map(result.value.turns[0]?.internal.map((e) => [e.path, e.state]) ?? [])
+    expect(states.get('a.txt')).toBe('committed')
+    expect(probed).toBe(0) // 恢复命中 → 零探测(根治:安装/重启不再重新收敛)
+    expect(persisted).toBe(0) // 无新判定 → 零落盘
+  })
+
+  it('persists new verdicts after an upgrade pass', async () => {
+    const pipeline = new RecordStore(memoryPersistenceFactory(), 0)
+    const tracker = new PathStateTracker()
+    let persisted = 0
+    const result = await runTurnRecords(pipeline, sources({
+      pathStates: () => tracker,
+      persistPathStates: async () => { persisted += 1 },
+      finalStateProbe: () => ({ finalState: async () => 'committed' }),
+    }), 's1')
+    if (!result.ok || result.value.kind !== 'turn-records') throw new Error('failed')
+    expect(tracker.isDirty).toBe(true)
+    expect(persisted).toBe(1) // 探测到新判定 → 查询后落盘一次
   })
 })

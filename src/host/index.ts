@@ -55,6 +55,10 @@ interface SessionPersistenceLike {
 /** mtime 精修的 stat 上限(与 maxChanges 同量级,防超大变更集拖慢组装)。 */
 const MTIME_STAT_CAP = 200
 
+/** 去向探测的专用短超时(ms):探测是运维性低层操作,不允许一条卡死 git
+ * 命令把单查询拖到默认 5s 超时 × 配额条数(25→8)的顺序放大。 */
+const PROBE_TIMEOUT_MS = 2000
+
 /**
  * gitInfo Remote 服务:Cordis 壳。
  *
@@ -201,32 +205,74 @@ export class GitStatusService extends TypertRemoteService {
 
   /** 恢复对账探针:git log -1 -- <path> 判定是否已提交(workspace 惰性解析缓存)。
    * 注意:git log 对无匹配提交的路径是「无输出 + exit 0」——必须校验 stdout 非空,
-   * 否则从未提交的消失文件会被误判为已提交(冒烟测试抓获的真实 bug)。 */
+   * 否则从未提交的消失文件会被误判为已提交(冒烟测试抓获的真实 bug)。
+   * 探测命令带**专用短超时**(PROBE_TIMEOUT_MS):探测是运维性低层操作,
+   * 不允许一条卡死的 git 探测把单查询拖到默认 5s 超时 × 配额条数。 */
   private probeFor(sessionId: string): CommitProbe {
     return {
       isCommitted: async (path) => {
         const root = await this.resolveRoot(sessionId)
         if (root === null) return false
-        const outcome = await runCommand(
-          this.deps.run,
-          ['git', 'log', '-1', '--format=%h', '--', path],
-          root,
-          'probe log',
-        )
-        return 'run' in outcome
-          && !outcome.run.timedOut
-          && outcome.run.exitCode === 0
-          && outcome.run.stdout.trim() !== ''
+        const timeout = new AbortController()
+        const timer = setTimeout(() => timeout.abort(), PROBE_TIMEOUT_MS)
+        try {
+          const outcome = await runCommand(
+            this.deps.run,
+            ['git', 'log', '-1', '--format=%h', '--', path],
+            root,
+            'probe log',
+            timeout.signal,
+          )
+          return 'run' in outcome
+            && !outcome.run.timedOut
+            && outcome.run.exitCode === 0
+            && outcome.run.stdout.trim() !== ''
+        } finally {
+          clearTimeout(timer)
+        }
       },
     }
   }
 
-  /** 去向权威探针(同族探针,供 gone 条目升级):有提交 → committed;否则 reverted。 */
+  /** 去向权威探针(同族探针,供 gone 条目升级):有提交 → committed;否则 reverted。
+   * 与恢复探针不同:超时/运行失败返回 **null(保持 gone,冷却后重试)**——
+   * "没查完"≠"从未提交",不得把超时误标为 reverted(错误断言会被永久缓存)。 */
   private finalStateProbeFor(sessionId: string): PathStateProbe {
-    const commitProbe = this.probeFor(sessionId)
     return {
-      finalState: async (path) => (await commitProbe.isCommitted(path)) ? 'committed' : 'reverted',
+      finalState: async (path) => {
+        const root = await this.resolveRoot(sessionId)
+        if (root === null) return null
+        const timeout = new AbortController()
+        const timer = setTimeout(() => timeout.abort(), PROBE_TIMEOUT_MS)
+        try {
+          const outcome = await runCommand(
+            this.deps.run,
+            ['git', 'log', '-1', '--format=%h', '--', path],
+            root,
+            'probe final-state',
+            timeout.signal,
+          )
+          if (!('run' in outcome) || outcome.run.timedOut) return null
+          return outcome.run.exitCode === 0 && outcome.run.stdout.trim() !== ''
+            ? 'committed'
+            : 'reverted'
+        } catch {
+          return null
+        } finally {
+          clearTimeout(timer)
+        }
+      },
     }
+  }
+
+  /** 每会话一份的去向判定缓存(惰性创建,dispose 随会话清理)。 */
+  private trackedPathStates(id: string): PathStateTracker {
+    let tracker = this.pathStates.get(id)
+    if (tracker === undefined) {
+      tracker = new PathStateTracker()
+      this.pathStates.set(id, tracker)
+    }
+    return tracker
   }
 
   /** 惰性解析会话仓库根(缓存;失败 → null)。 */
@@ -256,6 +302,24 @@ export class GitStatusService extends TypertRemoteService {
     }
   }
 
+  /** 去向判定持久化通道:ps-<sessionKey>.jsonl(与 obs 同目录同构)。
+   * 判定(git 历史可达性)跨宿主重启依然成立——持久化让"插件更新/宿主
+   * 重启"不再触发全量重新收敛(事故复盘 incident-load-hang 的复发根因)。 */
+  private pathStatesPersistence(sessionId: string): { read(): Promise<string | null>; write(raw: string): Promise<void> } {
+    const file = `ps-${sessionStorageKey(sessionId)}.jsonl`
+    return {
+      read: async () => {
+        const result = await this.storage.read({ file } satisfies GitStorageReadRequest)
+        if (!result.ok) return null
+        return result.value
+      },
+      write: async (raw) => {
+        const result = await this.storage.write({ file, data: raw } satisfies GitStorageWriteRequest)
+        if (!result.ok) throw new Error(`ps write failed: ${result.error.message}`)
+      },
+    }
+  }
+
   /** turn-records 编排(hook 进 query 端点路由)。 */
   private async runTurnRecords(sessionId: string, signal?: AbortSignal): Promise<GitQueryResponse> {
     const sources: TurnRecordSources = {
@@ -270,13 +334,42 @@ export class GitStatusService extends TypertRemoteService {
         collectSubagentWrites(id, this.records.turns(id), this.sessions, root, this.presenter),
       ),
       probe: (id) => this.probeFor(id),
-      pathStates: (id) => {
-        let tracker = this.pathStates.get(id)
-        if (tracker === undefined) {
-          tracker = new PathStateTracker()
-          this.pathStates.set(id, tracker)
+      pathStates: (id) => this.trackedPathStates(id),
+      ensurePathStates: async (id) => {
+        // 惰性创建 + 幂等恢复(重启后首次查询载入磁盘判定,不再从头收敛)。
+        const tracker = this.trackedPathStates(id)
+        if (tracker.restored) return undefined
+        const stored = await this.pathStatesPersistence(id).read()
+        if (stored !== null) {
+          const entries: Array<readonly [string, 'committed' | 'reverted']> = []
+          for (const line of stored.split('\n')) {
+            if (line === '') continue
+            try {
+              const parsed = JSON.parse(line) as { p?: unknown; s?: unknown }
+              if (typeof parsed.p === 'string' && (parsed.s === 'committed' || parsed.s === 'reverted')) {
+                entries.push([parsed.p, parsed.s])
+              }
+            } catch {
+              // 坏行跳过(文件被截断/损坏时不阻断恢复)
+            }
+          }
+          tracker.restore(entries)
         }
-        return tracker
+        tracker.restored = true
+        return undefined
+      },
+      persistPathStates: async (id) => {
+        const tracker = this.pathStates.get(id)
+        if (tracker === undefined || !tracker.isDirty) return
+        try {
+          const raw = tracker.entries()
+            .map(([path, state]) => JSON.stringify({ p: path, s: state }))
+            .join('\n')
+          await this.pathStatesPersistence(id).write(raw)
+          tracker.clearDirty()
+        } catch {
+          // 落盘失败不阻断查询:判定仍在内存缓存,下次有变化时重写。
+        }
       },
       finalStateProbe: (id) => this.finalStateProbeFor(id),
       now: () => Date.now(),
