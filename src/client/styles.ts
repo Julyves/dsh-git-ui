@@ -2107,7 +2107,9 @@ export const settingsSwitch: CSSProperties = {
   flex: 'none',
 }
 
-/** 开关滑钮：20px 圆片，位移经 data-on 由全局 CSS 切换（父按钮样式表中无 data 选择器）。 */
+/** 开关滑钮：20px 圆片，位移经 data-on 由全局 CSS 切换（父按钮样式表中无 data 选择器）。
+ * 描边用 label-tertiary 淡晕：亮色主题下轨道为浅灰（layer-2），白滑钮需一道
+ * 可见灰边才能辨认 off 态——仅靠 border-l2（更浅）在亮色下几乎不可见。 */
 export const settingsSwitchKnob: CSSProperties = {
   position: 'absolute',
   top: 2,
@@ -2116,7 +2118,7 @@ export const settingsSwitchKnob: CSSProperties = {
   height: 20,
   borderRadius: '50%',
   background: 'var(--dsw-alias-bg-layer-3)',
-  boxShadow: 'var(--dsw-shadow-lv2), inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  boxShadow: 'var(--dsw-shadow-lv2), inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-tertiary) 40%, transparent)',
 }
 
 /** 分段控件容器：iOS 式轨道（layer-2 满宽胶囊，激活段内凹凸起由行内样式叠加）。 */
@@ -2148,11 +2150,17 @@ export const settingsSegment: CSSProperties = {
   whiteSpace: 'nowrap',
 }
 
-/** 激活段：layer-3 凸起 + 阴影（与预览卡面同级，形成「抬起」层级）。 */
+/**
+ * 激活段：业务色淡晕 + 同源描边（与计数徽章开态同语言）。
+ * 旧实现用 layer-3 + border-l2 描边——亮色主题下 layer-2（轨道）与
+ * layer-3（激活段）同为浅灰、border-l2 更浅，选中态几乎融入轨道、不可分辨。
+ * color-mix 相对宿主语义 token 派生，亮/暗主题均保持强对比。
+ */
 export const settingsSegmentActive: CSSProperties = {
-  background: 'var(--dsw-alias-bg-layer-3)',
-  boxShadow: 'var(--dsw-shadow-lv1), inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  background: 'color-mix(in srgb, var(--dsw-alias-state-business-primary) 16%, transparent)',
+  boxShadow: 'var(--dsw-shadow-lv1), inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-business-primary) 40%, transparent)',
   color: 'var(--dsw-alias-label-primary)',
+  fontWeight: 500,
 }
 
 /** 计数三徽章容器。 */

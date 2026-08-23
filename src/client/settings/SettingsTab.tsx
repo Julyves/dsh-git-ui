@@ -11,6 +11,7 @@
  * 扩展：新增设置项 = 新增一行 SettingRow + Patch 类型已由协议承载，本组件
  * 仅做声明式渲染。
  */
+import { useEffect, useState } from 'react'
 import type { JSX } from 'react'
 import {
   DEFAULT_SETTINGS, MAX_DIFF_FONT_SIZE, MAX_RECENT_COMMITS, MIN_DIFF_FONT_SIZE, PRESETS,
@@ -107,7 +108,17 @@ export function SettingsTab({
   readonly notify: (text: string) => void
 }): JSX.Element {
   const settings = useSettings()
-  const mode = presetOf(settings)
+  // 「自定义」可手动选中：override 记录用户显式选择的档位；默认跟随 presetOf
+  // 纯派生。设置值一旦变化（点预设、或手动改任一开关）即清除 override 回到
+  // 派生——因此「手调自动转自定义 / 改回预设自动回位」的跳转逻辑保持不变。
+  const derived = presetOf(settings)
+  const [override, setOverride] = useState<PresetId | null>(null)
+  const mode = override ?? derived
+
+  useEffect(() => {
+    // 设置值变化（含切换预设本身）：清除显式覆盖，回到派生。
+    setOverride(null)
+  }, [settings])
 
   const applyPill = (patch: PillPatch): void => settingsStore.setSettings(patchPill(settings, patch))
   const applyPopup = (patch: PopupPatch): void => settingsStore.setSettings(patchPopup(settings, patch))
@@ -122,6 +133,16 @@ export function SettingsTab({
     { id: 'custom' as PresetId, label: t(PRESET_LABEL_KEY.custom) },
   ]
 
+  /** 分段切换：点击预设 = 应用完整组合并选中；点击「自定义」= 仅进入自定义（不改当前值）。 */
+  const onPresetChange = (id: PresetId): void => {
+    if (id === 'custom') {
+      setOverride('custom')
+      return
+    }
+    settingsStore.setSettings(applyPreset(settings, id))
+    setOverride(id)
+  }
+
   return (
     <>
       <SettingsPreview settings={settings.pill} t={t} />
@@ -135,7 +156,7 @@ export function SettingsTab({
           value={mode}
           options={presetOptions}
           ariaLabel={t('settings.preset')}
-          onChange={(id) => settingsStore.setSettings(applyPreset(settings, id))}
+          onChange={onPresetChange}
         />
       </section>
 
