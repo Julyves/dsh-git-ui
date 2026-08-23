@@ -361,12 +361,7 @@ function GitPopupBody({
             </div>
             {hasAny ? (
               <>
-                {internal > 0 && (
-                  <div style={css.workGroupTitle}>
-                    <span style={css.workBadgeDotInternal} aria-hidden="true" />
-                    {t('work.group.turnInternal')} {internal}
-                  </div>
-                )}
+                {/* 本 Turn 变更不设分组标题——区块头「最近 turn 工作时段」已说明归属 */}
                 {windowTurn !== undefined && windowTurn.internal.map((entry) => entryRow(entry, `pi-${entry.path}`))}
                 {external > 0 && (
                   <div style={css.workGroupTitle}>
