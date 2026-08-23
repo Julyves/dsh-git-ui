@@ -184,8 +184,8 @@ export interface GitFileStat {
 
 // ── Turn 工作记录(turn-records 查询) ──────────────────────────────────────
 
-/** 记录条目状态:仍在工作区 / 提交后离开 / 还原后消失。 */
-export type WorkEntryState = 'dirty' | 'committed' | 'reverted'
+/** 记录条目状态:仍变更 / 已提交 / 已还原(权威判定)/ 已离开待定。 */
+export type WorkEntryState = 'dirty' | 'committed' | 'reverted' | 'gone'
 
 /** 一条对外展示的工作记录条目。 */
 export interface WorkEntry {

@@ -12,6 +12,8 @@ import type { GitQueryResponse, GitSnapshot, GitSnapshotFailure, GitSnapshotResu
 import type { TurnEventSlice } from './turns.ts'
 import type { MtimeSource } from './record-assembly.ts'
 import type { ToolPresenter } from './write-paths.ts'
+import type { PathStateProbe, PathStateTracker } from './path-state.ts'
+import type { TurnWorkRecord } from './types.ts'
 
 /** turn-records 编排所需的外部面(全由适配层提供)。 */
 export interface TurnRecordSources {
@@ -27,6 +29,10 @@ export interface TurnRecordSources {
   subagentWrites(sessionId: string, root: string): Promise<ReadonlyMap<number, readonly string[]>>
   /** 恢复对账探针(按 sessionId 取)。 */
   probe(sessionId: string): CommitProbe
+  /** 去向判定缓存(每会话一份;可缺省 = 不升级,全部保持 gone)。 */
+  pathStates(sessionId: string): PathStateTracker | undefined
+  /** 去向权威探针(git log;可缺省 = 不升级)。 */
+  finalStateProbe(sessionId: string): PathStateProbe | undefined
   /** 可注入时钟(测试)。 */
   now(): number
 }
@@ -50,15 +56,66 @@ export async function runTurnRecords(
 
   const mtimes = await sources.mtimes(snapshot.value)
   const subagentWrites = await sources.subagentWrites(sessionId, snapshot.value.root)
-  const records = pipeline.assemble(sessionId, {
+  const pathStates = sources.pathStates(sessionId)
+  const assembleTurns = (): readonly TurnWorkRecord[] => pipeline.assemble(sessionId, {
     changes: snapshot.value.changes,
     repoRoot: snapshot.value.root,
     presenter: sources.presenter,
     mtimes,
     now: sources.now(),
     subagentWrites,
+    pathStates,
   })
-  return { ok: true, value: { kind: 'turn-records', turns: records } }
+  const records = assembleTurns()
+
+  // 去向升级:对 gone 条目按配额做权威探测(顺序、有界、防重),
+  // 探测完成后**二次组装**——本次查询即可返回升级后的状态(渐进收敛)。
+  const upgraded = await upgradeGonePaths(records, sources, sessionId, signal)
+  const finalRecords = upgraded > 0 ? assembleTurns() : records
+  return { ok: true, value: { kind: 'turn-records', turns: finalRecords } }
+}
+
+/**
+ * 对全部 gone 条目按本轮配额(UPGRADE_BUDGET_PER_QUERY)顺序探测:
+ * git log 权威判定 → 写缓存。返回本轮成功升级的数量。
+ * 失败/取消的探测保持 gone(下轮继续)。
+ */
+async function upgradeGonePaths(
+  records: readonly TurnWorkRecord[],
+  sources: TurnRecordSources,
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<number> {
+  const tracker = sources.pathStates(sessionId)
+  const probe = sources.finalStateProbe(sessionId)
+  if (tracker === undefined || probe === undefined) return 0
+  const gone = new Set<string>()
+  for (const turn of records) {
+    for (const entry of turn.internal) {
+      if (entry.state === 'gone') gone.add(entry.path)
+    }
+    for (const entry of turn.external) {
+      if (entry.state === 'gone') gone.add(entry.path)
+    }
+  }
+  tracker.beginCycle()
+  let upgraded = 0
+  for (const path of gone) {
+    if (signal?.aborted === true) break
+    if (tracker.get(path) !== undefined) continue
+    if (!tracker.tryAcquire(path)) break // 配额耗尽
+    let state: 'committed' | 'reverted' | null = null
+    try {
+      state = await probe.finalState(path)
+    } catch {
+      state = null // 探测失败(仓库不可用等):保持待定
+    }
+    if (state !== null) {
+      tracker.set(path, state)
+      upgraded += 1
+    }
+  }
+  return upgraded
 }
 
 /** 快照失败 → 查询错误(快照码与操作码的并集已在 GitOperationErrorCode 中)。 */

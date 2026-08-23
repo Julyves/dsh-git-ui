@@ -69,13 +69,39 @@ describe('assembleAll — internal attribution', () => {
     expect(records[0]?.internal[0]).toMatchObject({ state: 'dirty', status: 'modified' })
   })
 
-  it('labels vanished non-committed agent writes as reverted', () => {
+  it('labels vanished non-committed agent writes as gone (pending authority)', () => {
     const { log, deps } = fixture()
-    // test.txt 不在 changes 且无 committedAt(清除 markCommitted 的影响:重建观测)
+    // test.txt 不在 changes 且无提交证据:去向待定 → 中性态 gone(不再断言已还原)。
     const observations2 = new ObservationLog()
     observations2.update([change('external.txt')], 1500)
     const records = assembleAll({ log, observations: observations2, ...deps, changes: [change('external.txt')] })
+    expect(records[0]?.internal[0]).toMatchObject({ state: 'gone' })
+  })
+
+  it('attributes reverted only after an authoritative probe says so', () => {
+    const { log, deps } = fixture()
+    const observations2 = new ObservationLog()
+    observations2.update([change('external.txt')], 1500)
+    const records = assembleAll({
+      log, observations: observations2, ...deps,
+      changes: [change('external.txt')],
+      pathStates: { get: (path) => path === 'docs/test.txt' ? 'reverted' : undefined },
+    })
     expect(records[0]?.internal[0]).toMatchObject({ state: 'reverted' })
+  })
+
+  it('prefers committed evidence over a stale reverted verdict', () => {
+    const { log, deps } = fixture()
+    const observations2 = new ObservationLog()
+    // HEAD 检测证据:committed 是最终事实,覆盖探测的 reverted 缓存。
+    observations2.update([change('docs/test.txt')], 1500)
+    observations2.markCommitted(['docs/test.txt'], 1600)
+    const records = assembleAll({
+      log, observations: observations2, ...deps,
+      changes: [],
+      pathStates: { get: () => 'reverted' },
+    })
+    expect(records[0]?.internal[0]).toMatchObject({ state: 'committed' })
   })
 
   it('treats an agent rewrite of an old file as internal of the new turn', () => {

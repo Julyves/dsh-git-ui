@@ -82,9 +82,9 @@ describe('RecordStore', () => {
       mtimes: undefined, now: 3000, subagentWrites: new Map(),
     })
     expect(probed).toEqual(new Set(['done.ts', 'gone.ts']))
-    // done.ts 经探针标注 committed;gone.ts 保持 reverted(仅日志内写入可见)。
+    // done.ts 经探针标注 committed;gone.ts 无提交证据 → 中性待定(gone,非断言已还原)。
     expect(records[0]?.external.find((e) => e.path === 'done.ts')?.state).toBe('committed')
-    expect(records[0]?.external.find((e) => e.path === 'gone.ts')?.state).toBe('reverted')
+    expect(records[0]?.external.find((e) => e.path === 'gone.ts')?.state).toBe('gone')
   })
 
   it('caps the reconcile probe at RECONCILE_PROBE_CAP', async () => {

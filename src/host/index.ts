@@ -24,6 +24,7 @@ import { createHostEndpoints, type HostEndpoints } from '../contracts/host-endpo
 import { RecordStore, type CommitProbe } from './record-store.ts'
 import { runTurnRecords, type TurnRecordSources } from './turn-records.ts'
 import { parseNameStatusOutput } from './parser.ts'
+import { PathStateTracker, type PathStateProbe } from './path-state.ts'
 import { sliceEvents, type SessionLike } from '../adapters/dsh/session-log.ts'
 import { createToolPresenter, type ToolRegistryLike } from '../adapters/dsh/tools-presenter.ts'
 import { collectSubagentWrites, type SessionsLike as SubagentSessionsLike } from '../adapters/dsh/subagent-adapter.ts'
@@ -75,6 +76,8 @@ export class GitStatusService extends TypertRemoteService {
   private readonly probeRoots = new Map<string, string | null>()
   /** 最近一次成功快照缓存(turn-records 复用,避免重复跑 git 命令风暴)。 */
   private readonly snapshotCache = new Map<string, GitSnapshot>()
+  /** 去向判定缓存(每会话一份;gone 条目按配额渐进升级)。 */
+  private readonly pathStates = new Map<string, PathStateTracker>()
 
   constructor(ctx: Context, config: unknown) {
     super(ctx, 'gitInfo')
@@ -132,6 +135,7 @@ export class GitStatusService extends TypertRemoteService {
         this.records.disposeSession(id)
         this.snapshotCache.delete(id)
         this.probeRoots.delete(id)
+        this.pathStates.delete(id)
       }
     })
     ctx.on('dispose', () => {
@@ -195,26 +199,45 @@ export class GitStatusService extends TypertRemoteService {
     return { mtime: (path) => values.get(path) }
   }
 
-  /** 恢复对账探针:git log -1 -- <path> 判定是否已提交(workspace 惰性解析缓存)。 */
+  /** 恢复对账探针:git log -1 -- <path> 判定是否已提交(workspace 惰性解析缓存)。
+   * 注意:git log 对无匹配提交的路径是「无输出 + exit 0」——必须校验 stdout 非空,
+   * 否则从未提交的消失文件会被误判为已提交(冒烟测试抓获的真实 bug)。 */
   private probeFor(sessionId: string): CommitProbe {
     return {
       isCommitted: async (path) => {
-        let root = this.probeRoots.get(sessionId)
-        if (root === undefined) {
-          const workspace = await resolveWorkspace(this.deps, sessionId)
-          root = workspace.ok ? workspace.root : null
-          this.probeRoots.set(sessionId, root)
-        }
-        if (root === null || root === undefined) return false
+        const root = await this.resolveRoot(sessionId)
+        if (root === null) return false
         const outcome = await runCommand(
           this.deps.run,
           ['git', 'log', '-1', '--format=%h', '--', path],
           root,
           'probe log',
         )
-        return 'run' in outcome && !outcome.run.timedOut && outcome.run.exitCode === 0
+        return 'run' in outcome
+          && !outcome.run.timedOut
+          && outcome.run.exitCode === 0
+          && outcome.run.stdout.trim() !== ''
       },
     }
+  }
+
+  /** 去向权威探针(同族探针,供 gone 条目升级):有提交 → committed;否则 reverted。 */
+  private finalStateProbeFor(sessionId: string): PathStateProbe {
+    const commitProbe = this.probeFor(sessionId)
+    return {
+      finalState: async (path) => (await commitProbe.isCommitted(path)) ? 'committed' : 'reverted',
+    }
+  }
+
+  /** 惰性解析会话仓库根(缓存;失败 → null)。 */
+  private async resolveRoot(sessionId: string): Promise<string | null> {
+    let root = this.probeRoots.get(sessionId)
+    if (root === undefined) {
+      const workspace = await resolveWorkspace(this.deps, sessionId)
+      root = workspace.ok ? workspace.root : null
+      this.probeRoots.set(sessionId, root)
+    }
+    return root
   }
 
   /** 观测持久化通道:插件数据存储 obs-<sessionKey>.jsonl(原子写/白名单/上限复用)。 */
@@ -247,6 +270,15 @@ export class GitStatusService extends TypertRemoteService {
         collectSubagentWrites(id, this.records.turns(id), this.sessions, root, this.presenter),
       ),
       probe: (id) => this.probeFor(id),
+      pathStates: (id) => {
+        let tracker = this.pathStates.get(id)
+        if (tracker === undefined) {
+          tracker = new PathStateTracker()
+          this.pathStates.set(id, tracker)
+        }
+        return tracker
+      },
+      finalStateProbe: (id) => this.finalStateProbeFor(id),
       now: () => Date.now(),
     }
     return runTurnRecords(this.records, sources, sessionId, signal).catch((error: unknown) => {

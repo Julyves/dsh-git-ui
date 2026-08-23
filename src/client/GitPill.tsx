@@ -20,7 +20,7 @@ import type { GitObservable, GitQueryOutcome, GitView } from './controller.ts'
 import type { GitInjected } from '../contracts/client-platform.ts'
 import { GitCenter } from './GitCenter.tsx'
 import { fileIconForPath, FolderIcon, AlertIcon, CloseIcon, GearIcon, RollbackIcon, StageIcon, UnstageIcon } from './icons.tsx'
-import type { GitAction, GitActionResult, GitBranch, GitOperationErrorCode, GitQueryRequest, WorkEntry } from '../host/types.ts'
+import type { GitAction, GitActionResult, GitBranch, GitOperationErrorCode, GitQueryRequest, WorkEntry, WorkEntryState } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import { SelectMenu } from './select-menu.tsx'
 import { splitChangePath } from './file-tree.ts'
@@ -30,7 +30,7 @@ import { errorText, errorAction } from './error-text.ts'
 import { useSettings } from './settings/use-settings.ts'
 import { renderPill, chipLetter, popupBadgeTexts } from './pill-segments.tsx'
 import { useTurnRecords } from './use-turn-records.ts'
-import { latestWorkTurn, turnEntryCounts } from './work-record-meta.ts'
+import { latestWorkTurn, turnEntryCounts, workStateLabel } from './work-record-meta.ts'
 import type { GitUISettings } from '../contracts/settings.ts'
 import type { GitCenterTab } from './GitCenter.tsx'
 import type { TurnWorkRecord } from '../host/types.ts'
@@ -437,7 +437,7 @@ function GitPopupBody({
             </span>
             <span style={css.changeNamePopBtn} title={entry.path}>{entry.path}</span>
             <span style={{ flex: 1 }} />
-            <span style={css.workStateBadge}>{entry.state === 'dirty' ? t('work.state.dirty') : entry.state === 'committed' ? t('work.state.committed') : t('work.state.reverted')}</span>
+            <span style={css.workStateBadge}>{workStateLabel(entry.state as WorkEntryState, t)}</span>
           </div>
         )
         return (

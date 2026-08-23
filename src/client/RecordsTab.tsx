@@ -13,6 +13,7 @@ import type { JSX } from 'react'
 import type { GitSnapshot, TurnWorkRecord, WorkEntry } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import { chipLetter } from './pill-segments.tsx'
+import { workStateLabel } from './work-record-meta.ts'
 import { ChevronIcon, fileIconForPath, FolderIcon } from './icons.tsx'
 import { splitChangePath } from './file-tree.ts'
 import * as css from './styles.ts'
@@ -57,11 +58,7 @@ function WorkEntryRow({ entry, onOpenDiff, t }: {
   readonly t: (key: GitKey) => string
 }): JSX.Element {
   const { name, dir, isDir } = splitChangePath(entry.path, entry.path.endsWith('/'))
-  const stateLabel = entry.state === 'dirty'
-    ? t('work.state.dirty')
-    : entry.state === 'committed'
-      ? t('work.state.committed')
-      : t('work.state.reverted')
+  const stateLabel = workStateLabel(entry.state, t)
   const clickable = entry.state === 'dirty'
   return (
     <div style={css.workRow}>

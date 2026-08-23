@@ -178,6 +178,36 @@ if (gitSpawns - beforeSecond !== 0) {
 const runResult = await service.run({ sessionId: sessionRecord.id, action: { kind: 'stage', paths: ['docs.txt'] } })
 console.log(`[smoke] run stage ok=${runResult.ok}`)
 
+// 5. 权威去向升级:提交 docs.txt → 探测判定 committed;写一个从未提交的文件并删除 → reverted
+await writeFile(join(dir, 'docs.txt'), 'agent wrote this v2\n')
+git(dir, 'add', 'docs.txt')
+git(dir, 'commit', '-m', 'commit docs')
+// 事件日志补一条 scratch.txt 的写入(新事件,增量折叠)
+sessionRecord.events.push(ev('tool/call', 2100, { turn: 1, callId: 'c2', name: 'write', arguments: JSON.stringify({ file_path: 'scratch.txt', content: 'x' }) }))
+sessionRecord.seq = sessionRecord.events.length
+await writeFile(join(dir, 'scratch.txt'), 'never committed\n')
+// 触发一次带观测的 snapshot(让 scratch.txt 进入时间线)
+await service.snapshot({ sessionId: sessionRecord.id })
+await rm(join(dir, 'scratch.txt'))
+// 删除后再快照一次:刷新缓存与观测(真实场景由下轮 30s 轮询完成)
+await service.snapshot({ sessionId: sessionRecord.id })
+
+const upgraded = await service.query({ sessionId: sessionRecord.id, query: { kind: 'turn-records' } })
+if (!upgraded.ok || upgraded.value.kind !== 'turn-records') throw new Error('upgraded query failed')
+const internalStates = new Map(upgraded.value.turns[0]?.internal.map((e) => [e.path, e.state]) ?? [])
+console.log(`[smoke] internal states: ${JSON.stringify([...internalStates])}`)
+// docs.txt 已提交 → committed(权威 git log 探测,不限观测窗口)
+const docsState = internalStates.get('docs.txt')
+if (docsState !== 'committed') {
+  console.error(`[smoke] EXPECTED docs.txt=committed, got ${String(docsState)}`)
+  process.exit(1)
+}
+const scratchState = internalStates.get('scratch.txt')
+if (scratchState !== 'reverted') {
+  console.error(`[smoke] EXPECTED scratch.txt=reverted, got ${String(scratchState)}`)
+  process.exit(1)
+}
+
 // 5. 不存在的会话 → 降级
 const missing = await service.query({ sessionId: 'nope', query: { kind: 'turn-records' } })
 console.log(`[smoke] unknown session -> ok=${missing.ok} code=${missing.error?.code}`)

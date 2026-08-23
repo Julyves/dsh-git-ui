@@ -40,6 +40,8 @@ function sources(overrides: Partial<TurnRecordSources> = {}): TurnRecordSources 
     mtimes: async () => undefined,
     subagentWrites: async () => new Map(),
     probe: () => ({ isCommitted: async () => false }),
+    pathStates: () => undefined,
+    finalStateProbe: () => undefined,
     now: () => NOW,
     ...overrides,
   }
@@ -85,7 +87,7 @@ describe('runTurnRecords', () => {
     if (turn === undefined) return
     expect(turn).toMatchObject({ turn: 1, startAt: 1000, endAt: 2000, hasWork: true })
     expect(turn.internal.map((e) => e.path)).toEqual(['a.txt'])
-    expect(turn.internal[0]?.state).toBe('reverted') // a.txt 不在 changes
+    expect(turn.internal[0]?.state).toBe('gone') // a.txt 不在 changes 且无证据:待定
     expect(turn.external.map((e) => e.path)).toEqual(['ext.txt'])
     expect(turn.external[0]?.state).toBe('dirty')
   })

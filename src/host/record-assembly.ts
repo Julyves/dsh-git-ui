@@ -20,9 +20,14 @@ import type { FoldedTurn, TurnLog } from './turns.ts'
 import { extractWritePaths, metaWritePaths, type ToolPresenter } from './write-paths.ts'
 import type { ObservationLog } from './observation.ts'
 import type { GitChange, GitChangeStatus } from './types.ts'
+import type { PathStateLookup } from './path-state.ts'
 
-/** 记录条目状态(见模块注释三态)。 */
-export type WorkEntryState = 'dirty' | 'committed' | 'reverted'
+/** 记录条目状态:仍变更 / 已提交 / 已还原(权威判定)/ 已离开待定。
+ *
+ * `reverted` 仅由权威探测(git log 无历史)得出;无法判定去向时一律
+ * `gone`(中性,不再是过度断言)——旧实现把"无提交证据"直接标为
+ * reverted,历史 turn 的文件(通常早已提交)被系统性误标。 */
+export type WorkEntryState = 'dirty' | 'committed' | 'reverted' | 'gone'
 
 /** 一条对外展示的工作记录条目。 */
 export interface WorkEntry {
@@ -59,6 +64,8 @@ export interface AssembleDeps {
   readonly now: number
   /** 子会话写路径:父 turn → 路径(适配层注入;缺省无)。 */
   readonly subagentWrites?: ReadonlyMap<number, readonly string[]>
+  /** 去向判定缓存(权威探测结果;缺省 = 全部待定 → gone)。 */
+  readonly pathStates?: PathStateLookup
 }
 
 /**
@@ -130,11 +137,7 @@ function collectExternal(
       : false
     if (!firstInWindow && !mtimeInWindow) continue
     const inChanges = deps.changes.some((change) => change.path === observation.path)
-    const state: WorkEntryState = inChanges
-      ? 'dirty'
-      : observation.committedAt !== null
-        ? 'committed'
-        : 'reverted'
+    const state = finalStateFor(observation.path, inChanges, observation, deps.pathStates)
     entries.push({
       path: observation.path,
       status: inChanges
@@ -147,15 +150,25 @@ function collectExternal(
   return entries.sort((a, b) => a.path.localeCompare(b.path))
 }
 
-/** 单条 entry:状态三态 + 当前/观测 status + 首见时刻。 */
+/** 单个 entry 的去向判定(四态):
+ *   - 在当前变更列表 → dirty;
+ *   - 观测 HEAD 检测或权威缓存判定已提交 → committed(提交是最终事实,优先);
+ *   - 权威探测确认未进入历史 → reverted;
+ *   - 其余(无证据)→ gone(中性,待定)。 */
+function finalStateFor(path: string, inChanges: boolean, observation: { readonly committedAt: number | null } | undefined, pathStates: PathStateLookup | undefined): WorkEntryState {
+  if (inChanges) return 'dirty'
+  const headDetected = observation?.committedAt !== null && observation?.committedAt !== undefined
+  const final = pathStates?.get(path)
+  if (headDetected || final === 'committed') return 'committed'
+  if (final === 'reverted') return 'reverted'
+  return 'gone'
+}
+
+/** 单条 entry:状态四态 + 当前/观测 status + 首见时刻。 */
 function entryFor(path: string, deps: AssembleDeps, fallbackFirstSeenAt: number): WorkEntry {
   const observation = deps.observations.get(path)
   const inChanges = deps.changes.some((change) => change.path === path)
-  const state: WorkEntryState = inChanges
-    ? 'dirty'
-    : observation?.committedAt !== null && observation?.committedAt !== undefined
-      ? 'committed'
-      : 'reverted'
+  const state = finalStateFor(path, inChanges, observation, deps.pathStates)
   return {
     path,
     status: inChanges

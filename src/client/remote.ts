@@ -131,6 +131,8 @@ export const gitQuerySchema = z.discriminatedUnion('kind', [
 ])
 
 /** Turn 工作记录(wire 镜像 host/types.ts 的 TurnWorkRecord/WorkEntry)。 */
+export const workEntryStateSchema = z.enum(['dirty', 'committed', 'reverted', 'gone'])
+
 export const turnWorkRecordSchema = z.object({
   turn: z.number().int(),
   startAt: z.number(),
@@ -139,13 +141,13 @@ export const turnWorkRecordSchema = z.object({
   internal: z.array(z.object({
     path: z.string(),
     status: z.enum(['added', 'modified', 'deleted', 'renamed', 'untracked', 'conflicted', 'typechange']),
-    state: z.enum(['dirty', 'committed', 'reverted']),
+    state: workEntryStateSchema,
     firstSeenAt: z.number(),
   })),
   external: z.array(z.object({
     path: z.string(),
     status: z.enum(['added', 'modified', 'deleted', 'renamed', 'untracked', 'conflicted', 'typechange']),
-    state: z.enum(['dirty', 'committed', 'reverted']),
+    state: workEntryStateSchema,
     firstSeenAt: z.number(),
   })),
 })
