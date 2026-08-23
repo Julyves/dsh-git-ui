@@ -267,7 +267,8 @@ function GitPopupBody({
               <span style={css.popupStatLabel}>{t(key)}</span>
             </span>
           ))}
-          {/* 已领先/已落后恒显示(0 值展示 ↑0/↓0)——统计条五格对齐,与三计数同构 */}
+          {/* 已领先/已落后恒显示(0 值展示 ↑0/↓0);上次提交补全时间维度(无提交显示"无提交")。
+             六格 grid 三列两行:第一行工作区三态,第二行同步与历史。 */}
           <span style={css.popupStatItem}>
             <span style={css.popupStatValue}>↑{s.ahead}</span>
             <span style={css.popupStatLabel}>{t('popup.ahead')}</span>
@@ -275,6 +276,12 @@ function GitPopupBody({
           <span style={css.popupStatItem}>
             <span style={css.popupStatValue}>↓{s.behind}</span>
             <span style={css.popupStatLabel}>{t('popup.behind')}</span>
+          </span>
+          <span style={css.popupStatItem}>
+            <span style={css.popupStatValue}>{
+              s.lastCommit === null ? t('pill.noCommits') : timeAgo(s.lastCommit.dateIso, now, t)
+            }</span>
+            <span style={css.popupStatLabel}>{t('popup.lastCommit')}</span>
           </span>
         </div>
       )}

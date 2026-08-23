@@ -669,25 +669,24 @@ export const popupBranchMenu: CSSProperties = {
   borderRadius: 4,
 }
 
-/** 紧凑状态条:发丝边 stat chips 横排,**约束在一行内**(nowrap + 弹性收缩),
- * 5 格(已暂存/已修改/未跟踪/已领先/已落后)在窄弹窗(340px)内可挤一行。 */
+/** 紧凑状态条:发丝边 stat chips,**grid 三列两行**等宽对齐。
+ * 6 格分两行——第一行工作区三态(已暂存/已修改/未跟踪),
+ * 第二行同步与历史(已领先/已落后/上次提交);窄弹窗下不挤、不换行。 */
 export const popupStatusBar: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, 1fr)',
   gap: 4,
-  flexWrap: 'nowrap',
   marginBottom: 10,
 }
 
 /** 状态 chip:layer-2 底 + 发丝边 + 圆角 6(与 changeChip/行圆角同族)。
- * flex 弹性收缩 + minWidth:0:窄弹窗下各格按需收窄,文字 nowrap 不内部换行。 */
+ * grid 项自动等宽;minWidth:0 + nowrap 防内部溢出/换行。 */
 export const popupStatItem: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'baseline',
   gap: 3,
-  flex: '1 1 auto',
-  minWidth: 0,
   justifyContent: 'center',
+  minWidth: 0,
   padding: '3px 6px',
   borderRadius: 6,
   background: 'var(--dsw-alias-bg-layer-2)',
