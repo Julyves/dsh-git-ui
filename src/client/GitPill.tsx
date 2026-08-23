@@ -267,18 +267,15 @@ function GitPopupBody({
               <span style={css.popupStatLabel}>{t(key)}</span>
             </span>
           ))}
-          {s.ahead > 0 && (
-            <span style={css.popupStatItem}>
-              <span style={css.popupStatValue}>↑{s.ahead}</span>
-              <span style={css.popupStatLabel}>{t('popup.ahead')}</span>
-            </span>
-          )}
-          {s.behind > 0 && (
-            <span style={css.popupStatItem}>
-              <span style={css.popupStatValue}>↓{s.behind}</span>
-              <span style={css.popupStatLabel}>{t('popup.behind')}</span>
-            </span>
-          )}
+          {/* 已领先/已落后恒显示(0 值展示 ↑0/↓0)——统计条五格对齐,与三计数同构 */}
+          <span style={css.popupStatItem}>
+            <span style={css.popupStatValue}>↑{s.ahead}</span>
+            <span style={css.popupStatLabel}>{t('popup.ahead')}</span>
+          </span>
+          <span style={css.popupStatItem}>
+            <span style={css.popupStatValue}>↓{s.behind}</span>
+            <span style={css.popupStatLabel}>{t('popup.behind')}</span>
+          </span>
         </div>
       )}
       {settings.popup.branchCreate && (
