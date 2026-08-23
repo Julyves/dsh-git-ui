@@ -165,14 +165,27 @@ describe('normalizeRepoPath', () => {
 
 describe('metaWritePaths', () => {
   it('extracts diffs[].path from the FsDiffMeta shape', () => {
-    expect(metaWritePaths({ diffs: [{ path: 'a.ts', oldText: null, newText: 'x' }] })).toEqual(['a.ts'])
+    expect(metaWritePaths({ diffs: [{ path: 'a.ts', oldText: null, newText: 'x' }] }, '/repo')).toEqual(['a.ts'])
+  })
+
+  it('normalizes absolute paths to repo-relative (no duplicate entries)', () => {
+    // 回归:dsh write/edit 把模型入参 args.file_path 投影为 diff paths,
+    // 模型常传绝对路径——不归一化会导致同文件绝对/相对双记录(已提交+仍变更)。
+    expect(metaWritePaths(
+      { diffs: [{ path: '/repo/src/a.ts', oldText: null, newText: 'x' }] },
+      '/repo',
+    )).toEqual(['src/a.ts'])
+  })
+
+  it('drops paths outside the repository (git-based constraint)', () => {
+    expect(metaWritePaths({ diffs: [{ path: '/elsewhere/a.ts', oldText: null, newText: 'x' }] }, '/repo')).toEqual([])
   })
 
   it('handles non-object, empty and malformed meta', () => {
-    expect(metaWritePaths(undefined)).toEqual([])
-    expect(metaWritePaths(null)).toEqual([])
-    expect(metaWritePaths('x')).toEqual([])
-    expect(metaWritePaths({ diffs: 'nope' })).toEqual([])
-    expect(metaWritePaths({ diffs: [{ nope: 1 }] })).toEqual([])
+    expect(metaWritePaths(undefined, '/repo')).toEqual([])
+    expect(metaWritePaths(null, '/repo')).toEqual([])
+    expect(metaWritePaths('x', '/repo')).toEqual([])
+    expect(metaWritePaths({ diffs: 'nope' }, '/repo')).toEqual([])
+    expect(metaWritePaths({ diffs: [{ nope: 1 }] }, '/repo')).toEqual([])
   })
 })

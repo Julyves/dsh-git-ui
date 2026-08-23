@@ -102,7 +102,7 @@ function internalOf(folded: FoldedTurn, deps: AssembleDeps): readonly WorkEntry[
       written.add(path)
     }
     if (call.meta !== undefined) {
-      for (const path of metaWritePaths(call.meta)) {
+      for (const path of metaWritePaths(call.meta, deps.repoRoot)) {
         written.add(path)
       }
     }

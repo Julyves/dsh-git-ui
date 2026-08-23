@@ -112,10 +112,19 @@ export function extractWritePaths(
   return [...out]
 }
 
-/** 从 tool/result 的 meta(不透明 JSON)结构性提取 diff 路径(双源补充)。
+/**
+ * 从 tool/result 的 meta(不透明 JSON)结构性提取 diff 路径(双源补充)。
  * 与 dsh FsDiffMeta `{ diffs: [{ path, oldText, newText }] }` 对齐,
- * 但为结构性判定,不依赖平台包。 */
-export function metaWritePaths(meta: unknown): readonly string[] {
+ * 但为结构性判定,不依赖平台包。
+ *
+ * **必须归一化**(与 extractWritePaths 的 add() 同规):dsb 的 write/edit 工具
+ * 直接把模型入参 `args.file_path` 投影为 diff paths——模型常传**绝对路径**。
+ * 若不归一化,同一文件会以绝对/相对两个字符串进入 written Set,产出一条
+ * 「已提交」+ 一条「仍变更」的重复记录(实测:git log 能解析仓库内绝对路径,
+ * 绝对路径条目被权威探测标 committed,相对条目仍在 changes 标 dirty)。
+ * 仓库外/非法路径丢弃(git-based 约束)。
+ */
+export function metaWritePaths(meta: unknown, repoRoot: string): readonly string[] {
   if (typeof meta !== 'object' || meta === null) return []
   const diffs = (meta as { diffs?: unknown }).diffs
   if (!Array.isArray(diffs)) return []
@@ -123,7 +132,10 @@ export function metaWritePaths(meta: unknown): readonly string[] {
   for (const diff of diffs) {
     if (typeof diff === 'object' && diff !== null) {
       const path = (diff as { path?: unknown }).path
-      if (typeof path === 'string' && path !== '') paths.push(path)
+      if (typeof path === 'string' && path !== '') {
+        const normalized = normalizeRepoPath(path, repoRoot)
+        if (normalized !== null) paths.push(normalized)
+      }
     }
   }
   return paths

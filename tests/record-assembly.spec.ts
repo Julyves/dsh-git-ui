@@ -48,6 +48,42 @@ function fixture(overrides: { mtimes?: MtimeSource | undefined } = {}): Fixture 
   return { log, observations, deps }
 }
 
+describe('assembleAll — dual-source path dedup', () => {
+  it('merges absolute meta paths with relative presenter paths (no duplicate entries)', () => {
+    // 回归:dsb write/edit 的 tool/result meta 直接投影模型入参 args.file_path
+    // (常为绝对路径),presentCall 的 locations 同源——两路若不归一化,
+    // 同文件会以绝对/相对两个字符串录入,产出一条「已提交」+一条「仍变更」。
+    const log = new TurnLog()
+    log.append([
+      { type: 'turn/start', seq: 1, time: 1000, data: { turn: 1 } },
+      { type: 'tool/call', seq: 2, time: 1100, data: { turn: 1, callId: 'c1', name: 'write', arguments: '{"file_path":"/repo/docs/test.txt"}' } },
+      {
+        type: 'tool/result',
+        seq: 3,
+        time: 1200,
+        data: { turn: 1, callId: 'c1', meta: { diffs: [{ path: '/repo/docs/test.txt', oldText: null, newText: 'x' }] } },
+      },
+      { type: 'turn/end', seq: 4, time: 2000, data: { turn: 1 } },
+    ])
+    const observations = new ObservationLog()
+    const presenter: ToolPresenter = presenterOf({
+      card: 'diff',
+      diffs: [{ path: '/repo/docs/test.txt' }],
+      locations: [{ path: '/repo/docs/test.txt' }],
+    })
+    const records = assembleAll({
+      log,
+      observations,
+      changes: [change('docs/test.txt')],
+      repoRoot: '/repo',
+      presenter,
+      mtimes: undefined,
+      now: 5000,
+    })
+    expect(records[0]?.internal.map((e) => e.path)).toEqual(['docs/test.txt'])
+  })
+})
+
 describe('assembleAll — internal attribution', () => {
   it('marks agent-written paths as internal of their turn', () => {
     const { log, observations, deps } = fixture()
