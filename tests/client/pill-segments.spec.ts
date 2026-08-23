@@ -103,7 +103,7 @@ describe('enabledSegments（设置驱动筛选）', () => {
     const allOff: PillSettings = {
       dot: false, branch: false,
       counts: { staged: false, modified: false, untracked: false },
-      sync: false,
+      sync: false, workRecord: false,
     }
     expect(enabledSegments(allOff).map((s) => s.key)).toEqual(['dot'])
   })
@@ -131,7 +131,7 @@ describe('renderPill（渲染管道）', () => {
     const allOff: PillSettings = {
       dot: false, branch: false,
       counts: { staged: false, modified: false, untracked: false },
-      sync: false,
+      sync: false, workRecord: false,
     }
     const render = renderPill(readyView(), allOff, t)
     expect(render.nodes).toHaveLength(1)
@@ -152,7 +152,7 @@ describe('popupBadgeTexts（弹窗头部徽章沿 Pill 设置）', () => {
       { key: 'counts', text: '+2 −1 ?3' },
       { key: 'sync', text: '↑1 ↓2' },
     ])
-    const minimal = { dot: true, branch: true, counts: { staged: false, modified: false, untracked: false }, sync: false } satisfies PillSettings
+    const minimal = { dot: true, branch: true, counts: { staged: false, modified: false, untracked: false }, sync: false, workRecord: false } satisfies PillSettings
     expect(popupBadgeTexts(view.snapshot, minimal)).toEqual([])
   })
 })

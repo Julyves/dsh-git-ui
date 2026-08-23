@@ -24,6 +24,8 @@ export const pillSettingsSchema = z.object({
   branch: boolSchema,
   counts: countsSettingsSchema,
   sync: boolSchema,
+  // workRecord 为宽松可选(旧版数据缺字段),读取后经 migrateSettings 补齐默认。
+  workRecord: boolSchema.optional(),
 })
 
 export const popupSettingsSchema = z.object({

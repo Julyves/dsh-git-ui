@@ -22,9 +22,10 @@ export const SETTINGS_STORAGE_KEY = 'dsh-git-ui.settings'
 /**
  * 存储格式版本：schema 不兼容变更时 +1。
  * v1 → v2：新增 `diff` 维度（字体大小 / 语法高亮 / 上下文折叠）。
+ * v2 → v3：新增 `pill.workRecord`（Turn 工作记录徽章开关）。
  * 旧值经 migrateSettings 补默认字段（不丢既有偏好）。
  */
-export const SETTINGS_SCHEMA_VERSION = 2
+export const SETTINGS_SCHEMA_VERSION = 3
 
 /** 显示模式档位。'custom' 仅为派生结果，不作为规则表成员。 */
 export type PresetId = 'minimal' | 'standard' | 'full' | 'custom'
@@ -46,6 +47,8 @@ export interface PillSettings {
   readonly counts: CountsSettings
   /** 领先 / 落后徽章（`↑N ↓N`）。 */
   readonly sync: boolean
+  /** Turn 工作记录段（本会话/外部徽章;默认开）。关闭时弹窗分组同步隐藏。 */
+  readonly workRecord: boolean
 }
 
 /** 详情弹窗信息组件开关。 */
@@ -117,6 +120,7 @@ const MINIMAL_UI: GitUISettings = {
     branch: true,
     counts: { staged: false, modified: false, untracked: false },
     sync: false,
+    workRecord: false,
   },
   popup: {
     rootPath: true,
@@ -136,6 +140,7 @@ const STANDARD_UI: GitUISettings = {
     branch: true,
     counts: { staged: true, modified: true, untracked: true },
     sync: true,
+    workRecord: true,
   },
   popup: {
     rootPath: true,
@@ -212,6 +217,7 @@ export function pillEqual(a: PillSettings, b: PillSettings): boolean {
   return a.dot === b.dot
     && a.branch === b.branch
     && a.sync === b.sync
+    && a.workRecord === b.workRecord
     && countsEqual(a.counts, b.counts)
 }
 
@@ -233,6 +239,7 @@ export type PillPatch = Partial<{
   dot: boolean
   branch: boolean
   sync: boolean
+  workRecord: boolean
   counts: Partial<CountsSettings>
 }>
 
@@ -250,6 +257,7 @@ export function patchPill(prev: GitUISettings, patch: PillPatch): GitUISettings 
       dot: patch.dot ?? prev.pill.dot,
       branch: patch.branch ?? prev.pill.branch,
       sync: patch.sync ?? prev.pill.sync,
+      workRecord: patch.workRecord ?? prev.pill.workRecord,
       counts: {
         staged: patch.counts?.staged ?? prev.pill.counts.staged,
         modified: patch.counts?.modified ?? prev.pill.counts.modified,
@@ -302,13 +310,27 @@ export function patchDiff(prev: GitUISettings, patch: DiffPatch): GitUISettings 
 }
 
 /**
- * 旧版（v1）设置迁入 v2：补上 diff 字段默认值，保留全部既有偏好。
- * 仅当存储信封的版本 < 当前版本时调用；diff 允许部分缺失（旧数据可能
- * 只带某个子字段），缺省子字段补默认。
+ * 旧版（v1/v2）设置迁入：v2 补 diff 维度;v3 补 pill.workRecord 默认(true)。
+ * 仅当存储信封的版本 < 当前版本时调用;各维度允许部分缺失(旧数据可能只带
+ * 某个子字段),缺省子字段补默认——幂等,不丢既有偏好。
  */
-export function migrateSettings(settings: Omit<GitUISettings, 'diff'> & { readonly diff?: Partial<DiffSettings> }): GitUISettings {
+export function migrateSettings(settings: {
+  readonly pill?: Partial<Omit<PillSettings, 'counts'>> & { readonly counts?: Partial<CountsSettings> }
+  readonly popup: PopupSettings
+  readonly diff?: Partial<DiffSettings>
+}): GitUISettings {
   return {
-    pill: settings.pill,
+    pill: {
+      dot: settings.pill?.dot ?? DEFAULT_SETTINGS.pill.dot,
+      branch: settings.pill?.branch ?? DEFAULT_SETTINGS.pill.branch,
+      sync: settings.pill?.sync ?? DEFAULT_SETTINGS.pill.sync,
+      workRecord: settings.pill?.workRecord ?? DEFAULT_SETTINGS.pill.workRecord,
+      counts: {
+        staged: settings.pill?.counts?.staged ?? DEFAULT_SETTINGS.pill.counts.staged,
+        modified: settings.pill?.counts?.modified ?? DEFAULT_SETTINGS.pill.counts.modified,
+        untracked: settings.pill?.counts?.untracked ?? DEFAULT_SETTINGS.pill.counts.untracked,
+      },
+    },
     popup: settings.popup,
     diff: { ...DEFAULT_DIFF_SETTINGS, ...(settings.diff ?? {}) },
   }

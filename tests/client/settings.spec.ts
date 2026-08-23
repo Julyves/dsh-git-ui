@@ -123,6 +123,34 @@ describe('migrateSettings（v1 → v2 差异维度补齐）', () => {
     expect(migrated.diff.fontSize).toBe(14)
     expect(migrated.diff.syntaxHighlight).toBe(true)
   })
+
+  it('fills workRecord with the default when absent (v2 → v3)', () => {
+    const v2 = {
+      pill: { ...DEFAULT_SETTINGS.pill, workRecord: undefined } as unknown as Record<string, unknown>,
+      popup: DEFAULT_SETTINGS.popup,
+      diff: DEFAULT_DIFF_SETTINGS,
+    }
+    // v2 数据没有 workRecord 字段 → 迁移补默认 true,其余保留。
+    delete (v2 as { pill: Record<string, unknown> }).pill.workRecord
+    const migrated = migrateSettings(v2 as unknown as Parameters<typeof migrateSettings>[0])
+    expect(migrated.pill.workRecord).toBe(true)
+    expect(migrated.pill.dot).toBe(DEFAULT_SETTINGS.pill.dot)
+  })
+
+  it('respects an explicit false workRecord (user turned it off)', () => {
+    const migrated = migrateSettings({
+      pill: { ...DEFAULT_SETTINGS.pill, workRecord: false },
+      popup: DEFAULT_SETTINGS.popup,
+    })
+    expect(migrated.pill.workRecord).toBe(false)
+  })
+
+  it('preset linkage: minimal hides workRecord, standard/full show it', () => {
+    expect(presetOf(applyPreset(DEFAULT_SETTINGS, 'minimal'))).toBe('minimal')
+    expect(applyPreset(DEFAULT_SETTINGS, 'minimal').pill.workRecord).toBe(false)
+    expect(applyPreset(DEFAULT_SETTINGS, 'standard').pill.workRecord).toBe(true)
+    expect(applyPreset(DEFAULT_SETTINGS, 'full').pill.workRecord).toBe(true)
+  })
 })
 
 /** 内存持久化桩：模拟 host 磁盘通道（settings.json）。 */
@@ -152,7 +180,7 @@ describe('createSettingsStore（存储生命周期：host 主存储 + 迁移）'
     store.setSettings(next)
     await store.flush()
     expect(persistence.dump()).toContain('"sync":false')
-    expect(persistence.dump()).toContain('"v":2')
+    expect(persistence.dump()).toContain('"v":3')
   })
 
   it('migrates the v1 legacy localStorage payload when host has no data (and writes it back)', async () => {
