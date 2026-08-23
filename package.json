@@ -46,7 +46,8 @@
     "test": "vitest run",
     "build": "node build.mjs",
     "prepare": "node build.mjs",
-    "pack": "npm pack"
+    "pack": "npm pack",
+    "smoke": "pnpm run build && node tests/smoke-host.mjs"
   },
   "dsh": {
     "bundle": {
