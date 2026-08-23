@@ -17,6 +17,10 @@ export function Switch({
   readonly label: string
   readonly disabled?: boolean
 }): JSX.Element {
+  // 激活色经 inline 条件切换（settingsSwitchOn）——勿依赖全局 CSS 的
+  // [data-on] 背景覆盖：inline style 优先级高于任何 class 选择器，CSS 层的
+  // 激活背景被压住，导致开态轨道一直停留在 off 灰（本项目此前的隐形缺陷）。
+  // data-on 仅保留给滑钮位移（inline 不含 transform，CSS 可正常接管）。
   return (
     <button
       type="button"
@@ -25,7 +29,7 @@ export function Switch({
       aria-label={label}
       disabled={disabled}
       className="dsh-git-ui__switch"
-      style={css.settingsSwitch}
+      style={checked ? { ...css.settingsSwitch, ...css.settingsSwitchOn } : css.settingsSwitch}
       data-on={checked ? 'true' : 'false'}
       onClick={() => onChange(!checked)}
     >

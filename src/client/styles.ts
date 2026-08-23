@@ -514,8 +514,9 @@ const globalCss = [
   '.dsh-git-ui__switch-knob { transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }',
   '.dsh-git-ui__segment { transition: background var(--ds-transition-duration-fast) var(--ds-ease-in-out), color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   '.dsh-git-ui__counts-badge { transition: background var(--ds-transition-duration-fast) var(--ds-ease-in-out), border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out), color var(--ds-transition-duration-fast) var(--ds-ease-in-out), opacity var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
-  // 开关状态经 data-on 切换（组件向元素写 data 属性，避免 JS 内联背景/位移）。
-  '.dsh-git-ui__switch[data-on="true"] { background: var(--dsw-alias-state-business-primary); box-shadow: inset 0 0 0 1px transparent; }',
+  // 开关状态：滑钮位移经 data-on 切换（inline 不含 transform，CSS 正常接管）。
+  // 激活背景 NOT 在此——inline style 优先级高于 class 选择器，CSS 层的背景
+  // 覆盖会被压住；激活色由组件条件合并 settingsSwitchOn（见 controls.tsx）。
   '.dsh-git-ui__switch[data-on="true"] .dsh-git-ui__switch-knob { transform: translateX(16px); }',
   // 工具栏自绘按钮（发丝边胶囊族）：hover 提边 + 可按压。
   '.dsh-git-ui__tool-button { transition: transform var(--ds-transition-duration-fast) ease-out, background var(--ds-transition-duration-fast) var(--ds-ease-in-out), border-color var(--ds-transition-duration-fast) var(--ds-ease-in-out), color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
@@ -2093,7 +2094,11 @@ export const settingsRowHint: CSSProperties = {
   color: 'var(--dsw-alias-label-tertiary)',
 }
 
-/** 开关轨道：40×24 胶囊；激活色经 data-on 由全局 CSS 切换。 */
+/** 开关轨道：40×24 胶囊。
+ * 关闭态也落在业务蓝家族（20% 淡晕 + 38% 同源描边）——取代 layer-2 灰色，
+ * 灰白轨道在亮/暗主题下均显寡淡、与「常规按钮蓝」不符。
+ * 激活态经 inline 合并 settingsSwitchOn 饱和蓝色（勿依赖全局 CSS data-on
+ * 覆盖背景——inline style 优先级更高会压住它，本项目此前的隐形缺陷）。 */
 export const settingsSwitch: CSSProperties = {
   position: 'relative',
   width: 40,
@@ -2101,15 +2106,20 @@ export const settingsSwitch: CSSProperties = {
   padding: 0,
   border: 'none',
   borderRadius: 12,
-  background: 'var(--dsw-alias-bg-layer-2)',
-  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+  background: 'color-mix(in srgb, var(--dsw-alias-state-business-primary) 20%, var(--dsw-alias-bg-layer-2))',
+  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-business-primary) 38%, transparent)',
   cursor: 'pointer',
   flex: 'none',
 }
 
-/** 开关滑钮：20px 圆片，位移经 data-on 由全局 CSS 切换（父按钮样式表中无 data 选择器）。
- * 描边用 label-tertiary 淡晕：亮色主题下轨道为浅灰（layer-2），白滑钮需一道
- * 可见灰边才能辨认 off 态——仅靠 border-l2（更浅）在亮色下几乎不可见。 */
+/** 开关激活态：饱和业务蓝轨道（去描边，饱满）。 */
+export const settingsSwitchOn: CSSProperties = {
+  background: 'var(--dsw-alias-state-business-primary)',
+  boxShadow: 'inset 0 0 0 1px transparent',
+}
+
+/** 开关滑钮：20px 圆片，位移经 data-on 由全局 CSS 切换（inline 不含 transform，
+ * CSS 可正常接管位移）。白滑钮在浅蓝/饱和蓝轨道上均清晰可辨。 */
 export const settingsSwitchKnob: CSSProperties = {
   position: 'absolute',
   top: 2,
@@ -2118,7 +2128,8 @@ export const settingsSwitchKnob: CSSProperties = {
   height: 20,
   borderRadius: '50%',
   background: 'var(--dsw-alias-bg-layer-3)',
-  boxShadow: 'var(--dsw-shadow-lv2), inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-tertiary) 40%, transparent)',
+  // 白滑钮 + 阴影浮起；去掉灰色内描边（灰边在蓝轨道上破坏蓝色调）。
+  boxShadow: 'var(--dsw-shadow-lv2), inset 0 0 0 1px rgba(255, 255, 255, 0.35)',
 }
 
 /** 分段控件容器：iOS 式轨道（layer-2 满宽胶囊，激活段内凹凸起由行内样式叠加）。 */
