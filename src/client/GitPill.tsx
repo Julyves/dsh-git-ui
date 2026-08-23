@@ -16,11 +16,11 @@ import { createPortal } from 'react-dom'
 import type { JSX } from 'react'
 import { completedTurnCount, type TurnSignalSnapshot } from './turn-signal.ts'
 import { useUI } from '../contracts/ui-context.tsx'
-import type { GitObservable, GitQueryOutcome, GitView } from './controller.ts'
+import type { GitQueryOutcome, GitView } from './controller.ts'
 import type { GitInjected } from '../contracts/client-platform.ts'
 import { GitCenter } from './GitCenter.tsx'
-import { fileIconForPath, FolderIcon, AlertIcon, CloseIcon, GearIcon, RollbackIcon, StageIcon, UnstageIcon } from './icons.tsx'
-import type { GitAction, GitActionResult, GitBranch, GitOperationErrorCode, GitQueryRequest, WorkEntry, WorkEntryState } from '../host/types.ts'
+import { fileIconForPath, FolderIcon, AlertIcon, CloseIcon, GearIcon, RollbackIcon, StageIcon, UnstageIcon, RecordIcon } from './icons.tsx'
+import type { GitAction, GitActionResult, GitBranch, GitOperationErrorCode, GitQueryRequest, WorkEntry } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import { SelectMenu } from './select-menu.tsx'
 import { splitChangePath } from './file-tree.ts'
@@ -30,7 +30,7 @@ import { errorText, errorAction } from './error-text.ts'
 import { useSettings } from './settings/use-settings.ts'
 import { renderPill, chipLetter, popupBadgeTexts } from './pill-segments.tsx'
 import { useTurnRecords } from './use-turn-records.ts'
-import { latestWorkTurn, turnEntryCounts, workStateLabel } from './work-record-meta.ts'
+import { latestWorkTurn, relativeTimeLabel, turnEntryCounts, workStateLabel } from './work-record-meta.ts'
 import type { GitUISettings } from '../contracts/settings.ts'
 import type { GitCenterTab } from './GitCenter.tsx'
 import type { TurnWorkRecord } from '../host/types.ts'
@@ -75,6 +75,14 @@ function timeAgo(iso: string, now: number, t: (key: GitKey) => string): string {
   if (seconds < 3600) return fill('time.minutesAgo', Math.floor(seconds / 60))
   if (seconds < 86_400) return fill('time.hoursAgo', Math.floor(seconds / 3600))
   return fill('time.daysAgo', Math.floor(seconds / 86_400))
+}
+
+/** 短时刻（HH:mm）——工作记录时间窗展示用。 */
+function shortTime(epochMs: number): string {
+  const date = new Date(epochMs)
+  const hh = String(date.getHours()).padStart(2, '0')
+  const mm = String(date.getMinutes()).padStart(2, '0')
+  return `${hh}:${mm}`
 }
 
 /** Dimmed pill for degraded states（弱化图标锚点 + 说明文字）。 */
@@ -310,6 +318,82 @@ function GitPopupBody({
           </button>
         </div>
       )}
+      {settings.pill.workRecord && records !== null && (() => {
+        const windowTurn = latestWorkTurn(records)
+        const { internal, external } = turnEntryCounts(windowTurn)
+        const hasAny = internal > 0 || external > 0
+        // 条目行:chip(诚实反映原始变更类型)+ 路径拆分 + 写入时刻 + 状态四色徽章。
+        // 弹窗内不可点击(无 diff 跳转),因此不带 .dsh-git-ui__row hover 类。 
+        const entryRow = (entry: WorkEntry, key: string): JSX.Element => {
+          const { name, dir, isDir } = splitChangePath(entry.path, entry.path.endsWith('/'))
+          return (
+            <div
+              key={key}
+              style={css.workRow}
+            >
+              <span
+                style={{ ...css.changeChip, ...(css.chipStyles[entry.status] ?? css.chipStyles.untracked) }}
+                title={entry.status}
+              >
+                {chipLetter(entry.status)}
+              </span>
+              <span style={css.rowFileIcon} aria-hidden="true">
+                {isDir ? <FolderIcon /> : fileIconForPath(entry.path)}
+              </span>
+              <span style={css.changeNamePop} title={entry.path}>{name}</span>
+              {dir !== '' && <span style={css.changeDirPop}>{dir}</span>}
+              <span style={css.workEntryTime}>{relativeTimeLabel(entry.firstSeenAt, t)}</span>
+              <span style={css.workStateBadgeStyle(entry.state)}>{workStateLabel(entry.state, t)}</span>
+            </div>
+          )
+        }
+        return (
+          <>
+            <div style={css.workSectionHead}>
+              <span style={css.workSectionIcon} aria-hidden="true"><RecordIcon /></span>
+              <span style={css.workSectionText}>
+                <span style={css.workSectionTitle}>{t('work.section')}</span>
+                <span style={css.workSectionSub}>
+                  {windowTurn === undefined
+                    ? t('work.empty')
+                    : `${t('work.recentWindow')} · ${t('work.range').replace('{from}', shortTime(windowTurn.startAt)).replace('{to}', windowTurn.endAt === null ? t('work.running') : shortTime(windowTurn.endAt))}`}
+                </span>
+              </span>
+            </div>
+            {hasAny ? (
+              <>
+                {internal > 0 && (
+                  <div style={css.workGroupTitle}>
+                    <span style={css.workBadgeDotInternal} aria-hidden="true" />
+                    {t('work.group.internal')} {internal}
+                  </div>
+                )}
+                {windowTurn !== undefined && windowTurn.internal.map((entry) => entryRow(entry, `pi-${entry.path}`))}
+                {external > 0 && (
+                  <div style={css.workGroupTitle}>
+                    <span style={css.workBadgeDotExternal} aria-hidden="true" />
+                    {t('work.group.external')} {external}
+                  </div>
+                )}
+                {windowTurn !== undefined && windowTurn.external.map((entry) => entryRow(entry, `pe-${entry.path}`))}
+              </>
+            ) : (
+              <div style={css.workEmptyState}>
+                <span style={css.workEmptyIcon} aria-hidden="true"><RecordIcon /></span>
+                <span style={css.workEmptyText}>{t('work.empty')}</span>
+              </div>
+            )}
+            <button
+              type="button"
+              className="dsh-git-ui__change-link"
+              style={css.workAllLink}
+              onClick={openRecords}
+            >
+              {t('work.all')} →
+            </button>
+          </>
+        )
+      })()}
       {settings.popup.recentCommits > 0 && (
         <>
           <div style={css.sectionTitle}>{t('popup.recentCommits')}</div>
@@ -422,52 +506,6 @@ function GitPopupBody({
             )}
         </>
       )}
-      {settings.pill.workRecord && records !== null && (() => {
-        const windowTurn = latestWorkTurn(records)
-        if (windowTurn === undefined) return null
-        const { internal, external } = turnEntryCounts(windowTurn)
-        if (internal === 0 && external === 0) return null
-        const entryRow = (entry: WorkEntry, key: string): JSX.Element => (
-          <div key={key} style={css.workRow}>
-            <span
-              style={{ ...css.changeChip, ...(css.chipStyles[entry.state === 'reverted' ? 'modified' : entry.status] ?? css.chipStyles.untracked) }}
-              title={entry.status}
-            >
-              {chipLetter(entry.status)}
-            </span>
-            <span style={css.changeNamePopBtn} title={entry.path}>{entry.path}</span>
-            <span style={{ flex: 1 }} />
-            <span style={css.workStateBadge}>{workStateLabel(entry.state as WorkEntryState, t)}</span>
-          </div>
-        )
-        return (
-          <>
-            <div style={css.sectionTitle}>{t('work.section')}</div>
-            {internal > 0 && (
-              <div style={css.workGroupTitle}>
-                <span style={css.workBadgeDotInternal} aria-hidden="true" />
-                {t('work.group.internal')} {internal}
-              </div>
-            )}
-            {windowTurn.internal.map((entry) => entryRow({ ...entry, status: entry.status }, `pi-${entry.path}`))}
-            {external > 0 && (
-              <div style={css.workGroupTitle}>
-                <span style={css.workBadgeDotExternal} aria-hidden="true" />
-                {t('work.group.external')} {external}
-              </div>
-            )}
-            {windowTurn.external.map((entry) => entryRow({ ...entry, status: entry.status }, `pe-${entry.path}`))}
-            <button
-              type="button"
-              className="dsh-git-ui__change-link"
-              style={css.popupNoteAction}
-              onClick={openRecords}
-            >
-              {t('work.all')} →
-            </button>
-          </>
-        )
-      })()}
       <div style={css.footerRow}>
         <span style={css.checkedAt}>{t('popup.checkedAt').replace('{time}', new Date(s.checkedAt).toLocaleTimeString())}</span>
         <span style={css.footerActions}>
@@ -523,12 +561,13 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
   const uiSettings = useSettings()
 
   // Turn 工作记录:按快照刷新键拉取(轮询/手动刷新/操作后自动重拉)。
+  // 数据**恒拉取**(复用快照缓存,0 git 命令)——设置开关只控制 pill 徽章与
+  // 弹窗分组的显隐,不切断数据源:Git 中心「记录」Tab 是主动入口,恒可用
+  // (蓝图意图;关闭开关的意义是"减少 pill 打扰",不是禁用功能)。
   // 拉取失败或未就绪 → records=null → 徽章与弹窗分组静默隐藏(确定降级)。
-  // 设置关闭时刷新键为负 → 不发起任何查询(省 RPC)。
-  // Hook 必须位于所有早退 return 之前(规则的 hooks)。
   const { records } = useTurnRecords(
     (q) => query(q),
-    uiSettings.pill.workRecord && display.state === 'ready' ? display.snapshot.checkedAt : -1,
+    display.state === 'ready' ? display.snapshot.checkedAt : -1,
   )
 
   // Best-effort activity trigger: an agent turn completing is the most
@@ -694,17 +733,17 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
       >
         {render.nodes}
         {showWorkBadge && (
-          <span style={css.workBadges} aria-label={workBadgeTitle()}>
+          <span style={css.workBadges}>
             {internalCount > 0 && (
-              <span style={css.workBadgeInternal}>
+              <span style={css.workBadgeInternal} title={t('work.group.internal')}>
                 <span style={css.workBadgeDotInternal} aria-hidden="true" />
-                {internalCount}
+                {t('work.badgeInternalShort').replace('{n}', String(internalCount))}
               </span>
             )}
             {externalCount > 0 && (
-              <span style={css.workBadgeExternal}>
+              <span style={css.workBadgeExternal} title={t('work.group.external')}>
                 <span style={css.workBadgeDotExternal} aria-hidden="true" />
-                {externalCount}
+                {t('work.badgeExternalShort').replace('{n}', String(externalCount))}
               </span>
             )}
           </span>

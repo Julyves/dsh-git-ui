@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { latestWorkTurn, turnEntryCounts } from '../../src/client/work-record-meta.ts'
+import { latestWorkTurn, relativeTimeLabel, turnEntryCounts } from '../../src/client/work-record-meta.ts'
 import type { TurnWorkRecord } from '../../src/host/types.ts'
 
 function turn(overrides: Partial<TurnWorkRecord>): TurnWorkRecord {
@@ -39,5 +39,32 @@ describe('turnEntryCounts', () => {
 
   it('returns zeros for an undefined window', () => {
     expect(turnEntryCounts(undefined)).toEqual({ internal: 0, external: 0 })
+  })
+})
+
+/** 最小翻译桩:替换 {n} 后直接返回模板原文(断言 key 与替换逻辑)。 */
+const t = (key: string): string => ({ 'time.justNow': '刚刚', 'time.minutesAgo': '{n} 分钟前', 'time.hoursAgo': '{n} 小时前', 'time.daysAgo': '{n} 天前' })[key] ?? key
+
+describe('relativeTimeLabel', () => {
+  const now = 1_000_000_000_000
+
+  it('renders just-now for recent timestamps', () => {
+    expect(relativeTimeLabel(now - 5_000, t, now)).toBe('刚刚')
+  })
+
+  it('renders minutes for sub-hour ages', () => {
+    expect(relativeTimeLabel(now - 2 * 60_000, t, now)).toBe('2 分钟前')
+  })
+
+  it('renders hours for sub-day ages', () => {
+    expect(relativeTimeLabel(now - 3 * 3_600_000, t, now)).toBe('3 小时前')
+  })
+
+  it('renders days beyond a day', () => {
+    expect(relativeTimeLabel(now - 2 * 86_400_000, t, now)).toBe('2 天前')
+  })
+
+  it('clamps future timestamps to just-now', () => {
+    expect(relativeTimeLabel(now + 60_000, t, now)).toBe('刚刚')
   })
 })

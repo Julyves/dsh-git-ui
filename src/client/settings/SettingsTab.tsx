@@ -22,7 +22,7 @@ import { settingsStore } from './store.ts'
 import { useSettings } from './use-settings.ts'
 import { SegmentedControl, Stepper, Switch } from './controls.tsx'
 import { SettingsPreview } from './SettingsPreview.tsx'
-import { BranchIcon, DiffIcon, FolderIcon } from '../icons.tsx'
+import { BranchIcon, DiffIcon, FolderIcon, RecordIcon } from '../icons.tsx'
 import type { T } from '../pill-segments.tsx'
 import type { GitKey } from '../locales.ts'
 import * as css from '../styles.ts'
@@ -96,7 +96,7 @@ function CountsBadges({
 /** 全部 Pill 片段关闭？（用于兜底提示——状态点将强制保留。） */
 function pillFullyOff(settings: GitUISettings): boolean {
   const p = settings.pill
-  return !p.dot && !p.branch && !p.sync
+  return !p.dot && !p.branch && !p.sync && !p.workRecord
     && !p.counts.staged && !p.counts.modified && !p.counts.untracked
 }
 
@@ -189,7 +189,7 @@ export function SettingsTab({
           control={<Switch checked={settings.pill.sync} label={t('settings.sync')} onChange={(next) => applyPill({ sync: next })} />}
         />
         <SettingsRow
-          icon={<span style={css.settingsCountGlyph} aria-hidden="true">⟳</span>}
+          icon={<RecordIcon />}
           name={t('settings.workRecord')}
           desc={t('settings.workRecord.desc')}
           control={<Switch checked={settings.pill.workRecord} label={t('settings.workRecord')} onChange={(next) => applyPill({ workRecord: next })} />}

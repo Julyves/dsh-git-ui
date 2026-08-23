@@ -230,7 +230,7 @@ export function GitCenter({
             aria-labelledby="dsh-git-ui-tab-records"
             style={tab === 'records' ? { display: 'contents' } : { display: 'none' }}
           >
-            <RecordsTab snapshot={snapshot} records={records} t={t}
+            <RecordsTab records={records} t={t}
               onOpenDiff={(path, base) => {
                 setRecordOpenRequest({ path, base })
                 setTab('changes')

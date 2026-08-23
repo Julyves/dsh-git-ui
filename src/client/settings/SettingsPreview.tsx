@@ -11,7 +11,6 @@ import type { GitSnapshot } from '../../host/types.ts'
 import { renderPill, type T, type ReadyView } from '../pill-segments.tsx'
 import type { PillSettings } from '../../contracts/settings.ts'
 import * as css from '../styles.ts'
-
 /** 演示快照：覆盖分支/游离/计数/领先的展示分支（固定值保证预览稳定）。 */
 const DEMO_SNAPSHOT: GitSnapshot = {
   root: '~/projects/demo-repo',
@@ -50,6 +49,18 @@ export function SettingsPreview({
       <div style={css.settingsPreviewStage}>
         <span className="dsh-git-ui__pill" style={{ ...css.pill, ...css.settingsPreviewPill }} aria-hidden="true">
           {render.nodes}
+          {settings.workRecord && (
+            <span style={css.workBadges}>
+              <span style={css.workBadgeInternal}>
+                <span style={css.workBadgeDotInternal} aria-hidden="true" />
+                {t('work.badgeInternalShort').replace('{n}', '2')}
+              </span>
+              <span style={css.workBadgeExternal}>
+                <span style={css.workBadgeDotExternal} aria-hidden="true" />
+                {t('work.badgeExternalShort').replace('{n}', '1')}
+              </span>
+            </span>
+          )}
         </span>
       </div>
     </section>

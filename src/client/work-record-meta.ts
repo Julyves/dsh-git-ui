@@ -31,3 +31,16 @@ export function workStateLabel(state: WorkEntryState, t: (key: GitKey) => string
     case 'gone': return t('work.state.gone')
   }
 }
+
+/**
+ * 条目写入时刻的相对时间标签(复用 time.* 字典;未来时刻钳制为 0)。
+ * 例:`2 分钟前`——让用户感知"这轮工作何时发生",不依赖绝对钟面。
+ */
+export function relativeTimeLabel(epochMs: number, t: (key: GitKey) => string, now: number = Date.now()): string {
+  const seconds = Math.max(0, Math.floor((now - epochMs) / 1000))
+  const fill = (template: GitKey, n: number): string => t(template).replace('{n}', String(n))
+  if (seconds < 60) return t('time.justNow')
+  if (seconds < 3600) return fill('time.minutesAgo', Math.floor(seconds / 60))
+  if (seconds < 86_400) return fill('time.hoursAgo', Math.floor(seconds / 3600))
+  return fill('time.daysAgo', Math.floor(seconds / 86_400))
+}

@@ -10,16 +10,15 @@
  */
 import { useState } from 'react'
 import type { JSX } from 'react'
-import type { GitSnapshot, TurnWorkRecord, WorkEntry } from '../host/types.ts'
+import type { TurnWorkRecord, WorkEntry } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import { chipLetter } from './pill-segments.tsx'
-import { workStateLabel } from './work-record-meta.ts'
-import { ChevronIcon, fileIconForPath, FolderIcon } from './icons.tsx'
+import { relativeTimeLabel, workStateLabel } from './work-record-meta.ts'
+import { ChevronIcon, fileIconForPath, FolderIcon, RecordIcon } from './icons.tsx'
 import { splitChangePath } from './file-tree.ts'
 import * as css from './styles.ts'
 
 export interface RecordsTabProps {
-  readonly snapshot: GitSnapshot
   /** turn 工作记录(GitPill 下发);null = 未就绪/未开启。 */
   readonly records: readonly TurnWorkRecord[] | null
   readonly t: (key: GitKey) => string
@@ -27,26 +26,36 @@ export interface RecordsTabProps {
   readonly onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
 }
 
-/** 时间段展示(短格式:今天 HH:mm,否则 M/D HH:mm)。 */
-function rangeText(startAt: number, endAt: number | null, t: (key: GitKey) => string): string {
-  const from = shortTime(startAt)
-  const to = endAt === null ? `${shortTime(Date.now())} ${t('work.running')}` : shortTime(endAt)
-  return t('work.range').replace('{from}', from).replace('{to}', to)
+/** 工作时长(分钟向下取整;进行中 → 距现在)。 */
+function durationMinutes(startAt: number, endAt: number | null, now: number): number {
+  const to = endAt ?? now
+  return Math.max(0, Math.floor((to - startAt) / 60_000))
 }
 
-function shortTime(epochMs: number): string {
-  const date = new Date(epochMs)
-  const hh = String(date.getHours()).padStart(2, '0')
-  const mm = String(date.getMinutes()).padStart(2, '0')
-  return `${hh}:${mm}`
+/**
+ * 时间窗展示:相对起点(几分钟前/几小时前)+ 时长(纯时长键,与"前"语义分离)。
+ * 例:`23 分钟前 · 43 分钟`——让用户感知"何时、多久"。
+ */
+function windowText(startAt: number, endAt: number | null, t: (key: GitKey) => string): string {
+  const minutes = Math.max(0, Math.floor((Date.now() - startAt) / 60_000))
+  const since = minutes < 1
+    ? t('time.justNow')
+    : minutes < 60
+      ? t('time.minutesAgo').replace('{n}', String(minutes))
+      : t('time.hoursAgo').replace('{n}', String(Math.floor(minutes / 60)))
+  const dur = durationMinutes(startAt, endAt, Date.now())
+  const durText = dur < 60
+    ? t('work.duration').replace('{n}', String(dur))
+    : t('work.durationHours').replace('{n}', String(Math.floor(dur / 60)))
+  return `${since} · ${durText}`
 }
 
 /** 空白占位(无记录 / 加载失败)。 */
-function EmptyNote({ text }: { readonly text: string }): JSX.Element {
+function EmptyNote({ text }: { text: string }): JSX.Element {
   return (
-    <div style={css.emptyStateSmall}>
-      <span style={css.emptyStateDot} aria-hidden="true" />
-      {text}
+    <div style={css.workEmptyState}>
+      <span style={css.workEmptyIcon} aria-hidden="true"><RecordIcon /></span>
+      <span style={css.workEmptyText}>{text}</span>
     </div>
   )
 }
@@ -61,7 +70,7 @@ function WorkEntryRow({ entry, onOpenDiff, t }: {
   const stateLabel = workStateLabel(entry.state, t)
   const clickable = entry.state === 'dirty'
   return (
-    <div style={css.workRow}>
+    <div className="dsh-git-ui__row" style={css.workRow}>
       <span
         style={{ ...css.changeChip, ...(css.chipStyles[entry.status] ?? css.chipStyles.untracked) }}
         title={entry.status}
@@ -82,11 +91,11 @@ function WorkEntryRow({ entry, onOpenDiff, t }: {
           {name}
         </button>
       ) : (
-        <span style={css.changeNamePopBtn} title={entry.path}>{name}</span>
+        <span style={css.changeNamePop} title={entry.path}>{name}</span>
       )}
       {dir !== '' && <span style={css.changeDirPop}>{dir}</span>}
-      <span style={{ flex: 1 }} />
-      <span style={css.workStateBadge} title={entry.path}>{stateLabel}</span>
+      <span style={css.workEntryTime}>{relativeTimeLabel(entry.firstSeenAt, t)}</span>
+      <span style={css.workStateBadgeStyle(entry.state)}>{stateLabel}</span>
     </div>
   )
 }
@@ -103,16 +112,21 @@ function TurnRow({ turn, onOpenDiff, t }: {
     <div>
       <button
         type="button"
+        className="dsh-git-ui__work-turn"
         style={css.workTurnRow}
         onClick={() => { if (hasEntries) setOpen(!open) }}
         aria-expanded={open}
-        aria-label={t(turn.hasWork ? 'work.expanded' : 'work.minimized')}
+        aria-label={t('work.turnMeta').replace('{n}', String(turn.turn)).replace('{time}', windowText(turn.startAt, turn.endAt, t))}
       >
         <ChevronIcon open={open} />
         <span style={{ flex: 'none', fontWeight: 500 }}>
           {t('work.turn').replace('{n}', String(turn.turn))}
         </span>
-        <span style={css.workStateBadge}>{rangeText(turn.startAt, turn.endAt, t)}</span>
+        <span style={turn.endAt === null ? css.workRunningBadge : css.workTimeBadge}>
+          {turn.endAt === null
+            ? `${t('work.running')} · ${t('work.durationShort').replace('{n}', String(durationMinutes(turn.startAt, null, Date.now())))}`
+            : windowText(turn.startAt, turn.endAt, t)}
+        </span>
         {!turn.hasWork && <span style={{ flex: 1 }} />}
         {turn.hasWork && (
           <span style={css.workBadges}>
@@ -167,11 +181,12 @@ function TurnRow({ turn, onOpenDiff, t }: {
 /** Records 面板主体(数据受控:由 GitPill 下发)。 */
 export function RecordsTab({ records, t, onOpenDiff }: RecordsTabProps): JSX.Element {
   if (records === null) {
-    // 未就绪(设置关闭 / 查询失败 / 首次加载):保持空白,不闪加载态。
-    return <div style={{ height: 8 }} />
+    // 未就绪(首次加载 / 查询失败 / 浏览器降级):显示中性占位而非纯空白——
+    // 「记录」为主动入口,空白无说明会让用户误以为功能未实现。
+    return <EmptyNote text={t('work.loadFailed')} />
   }
   if (records.length === 0 || !records.some((turn) => turn.hasWork)) {
-    return <EmptyNote text={t('work.empty')} />
+    return <EmptyNote text={t('work.emptyDetails')} />
   }
   return (
     <div>
