@@ -16,7 +16,8 @@ export interface TurnRecordsState {
 
 /**
  * @param query 现有 query 注入面(turn-records 经 host 编排层返回)
- * @param refreshKey 快照检查时刻(checkedAt);变化即重拉
+ * @param refreshKey 快照检查时刻(checkedAt);变化即重拉;负值 = 禁用
+ *   (设置关闭等场景不发起任何查询)
  */
 export function useTurnRecords(
   query: (q: { readonly kind: 'turn-records' }) => Promise<GitQueryOutcome>,
@@ -26,6 +27,7 @@ export function useTurnRecords(
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
+    if (refreshKey < 0) return // 禁用:不拉取(设置关闭等)。
     let cancelled = false
     setFailed(false)
     void query({ kind: 'turn-records' }).then((outcome) => {
@@ -37,7 +39,7 @@ export function useTurnRecords(
       }
     })
     return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- query/refreshKey 为稳定契约;仅随刷新键重拉。
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- query 为稳定契约;仅随刷新键重拉。
   }, [refreshKey])
 
   return { records, failed }

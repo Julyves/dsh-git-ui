@@ -47,9 +47,6 @@ export const OBSERVATION_CAP = 2000
 
 export class ObservationLog {
   private readonly map = new Map<string, PathObservation>()
-
-  constructor(private readonly persistence: ObservationPersistence | null = null) {}
-
   /** 读快照(只读视图)。 */
   entries(): readonly PathObservation[] {
     return [...this.map.values()]

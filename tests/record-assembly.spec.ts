@@ -70,7 +70,7 @@ describe('assembleAll — internal attribution', () => {
   })
 
   it('labels vanished non-committed agent writes as reverted', () => {
-    const { log, observations, deps } = fixture()
+    const { log, deps } = fixture()
     // test.txt 不在 changes 且无 committedAt(清除 markCommitted 的影响:重建观测)
     const observations2 = new ObservationLog()
     observations2.update([change('external.txt')], 1500)
@@ -112,7 +112,7 @@ describe('assembleAll — external attribution', () => {
   })
 
   it('uses mtime to attribute still-dirty files into the window (restart retro-fit)', () => {
-    const { log, observations, deps } = fixture()
+    const { log, deps } = fixture()
     // firstSeen 早于窗口(重启前),但 mtime 落在窗口内 → 归入该 turn
     const observations2 = new ObservationLog()
     observations2.update([change('ideal.ts')], 500) // firstSeen 早于 turn1 窗口起点
@@ -122,7 +122,7 @@ describe('assembleAll — external attribution', () => {
   })
 
   it('excludes mtime hits outside the window', () => {
-    const { log, observations, deps } = fixture()
+    const { log, deps } = fixture()
     const observations2 = new ObservationLog()
     observations2.update([change('old.ts')], 500)
     const mtimes: MtimeSource = { mtime: () => 2500 } // 窗口 [1000,2000] 之外

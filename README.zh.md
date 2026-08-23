@@ -47,6 +47,10 @@
   - **设置项**：差异查看组——代码字号（10–16px）、语法高亮开关、上下文折叠开关；独立于显示模式档位（调它们不把档位打回「自定义」）。
 
 - **数据持久化于宿主磁盘（v2）**：设置不再存 localStorage——全部落盘于 dsh Harness home 下的 `plugin-data/dsh-git-ui/settings.json`（`$DSH_HOME` → `~/.dsh`，可在 profile 配置中覆盖 `dshHome`），原子写入（临时文件 + rename）、跨设备重启存活。浏览器仅经 host RPC 读写（严格文件名白名单）；初始化时自动将 v1 的 localStorage 旧设置一次性迁移并写回磁盘（后续不再读取该键）。
+- **Turn 工作记录**：按 turn 归因文件系统变更，统计严格基于 git（ignored / 仓库外文件不计）。两种模式：
+  - **单 turn 模式（pill，默认）**：胶囊展示最近工作时段的紧凑徽章——`本会话`（本会话 agent 经工具写入，含 subagent 委托）与 `外部`（IDE / 命令行 / 同一工作区其他 dsh 会话）；点击胶囊查看分组文件列表；【设置】中可关闭徽章。
+  - **全 session 模式（Git 中心「记录」标签）**：从 turn 1 到现在的逐 turn 列表——每行展示时间窗口与内外计数，展开为两组文件（带状态徽章：仍变更 / 已提交 / 已还原）。
+  - **实现要点**：宿主折叠会话事件日志（`turn/start`·`turn/end`·`tool/call` 自带时间戳）得到精确的 per-turn 窗口；复用每个工具自声明的 `presentCall` 写意图提取 agent 写路径（bash 走静态目标启发式：重定向 / tee / sed -i / cp-mv / dd of=）；外部变更经轮询观测时间线归因（每路径首见时刻 + HEAD 移动提交检测 + 仍脏文件的 mtime 精修）。观测时间线持久化于 `plugin-data/dsh-git-ui/obs-<会话>.jsonl`（原子写；恢复时对账提交判定），宿主重启后记录不丢。
 
   每次操作即时刷新状态：
 
@@ -124,6 +128,7 @@ dsh plugin --profile web remove dsh-git-ui
 - 轮询式刷新（默认 30s）；基于文件监听的事件推送为规划中的扩展。
 - 变更文件列表有上限（`maxChanges`）；未跟踪目录内部文件逐个枚举。status 输出超过内存上限（默认 4 MiB）时会从私有 spill 文件恢复完整输出，**计数保持精确**——仅当 spill 上限（64 MiB）也被突破时才回退为近似（`truncated: true`）。
 - 浏览器只传 `sessionId`，不传路径；主机解析权威 cwd 并执行 git 命令（写操作用 `--` 路径分隔、拒绝绝对路径与 `..` 逃逸）。
+- **Turn 工作记录**：bash 动态构造写目标（`$(...)`、glob、`find -exec`、`eval`）不可静态提取，落入「外部」（根治需上游沙箱记录 filesWritten）；冷 subagent（未加载）会话跳过内部归因；观测时间线每会话上限 2000 条（裁剪最旧），且在一个轮询间隔内出现又消失的外部变更在宿主重启后无法重建。
 - 语法高亮为 bundle 预算裁剪的语言子集（TypeScript/JS 族、JSON/YAML/TOML/INI、Markdown、XML/HTML、CSS/SCSS/LESS、Python、Shell、Java、Go、Rust、C、C#、Kotlin、SQL、Makefile）。C++ 以 C grammar 近似、HTML 以 XML grammar 近似、SCSS/LESS 以 CSS grammar 近似（基础 token 正确，语言特有结构回落纯文本）；PHP、Swift、Ruby、Lua 等未注册语言**整体回落纯文本**（仍为等宽字体、不报错）。
 - 设置存储（v2）迁移到宿主磁盘后不再写入 localStorage；若 host RPC 不可达（降级），设置仅停留在内存态（本次会话有效）。
 

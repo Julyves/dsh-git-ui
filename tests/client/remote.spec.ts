@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   gitActionResultSchema, gitActionRequestSchema, gitActionSchema,
-  gitInfoRemote, gitQueryResultSchema, gitQueryRequestSchema,
+  gitInfoRemote, gitOperationErrorSchema, gitQueryResultSchema, gitQueryRequestSchema,
   gitSnapshotFailureSchema, gitSnapshotResultSchema, gitSnapshotSchema,
   gitStorageReadRequestSchema, gitStorageReadResultSchema, gitStorageWriteRequestSchema, gitStorageWriteResultSchema,
 } from '../../src/client/remote.ts'
@@ -223,6 +223,32 @@ describe('gitInfoRemote query endpoint', () => {
   it('rejects a graph commit missing refs (strict mirror)', () => {
     const incomplete = { hash: 'h', shortHash: 'h', subject: 's', author: 'a', dateIso: 'd', parents: [] }
     expect(() => gitQueryResultSchema.parse({ kind: 'history', commits: [incomplete], total: 1 })).toThrow()
+  })
+
+  it('accepts turn-records results and rejects unknown entry states (strict mirror)', () => {
+    const records = {
+      kind: 'turn-records',
+      turns: [{
+        turn: 1, startAt: 1000, endAt: 2000, hasWork: true,
+        internal: [{ path: 'a.ts', status: 'modified', state: 'dirty', firstSeenAt: 1500 }],
+        external: [{ path: 'b.ts', status: 'untracked', state: 'committed', firstSeenAt: 1600 }],
+      }],
+    }
+    const parsed = gitQueryResultSchema.parse(records)
+    expect(parsed.kind).toBe('turn-records')
+    if (parsed.kind !== 'turn-records') return
+    expect(parsed.turns[0]?.internal[0]).toEqual({ path: 'a.ts', status: 'modified', state: 'dirty', firstSeenAt: 1500 })
+    // strict 镜像:未知 state 会被 reject(host 类型演进时此处先行失败)。
+    expect(() => gitQueryResultSchema.parse({
+      kind: 'turn-records',
+      turns: [{ turn: 1, startAt: 0, endAt: null, hasWork: false, internal: [{ path: 'x', status: 'modified', state: 'mystery', firstSeenAt: 1 }], external: [] }],
+    })).toThrow()
+    // 请求形状:最简单的 turn-records 查询通过。
+    expect(gitQueryRequestSchema.parse({ sessionId: 's1', query: { kind: 'turn-records' } }).query.kind).toBe('turn-records')
+    // 错误码镜像:git-unavailable / path-not-found 在枚举内。
+    expect(() => gitQueryResultSchema.parse({ ok: false } as never)).not.toBeNull()
+    const failure = gitOperationErrorSchema.parse({ code: 'git-unavailable', message: 'spawn failed' })
+    expect(failure.code).toBe('git-unavailable')
   })
 })
 

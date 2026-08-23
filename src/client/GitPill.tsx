@@ -519,12 +519,16 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
   if (view.state === 'ready') lastReady.current = view
   const display: GitView = view.state === 'loading' && lastReady.current !== null ? lastReady.current : view
 
+  // 设置（插件级全局）；Pill 与弹窗展示按此切片。置于 records hook 之前(顺序依赖)。
+  const uiSettings = useSettings()
+
   // Turn 工作记录:按快照刷新键拉取(轮询/手动刷新/操作后自动重拉)。
   // 拉取失败或未就绪 → records=null → 徽章与弹窗分组静默隐藏(确定降级)。
+  // 设置关闭时刷新键为负 → 不发起任何查询(省 RPC)。
   // Hook 必须位于所有早退 return 之前(规则的 hooks)。
   const { records } = useTurnRecords(
     (q) => query(q),
-    display.state === 'ready' ? display.snapshot.checkedAt : 0,
+    uiSettings.pill.workRecord && display.state === 'ready' ? display.snapshot.checkedAt : -1,
   )
 
   // Best-effort activity trigger: an agent turn completing is the most
@@ -550,8 +554,6 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
   const [centerRequest, setCenterRequest] = useState<{ path: string; base: 'worktree' | 'staged' } | null>(null)
   /** Git 中心初始 Tab：常规打开 = 变更；齿轮打开 = 设置；记录入口 = 记录。 */
   const [centerTab, setCenterTab] = useState<GitCenterTab>('changes')
-  /** 设置（插件级全局）；Pill 与弹窗展示按此切片。 */
-  const uiSettings = useSettings()
 
   /** 打开 Git 中心并定位到「记录」Tab（弹窗工作记录「全部 turn 记录」入口）。 */
   const openRecordsInCenter = (): void => {
