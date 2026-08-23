@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { latestWorkTurn, relativeTimeLabel, turnEntryCounts } from '../../src/client/work-record-meta.ts'
+import { buildTimelineRows, latestWorkTurn, relativeTimeLabel, summarizeWork, turnEntryCounts } from '../../src/client/work-record-meta.ts'
 import type { TurnWorkRecord } from '../../src/host/types.ts'
 
 function turn(overrides: Partial<TurnWorkRecord>): TurnWorkRecord {
@@ -66,5 +66,55 @@ describe('relativeTimeLabel', () => {
 
   it('clamps future timestamps to just-now', () => {
     expect(relativeTimeLabel(now + 60_000, t, now)).toBe('刚刚')
+  })
+})
+
+describe('summarizeWork', () => {
+  it('counts unique paths across turns (no double counting)', () => {
+    const records = [
+      turn({ turn: 1, internal: [{ path: 'a.ts', status: 'modified', state: 'dirty', firstSeenAt: 1 }] }),
+      turn({ turn: 2, internal: [{ path: 'a.ts', status: 'modified', state: 'committed', firstSeenAt: 2 }], external: [{ path: 'b.md', status: 'added', state: 'dirty', firstSeenAt: 3 }] }),
+    ]
+    expect(summarizeWork(records)).toEqual({ turns: 2, internal: 1, external: 1, dirty: 2 })
+  })
+
+  it('counts only working turns', () => {
+    const records = [turn({ turn: 1, hasWork: false }), turn({ turn: 2, hasWork: true })]
+    expect(summarizeWork(records).turns).toBe(1)
+  })
+})
+
+describe('buildTimelineRows', () => {
+  it('keeps working turns and merges consecutive idle turns', () => {
+    const records = [
+      turn({ turn: 1, hasWork: true }),
+      turn({ turn: 2, hasWork: false }),
+      turn({ turn: 3, hasWork: false }),
+      turn({ turn: 4, hasWork: true }),
+    ]
+    expect(buildTimelineRows(records)).toEqual([
+      { kind: 'turn', turn: records[0] },
+      { kind: 'idle', from: 2, to: 3 },
+      { kind: 'turn', turn: records[3] },
+    ])
+  })
+
+  it('keeps a single idle turn as its own idle row', () => {
+    const records = [turn({ turn: 1, hasWork: false }), turn({ turn: 2, hasWork: true })]
+    expect(buildTimelineRows(records)).toEqual([
+      { kind: 'idle', from: 1, to: 1 },
+      { kind: 'turn', turn: records[1] },
+    ])
+  })
+
+  it('sorts by turn number defensively', () => {
+    const records = [turn({ turn: 3, hasWork: true }), turn({ turn: 1, hasWork: true })]
+    const rows = buildTimelineRows(records)
+    expect(rows[0]?.kind).toBe('turn')
+    expect(rows[0]?.kind === 'turn' && rows[0].turn.turn).toBe(1)
+  })
+
+  it('returns empty for an empty list', () => {
+    expect(buildTimelineRows([])).toEqual([])
   })
 })

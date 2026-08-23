@@ -223,50 +223,6 @@ export const workSectionSub: CSSProperties = {
   whiteSpace: 'nowrap',
 }
 
-/** 工作记录 turn 行(中心 Tab;hover 由全局 .dsh-git-ui__work-turn 提供)。 */
-export const workTurnRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '7px 8px',
-  borderRadius: 8,
-  cursor: 'pointer',
-  width: '100%',
-  textAlign: 'left',
-  border: 0,
-  font: 'inherit',
-  color: 'var(--dsw-alias-label-primary)',
-  background: 'transparent',
-}
-
-/** 工作记录 turn 行内计数徽章(本会话/外部小胶囊,展开行同款语义色)。 */
-export const workBadgeInline: CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 3,
-  padding: '0 5px',
-  borderRadius: 6,
-  fontSize: 10,
-  lineHeight: '14px',
-  fontWeight: 600,
-}
-
-/** 工作记录 turn 行时间窗徽章(中性:相对起点 · 时长)。 */
-export const workTimeBadge: CSSProperties = {
-  ...workBadgeInline,
-  color: 'var(--dsw-alias-label-secondary)',
-  background: 'var(--dsw-alias-bg-layer-2)',
-  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
-}
-
-/** 工作记录 turn 状态徽章(进行中时钟语义)。 */
-export const workRunningBadge: CSSProperties = {
-  ...workBadgeInline,
-  color: 'var(--dsw-alias-brand-blue-strong, var(--dsw-alias-label-primary))',
-  background: 'color-mix(in srgb, var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary)) 14%, transparent)',
-  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary)) 30%, transparent)',
-}
-
 /** 工作记录分组标题(中心 Tab:本会话/外部)。 */
 export const workGroupTitle: CSSProperties = {
   display: 'flex',
@@ -315,6 +271,201 @@ export const workAllLink: CSSProperties = {
   lineHeight: '16px',
   color: 'var(--dsw-alias-brand-blue-strong, var(--dsw-alias-label-primary))',
   cursor: 'pointer',
+}
+
+// ── 记录中心:概览卡 + 时间线 ──────────────────────────────────────────────
+
+/** 概览卡:四格统计 + 弱化说明,页面级视觉重心。 */
+export const recordsSummary: CSSProperties = {
+  display: 'flex',
+  alignItems: 'stretch',
+  gap: 1,
+  borderRadius: 10,
+  overflow: 'hidden',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+}
+
+/** 单个统计格:大数字 + 标签 + 可选语义点。 */
+export const recordsSummaryItem: CSSProperties = {
+  flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 2,
+  padding: '10px 6px',
+  minWidth: 0,
+  background: 'color-mix(in srgb, var(--dsw-alias-bg-layer-2) 60%, transparent)',
+}
+
+export const recordsSummaryValue: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 5,
+  fontSize: 18,
+  fontWeight: 650,
+  lineHeight: '22px',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+export const recordsSummaryLabel: CSSProperties = {
+  fontSize: 10,
+  lineHeight: '14px',
+  color: 'var(--dsw-alias-label-tertiary)',
+  whiteSpace: 'nowrap',
+}
+
+/** 概览统计格的语义色点(本会话=蓝 / 外部=灰 / 仍在=琥珀)。 */
+export const recordsSummaryDot: CSSProperties = {
+  width: 8,
+  height: 8,
+  borderRadius: 999,
+  flex: 'none',
+}
+
+export const recordsSummaryDotInternal: CSSProperties = {
+  ...recordsSummaryDot,
+  background: 'var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary))',
+}
+
+export const recordsSummaryDotExternal: CSSProperties = {
+  ...recordsSummaryDot,
+  background: 'var(--dsw-alias-label-tertiary)',
+}
+
+export const recordsSummaryDotDirty: CSSProperties = {
+  ...recordsSummaryDot,
+  background: 'var(--dsw-alias-state-warn-primary)',
+}
+
+/** 概览卡下的时间线容器:左侧轴 + 右侧内容。 */
+export const recordsTimeline: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 0,
+}
+
+/** 时间线行:左轴槽 + 内容槽。 */
+export const recordsTimelineRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'stretch',
+}
+
+/** 左侧时间线轴槽:节点 + 竖线(除首尾)。 */
+export const recordsTimelineRail: CSSProperties = {
+  flex: 'none',
+  width: 28,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+}
+
+/** 轴线节点(有工作):语义色实心圆点。 */
+export const recordsTimelineDot: CSSProperties = {
+  flex: 'none',
+  width: 9,
+  height: 9,
+  borderRadius: 999,
+  marginTop: 15,
+  background: 'var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary))',
+  boxShadow: '0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary)) 18%, transparent)',
+}
+
+/** 轴线节点(空闲 turn):空心弱化圈。 */
+export const recordsTimelineDotIdle: CSSProperties = {
+  flex: 'none',
+  width: 7,
+  height: 7,
+  borderRadius: 999,
+  marginTop: 11,
+  background: 'transparent',
+  boxShadow: 'inset 0 0 0 1.5px var(--dsw-alias-border-l2)',
+}
+
+/** 轴线竖线(连接上下节点;首行/末行按需 trimmed)。 */
+export const recordsTimelineLine: CSSProperties = {
+  flex: 1,
+  width: 2,
+  borderRadius: 1,
+  background: 'color-mix(in srgb, var(--dsw-alias-border-l2) 70%, transparent)',
+}
+
+/** 轴线竖线(有工作节点间:语义色弱化)。 */
+export const recordsTimelineLineActive: CSSProperties = {
+  ...recordsTimelineLine,
+  background: 'color-mix(in srgb, var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary)) 22%, transparent)',
+}
+
+/** turn 卡片:圆角 + hover 淡底,头部可点。 */
+export const recordsTurnCard: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  margin: '0 0 10px',
+  borderRadius: 10,
+  padding: '2px 0',
+  background: 'transparent',
+}
+
+/** turn 卡片头部(可展开):标题 + 时间窗 + 计数徽章。
+ * 背景不内联——由全局 .dsh-git-ui__work-turn 基础规则提供,
+ * 内联会压掉 :hover 淡底(与 .dsh-git-ui__tab 同训)。 */
+export const recordsTurnHead: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  width: '100%',
+  padding: '8px 10px',
+  borderRadius: 10,
+  border: 0,
+  textAlign: 'left',
+  font: 'inherit',
+  cursor: 'pointer',
+  color: 'var(--dsw-alias-label-primary)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+}
+
+/** turn 标题:加粗大字号。 */
+export const recordsTurnTitle: CSSProperties = {
+  flex: 'none',
+  fontSize: 13,
+  fontWeight: 650,
+  lineHeight: '20px',
+}
+
+/** turn 时间窗:次要,弱化。 */
+export const recordsTurnWindow: CSSProperties = {
+  flex: 'none',
+  fontSize: 11,
+  lineHeight: '18px',
+  color: 'var(--dsw-alias-label-secondary)',
+  whiteSpace: 'nowrap',
+}
+
+/** turn 卡片头右端计数徽章组。 */
+export const recordsTurnCounts: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  marginLeft: 'auto',
+}
+
+/** 空闲(无工作)turn 聚合行:极简弱化,不再独立占位。 */
+export const recordsIdleRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  flex: 1,
+  minWidth: 0,
+  padding: '6px 10px',
+  borderRadius: 8,
+  fontSize: 11,
+  lineHeight: '16px',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+/** 展开后的 turn 内容区:与头部对齐缩进。 */
+export const recordsTurnBody: CSSProperties = {
+  padding: '4px 10px 8px',
 }
 
 /** Dimmed pill for degraded states (no repo / unavailable).
@@ -819,6 +970,11 @@ const globalCss = [
 
   // Git center dialog: widen the platform Modal card (headless mode).
   '.dsh-git-ui__center { width: min(1200px, 100vw); height: min(760px, calc(100vh - 48px)); }',
+
+  // 记录中心 turn 卡片头：基础底色走全局类（内联会压掉 :hover 淡底）。
+  '.dsh-git-ui__work-turn { background: var(--dsw-alias-bg-layer-2); }',
+  '.dsh-git-ui__work-turn:active { background: var(--dsw-alias-interactive-bg-active); }',
+  '.dsh-git-ui__work-turn:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }',
 
   // ── 悬停态（仅指针设备，触屏 tap 不误激活——emil/apple 闸控规则）──────
   '@media (hover: hover) and (pointer: fine) {',

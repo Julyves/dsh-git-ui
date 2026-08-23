@@ -1,19 +1,23 @@
 /**
- * Records tab — 逐 turn 工作记录(git 中心)。
+ * Records tab — 逐 turn 工作记录(git 中心):时间线叙事。
  *
  * 数据:由 GitPill 统一拉取后下发(records prop)——本组件**不自行查询**,
  * 避免每会话双查询风暴(RecordsTab 恒挂载于 GitCenter)。
- * 结构:turn 升序列表(turn 1 → now),每行收敛为
- * `Turn {n} · 时间段 · 本会话 +N · 外部 +M`;展开为两组条目。
- * 条目:状态 chip + 路径 + state 徽章(仍变更/已提交/已还原);
- * 仍变更条目可点击 → 跳转 Changes 标签打开该文件对照(worktree 基线)。
+ *
+ * 结构(重设计):
+ *   - 顶部**概览卡**:Turn 总数 / 本会话 / 外部 / 仍变更 四格统计,页面级视觉重心;
+ *   - 主体**时间线**:左轴(节点 + 竖线) + 右 turn 卡片;有工作 turn 为可展开卡片,
+ *     连续空闲 turn 聚合为一条弱化行(不再独立占位——截图噪音根因);
+ *   - turn 卡片头:`Turn {n}` + 时间窗(HH:mm 区间)+ 计数徽章(本会话蓝/外部灰);
+ *     展开显两组条目(状态 chip + 路径拆分 + 相对时刻 + 状态四色徽章);
+ *   - 仍变更条目可点击 → 跳转 Changes 标签打开该文件对照(worktree 基线)。
  */
 import { useState } from 'react'
 import type { JSX } from 'react'
 import type { TurnWorkRecord, WorkEntry } from '../host/types.ts'
 import type { GitKey } from './locales.ts'
 import { chipLetter } from './pill-segments.tsx'
-import { relativeTimeLabel, workStateLabel } from './work-record-meta.ts'
+import { buildTimelineRows, relativeTimeLabel, summarizeWork, workStateLabel } from './work-record-meta.ts'
 import { ChevronIcon, fileIconForPath, FolderIcon, RecordIcon } from './icons.tsx'
 import { splitChangePath } from './file-tree.ts'
 import * as css from './styles.ts'
@@ -26,29 +30,23 @@ export interface RecordsTabProps {
   readonly onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
 }
 
-/** 工作时长(分钟向下取整;进行中 → 距现在)。 */
-function durationMinutes(startAt: number, endAt: number | null, now: number): number {
-  const to = endAt ?? now
-  return Math.max(0, Math.floor((to - startAt) / 60_000))
+// ── 纯派生与时间工具 ───────────────────────────────────────────────────────
+
+function shortTime(epochMs: number): string {
+  const date = new Date(epochMs)
+  const hh = String(date.getHours()).padStart(2, '0')
+  const mm = String(date.getMinutes()).padStart(2, '0')
+  return `${hh}:${mm}`
 }
 
-/**
- * 时间窗展示:相对起点(几分钟前/几小时前)+ 时长(纯时长键,与"前"语义分离)。
- * 例:`23 分钟前 · 43 分钟`——让用户感知"何时、多久"。
- */
+/** 时间窗文本:HH:mm 区间(进行中补"进行中")。 */
 function windowText(startAt: number, endAt: number | null, t: (key: GitKey) => string): string {
-  const minutes = Math.max(0, Math.floor((Date.now() - startAt) / 60_000))
-  const since = minutes < 1
-    ? t('time.justNow')
-    : minutes < 60
-      ? t('time.minutesAgo').replace('{n}', String(minutes))
-      : t('time.hoursAgo').replace('{n}', String(Math.floor(minutes / 60)))
-  const dur = durationMinutes(startAt, endAt, Date.now())
-  const durText = dur < 60
-    ? t('work.duration').replace('{n}', String(dur))
-    : t('work.durationHours').replace('{n}', String(Math.floor(dur / 60)))
-  return `${since} · ${durText}`
+  const from = shortTime(startAt)
+  const to = endAt === null ? `${shortTime(Date.now())} ${t('work.running')}` : shortTime(endAt)
+  return t('work.range').replace('{from}', from).replace('{to}', to)
 }
+
+// ── 子组件 ────────────────────────────────────────────────────────────────
 
 /** 空白占位(无记录 / 加载失败)。 */
 function EmptyNote({ text }: { text: string }): JSX.Element {
@@ -100,8 +98,8 @@ function WorkEntryRow({ entry, onOpenDiff, t }: {
   )
 }
 
-/** 一个 turn 的折叠行。 */
-function TurnRow({ turn, onOpenDiff, t }: {
+/** 一个 turn 卡片(可展开)。 */
+function TurnCard({ turn, onOpenDiff, t }: {
   readonly turn: TurnWorkRecord
   readonly onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
   readonly t: (key: GitKey) => string
@@ -109,44 +107,35 @@ function TurnRow({ turn, onOpenDiff, t }: {
   const [open, setOpen] = useState(false)
   const hasEntries = turn.internal.length > 0 || turn.external.length > 0
   return (
-    <div>
+    <div style={css.recordsTurnCard}>
       <button
         type="button"
         className="dsh-git-ui__work-turn"
-        style={css.workTurnRow}
+        style={css.recordsTurnHead}
         onClick={() => { if (hasEntries) setOpen(!open) }}
-        aria-expanded={open}
+        aria-expanded={hasEntries ? open : undefined}
         aria-label={t('work.turnMeta').replace('{n}', String(turn.turn)).replace('{time}', windowText(turn.startAt, turn.endAt, t))}
       >
-        <ChevronIcon open={open} />
-        <span style={{ flex: 'none', fontWeight: 500 }}>
-          {t('work.turn').replace('{n}', String(turn.turn))}
+        {hasEntries ? <ChevronIcon open={open} /> : <span style={{ width: 14, flex: 'none' }} aria-hidden="true" />}
+        <span style={css.recordsTurnTitle}>{t('work.turn').replace('{n}', String(turn.turn))}</span>
+        <span style={css.recordsTurnWindow}>{windowText(turn.startAt, turn.endAt, t)}</span>
+        <span style={css.recordsTurnCounts}>
+          {turn.internal.length > 0 && (
+            <span style={css.workBadgeInternal} title={t('work.group.internal')}>
+              <span style={css.workBadgeDotInternal} aria-hidden="true" />
+              {t('work.group.internal')} {turn.internal.length}
+            </span>
+          )}
+          {turn.external.length > 0 && (
+            <span style={css.workBadgeExternal} title={t('work.group.external')}>
+              <span style={css.workBadgeDotExternal} aria-hidden="true" />
+              {t('work.group.external')} {turn.external.length}
+            </span>
+          )}
         </span>
-        <span style={turn.endAt === null ? css.workRunningBadge : css.workTimeBadge}>
-          {turn.endAt === null
-            ? `${t('work.running')} · ${t('work.durationShort').replace('{n}', String(durationMinutes(turn.startAt, null, Date.now())))}`
-            : windowText(turn.startAt, turn.endAt, t)}
-        </span>
-        {!turn.hasWork && <span style={{ flex: 1 }} />}
-        {turn.hasWork && (
-          <span style={css.workBadges}>
-            {turn.internal.length > 0 && (
-              <span style={css.workBadgeInternal} title={t('work.group.internal')}>
-                <span style={css.workBadgeDotInternal} aria-hidden="true" />
-                {t('work.group.internal')} {turn.internal.length}
-              </span>
-            )}
-            {turn.external.length > 0 && (
-              <span style={css.workBadgeExternal} title={t('work.group.external')}>
-                <span style={css.workBadgeDotExternal} aria-hidden="true" />
-                {t('work.group.external')} {turn.external.length}
-              </span>
-            )}
-          </span>
-        )}
       </button>
-      {open && turn.hasWork && (
-        <div style={{ padding: '0 8px 8px 30px' }}>
+      {open && hasEntries && (
+        <div style={css.recordsTurnBody}>
           {turn.internal.length > 0 && (
             <>
               <div style={css.workGroupTitle}>
@@ -171,12 +160,36 @@ function TurnRow({ turn, onOpenDiff, t }: {
           )}
         </div>
       )}
-      {!hasEntries && (
-        <EmptyNote text={t('work.empty')} />
-      )}
     </div>
   )
 }
+
+/** 空闲 turn 聚合行:极简弱化,不占独立卡片。 */
+function IdleRow({ from, to, t }: { readonly from: number; readonly to: number; readonly t: (key: GitKey) => string }): JSX.Element {
+  const label = from === to
+    ? t('work.idleSingle').replace('{n}', String(from))
+    : t('work.idleRange').replace('{from}', String(from)).replace('{to}', String(to))
+  return <div style={css.recordsIdleRow}>{label}</div>
+}
+
+/** 时间线行:左轴(节点 + 连线) + 内容。 */
+function TimelineRow({ children, active, isLast }: {
+  readonly children: JSX.Element | JSX.Element[]
+  readonly active: boolean
+  readonly isLast: boolean
+}): JSX.Element {
+  return (
+    <div style={css.recordsTimelineRow}>
+      <span style={css.recordsTimelineRail} aria-hidden="true">
+        <span style={active ? css.recordsTimelineDot : css.recordsTimelineDotIdle} />
+        {!isLast && <span style={active ? css.recordsTimelineLineActive : css.recordsTimelineLine} />}
+      </span>
+      {children}
+    </div>
+  )
+}
+
+// ── 主体 ──────────────────────────────────────────────────────────────────
 
 /** Records 面板主体(数据受控:由 GitPill 下发)。 */
 export function RecordsTab({ records, t, onOpenDiff }: RecordsTabProps): JSX.Element {
@@ -188,11 +201,55 @@ export function RecordsTab({ records, t, onOpenDiff }: RecordsTabProps): JSX.Ele
   if (records.length === 0 || !records.some((turn) => turn.hasWork)) {
     return <EmptyNote text={t('work.emptyDetails')} />
   }
+
+  const summary = summarizeWork(records)
+  const rows = buildTimelineRows(records)
+
   return (
-    <div>
-      {records.map((turn) => (
-        <TurnRow key={turn.turn} turn={turn} onOpenDiff={onOpenDiff} t={t} />
-      ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* 概览卡 */}
+      <div style={css.recordsSummary}>
+        <div style={css.recordsSummaryItem}>
+          <span style={css.recordsSummaryValue}>{summary.turns}</span>
+          <span style={css.recordsSummaryLabel}>{t('work.summaryTurns')}</span>
+        </div>
+        <div style={css.recordsSummaryItem}>
+          <span style={css.recordsSummaryValue}>
+            <span style={css.recordsSummaryDotInternal} aria-hidden="true" />
+            {summary.internal}
+          </span>
+          <span style={css.recordsSummaryLabel}>{t('work.summaryInternal')}</span>
+        </div>
+        <div style={css.recordsSummaryItem}>
+          <span style={css.recordsSummaryValue}>
+            <span style={css.recordsSummaryDotExternal} aria-hidden="true" />
+            {summary.external}
+          </span>
+          <span style={css.recordsSummaryLabel}>{t('work.summaryExternal')}</span>
+        </div>
+        <div style={css.recordsSummaryItem}>
+          <span style={css.recordsSummaryValue}>
+            <span style={css.recordsSummaryDotDirty} aria-hidden="true" />
+            {summary.dirty}
+          </span>
+          <span style={css.recordsSummaryLabel}>{t('work.summaryDirty')}</span>
+        </div>
+      </div>
+
+      {/* 时间线 */}
+      <div style={css.recordsTimeline}>
+        {rows.map((row, index) => (
+          <TimelineRow
+            key={row.kind === 'turn' ? `t-${row.turn.turn}` : `i-${row.from}-${row.to}`}
+            active={row.kind === 'turn'}
+            isLast={index === rows.length - 1}
+          >
+            {row.kind === 'turn'
+              ? <TurnCard turn={row.turn} onOpenDiff={onOpenDiff} t={t} />
+              : <IdleRow from={row.from} to={row.to} t={t} />}
+          </TimelineRow>
+        ))}
+      </div>
     </div>
   )
 }

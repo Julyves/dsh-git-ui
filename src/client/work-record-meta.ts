@@ -44,3 +44,63 @@ export function relativeTimeLabel(epochMs: number, t: (key: GitKey) => string, n
   if (seconds < 86_400) return fill('time.hoursAgo', Math.floor(seconds / 3600))
   return fill('time.daysAgo', Math.floor(seconds / 86_400))
 }
+
+// ── 记录中心概览与时间线行(纯派生,无 react 依赖) ──────────────────────────
+
+/** 概览统计(唯一路径去重:同一文件跨 turn 写入只计一次)。 */
+export interface WorkSummary {
+  readonly turns: number
+  readonly internal: number
+  readonly external: number
+  readonly dirty: number
+}
+
+export function summarizeWork(records: readonly TurnWorkRecord[]): WorkSummary {
+  const internalPaths = new Set<string>()
+  const externalPaths = new Set<string>()
+  const dirtyPaths = new Set<string>()
+  for (const turn of records) {
+    for (const entry of turn.internal) {
+      internalPaths.add(entry.path)
+      if (entry.state === 'dirty') dirtyPaths.add(entry.path)
+    }
+    for (const entry of turn.external) {
+      externalPaths.add(entry.path)
+      if (entry.state === 'dirty') dirtyPaths.add(entry.path)
+    }
+  }
+  return {
+    turns: records.filter((turn) => turn.hasWork).length,
+    internal: internalPaths.size,
+    external: externalPaths.size,
+    dirty: dirtyPaths.size,
+  }
+}
+
+/** 时间线行:有工作 turn 或连续空闲 turn 聚合。 */
+export type TimelineRow =
+  | { readonly kind: 'turn'; readonly turn: TurnWorkRecord }
+  | { readonly kind: 'idle'; readonly from: number; readonly to: number }
+
+/**
+ * 把 records(升序 turn)折叠为时间线行:连续 !hasWork 合并为一条 idle
+ * (不再独立占位);hasWork 保持独立 turn 行。输入为升序;乱序输入按
+ * turn 编号排序后折叠(防御)。
+ */
+export function buildTimelineRows(records: readonly TurnWorkRecord[]): readonly TimelineRow[] {
+  const sorted = [...records].sort((a, b) => a.turn - b.turn)
+  const rows: TimelineRow[] = []
+  for (const turn of sorted) {
+    if (turn.hasWork) {
+      rows.push({ kind: 'turn', turn })
+    } else {
+      const last = rows[rows.length - 1]
+      if (last !== undefined && last.kind === 'idle' && last.to === turn.turn - 1) {
+        rows[rows.length - 1] = { kind: 'idle', from: last.from, to: turn.turn }
+      } else {
+        rows.push({ kind: 'idle', from: turn.turn, to: turn.turn })
+      }
+    }
+  }
+  return rows
+}
