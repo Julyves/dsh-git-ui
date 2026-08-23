@@ -1,7 +1,8 @@
 /**
  * Records tab — 逐 turn 工作记录(git 中心)。
  *
- * 数据:host `turn-records` 查询(按轮询/操作后的快照刷新键拉取)。
+ * 数据:由 GitPill 统一拉取后下发(records prop)——本组件**不自行查询**,
+ * 避免每会话双查询风暴(RecordsTab 恒挂载于 GitCenter)。
  * 结构:turn 升序列表(turn 1 → now),每行收敛为
  * `Turn {n} · 时间段 · 本会话 +N · 外部 +M`;展开为两组条目。
  * 条目:状态 chip + 路径 + state 徽章(仍变更/已提交/已还原);
@@ -10,9 +11,7 @@
 import { useState } from 'react'
 import type { JSX } from 'react'
 import type { GitSnapshot, TurnWorkRecord, WorkEntry } from '../host/types.ts'
-import type { GitQueryOutcome } from './controller.ts'
 import type { GitKey } from './locales.ts'
-import { useTurnRecords } from './use-turn-records.ts'
 import { chipLetter } from './pill-segments.tsx'
 import { ChevronIcon, fileIconForPath, FolderIcon } from './icons.tsx'
 import { splitChangePath } from './file-tree.ts'
@@ -20,7 +19,8 @@ import * as css from './styles.ts'
 
 export interface RecordsTabProps {
   readonly snapshot: GitSnapshot
-  readonly query: (query: { readonly kind: 'turn-records' }) => Promise<GitQueryOutcome>
+  /** turn 工作记录(GitPill 下发);null = 未就绪/未开启。 */
+  readonly records: readonly TurnWorkRecord[] | null
   readonly t: (key: GitKey) => string
   /** 打开的变更文件(仍变更条目)→ 交给 GitCenter 定位 Changes 标签。 */
   readonly onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
@@ -167,12 +167,10 @@ function TurnRow({ turn, onOpenDiff, t }: {
   )
 }
 
-/** Records 面板主体。 */
-export function RecordsTab({ snapshot, query, t, onOpenDiff }: RecordsTabProps): JSX.Element {
-  const { records, failed } = useTurnRecords(query, snapshot.checkedAt)
-  if (failed) return <EmptyNote text={t('work.loadFailed')} />
+/** Records 面板主体(数据受控:由 GitPill 下发)。 */
+export function RecordsTab({ records, t, onOpenDiff }: RecordsTabProps): JSX.Element {
   if (records === null) {
-    // 首次加载中(或查询未完成):保持空白,不闪加载态。
+    // 未就绪(设置关闭 / 查询失败 / 首次加载):保持空白,不闪加载态。
     return <div style={{ height: 8 }} />
   }
   if (records.length === 0 || !records.some((turn) => turn.hasWork)) {

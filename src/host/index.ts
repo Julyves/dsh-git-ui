@@ -73,6 +73,8 @@ export class GitStatusService extends TypertRemoteService {
   private readonly sessions: SessionsService | undefined
   private readonly deps: SnapshotDeps
   private readonly probeRoots = new Map<string, string | null>()
+  /** 最近一次成功快照缓存(turn-records 复用,避免重复跑 git 命令风暴)。 */
+  private readonly snapshotCache = new Map<string, GitSnapshot>()
 
   constructor(ctx: Context, config: unknown) {
     super(ctx, 'gitInfo')
@@ -122,11 +124,15 @@ export class GitStatusService extends TypertRemoteService {
     }
   }
 
-  /** 生命周期接线:会话离开内存时冲刷并释放观测状态。 */
+  /** 生命周期接线:会话离开内存时冲刷并释放观测状态与缓存。 */
   private wireLifecycle(ctx: Context): void {
     ctx.on('session/disposed', (session: unknown) => {
       const id = (session as { id?: unknown } | null)?.id
-      if (typeof id === 'string') this.records.disposeSession(id)
+      if (typeof id === 'string') {
+        this.records.disposeSession(id)
+        this.snapshotCache.delete(id)
+        this.probeRoots.delete(id)
+      }
     })
     ctx.on('dispose', () => {
       this.records.flushAll()
@@ -139,6 +145,21 @@ export class GitStatusService extends TypertRemoteService {
     this.records.observe(sessionId, snapshot.changes, snapshot.checkedAt, snapshot.truncated)
     await this.records.noteHead(sessionId, snapshot.head, snapshot.checkedAt, (from, to) =>
       this.commitsBetween(sessionId, from, to))
+  }
+
+  /** 记录最近成功快照(turn-records 复用;只保留内存,dispose 随会话清理)。 */
+  private cacheSnapshot(sessionId: string, snapshot: GitSnapshot): void {
+    this.snapshotCache.set(sessionId, snapshot)
+  }
+
+  /**
+   * turn-records 的快照源:优先复用最近一次成功快照(轮询/操作已随路跟踪);
+   * 冷启动无缓存时才跑一次完整 snapshot。
+   */
+  private snapshotForRecords(sessionId: string, signal?: AbortSignal): Promise<GitSnapshotResult> {
+    const cached = this.snapshotCache.get(sessionId)
+    if (cached !== undefined) return Promise.resolve({ ok: true, value: cached })
+    return this.snapshotWithTrack({ sessionId }, signal)
   }
 
   /** HEAD 前移 → 提交路径集(git log old..new --name-status -z;失败返回空)。 */
@@ -219,7 +240,7 @@ export class GitStatusService extends TypertRemoteService {
         const session = this.sessions?.get(id)
         return session === undefined ? undefined : sliceEvents(session)
       },
-      snapshot: (id, sig) => this.snapshotWithTrack({ sessionId: id }, sig),
+      snapshot: (id, sig) => this.snapshotForRecords(id, sig),
       presenter: this.presenter,
       mtimes: (snapshot) => this.mtimesFor(snapshot),
       subagentWrites: (id, root) => Promise.resolve(
@@ -228,13 +249,18 @@ export class GitStatusService extends TypertRemoteService {
       probe: (id) => this.probeFor(id),
       now: () => Date.now(),
     }
-    return runTurnRecords(this.records, sources, sessionId, signal)
+    return runTurnRecords(this.records, sources, sessionId, signal).catch((error: unknown) => {
+      // 防御:编排层异常(理论不应发生)不得冒泡到 typert——归一为 git-error。
+      const message = error instanceof Error ? error.message : String(error)
+      return { ok: false, error: { code: 'git-error', message: `turn-records pipeline failed: ${message}` } }
+    })
   }
 
-  /** snapshot + 随路观测跟踪(端点与 turn-records 共用)。 */
+  /** snapshot + 随路观测跟踪(端点与 turn-records 共用);成功结果入缓存。 */
   private async snapshotWithTrack(request: GitSnapshotRequest, signal?: AbortSignal): Promise<GitSnapshotResult> {
     const result = await this.endpoints.snapshot(request, signal)
     if (result.ok) {
+      this.cacheSnapshot(request.sessionId, result.value)
       await this.track(request.sessionId, result.value)
     }
     return result

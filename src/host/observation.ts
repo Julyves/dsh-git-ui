@@ -60,7 +60,9 @@ export class ObservationLog {
    * 每轮 snapshot 后更新。`changes` 为当前 git 变更列表,
    * `unwindNow` 用于本轮变更列表被截断(truncated)时避免误判消失。
    */
-  update(changes: readonly GitChange[], now: number, truncated = false): void {
+  /** 变更是否为空(首个快照触发但未曾变化)。 *新增返回:观测集合是否有实际变化(供调用方决定是否落盘)。*/
+  update(changes: readonly GitChange[], now: number, truncated = false): boolean {
+    let changed = false
     const present = new Set<string>()
     for (const change of changes) {
       present.add(change.path)
@@ -73,17 +75,27 @@ export class ObservationLog {
           lastSeenAt: null,
           committedAt: null,
         })
-      } else {
+        changed = true
+      } else if (existing.status !== change.status) {
         this.map.set(change.path, { ...existing, status: change.status, lastSeenAt: null })
+        changed = true
+      } else {
+        // 无状态变化:lastSeenAt 保持 null(仍在场)即可,不触发落盘。
+        if (existing.lastSeenAt !== null) {
+          this.map.set(change.path, { ...existing, lastSeenAt: null })
+          changed = true
+        }
       }
     }
-    if (truncated) return // 截断时不判定消失,避免误标
+    if (truncated) return changed // 截断时不判定消失
     for (const [path, observation] of this.map) {
       if (!present.has(path) && observation.lastSeenAt === null) {
         this.map.set(path, { ...observation, lastSeenAt: now })
+        changed = true
       }
     }
     this.prune()
+    return changed
   }
 
   /** HEAD 前移检测到提交:对应路径标注 committedAt(未观测的路径忽略)。 */

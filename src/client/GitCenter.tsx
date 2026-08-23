@@ -19,7 +19,7 @@ import type { CSSProperties, JSX, MouseEvent as ReactMouseEvent } from 'react'
 import { useUI } from '../contracts/ui-context.tsx'
 import type {
   GitAction, GitActionResult, GitBranch, GitChange, GitFileStat,
-  GitQueryRequest, GitSnapshot,
+  GitQueryRequest, GitSnapshot, TurnWorkRecord,
 } from '../host/types.ts'
 import type { GraphCommit, GitRef } from '../host/types.ts'
 import type { GitQueryOutcome } from './controller.ts'
@@ -53,6 +53,8 @@ export interface GitCenterProps {
   readonly t: (key: GitKey) => string
   /** 打开定位：从 pill 点击变更文件而来——切到 changes 标签并打开该文件对照。 */
   readonly openRequest?: { readonly path: string; readonly base: 'worktree' | 'staged' } | null
+  /** turn 工作记录(由 GitPill 统一拉取并下发;null = 未就绪/未开启)。 */
+  readonly records?: readonly TurnWorkRecord[] | null
 }
 
 /** Tab 键：设置 Tab 与功能 Tab 并列（信息架构：工作区 + 偏好区）。 */
@@ -90,7 +92,7 @@ function timeAgo(iso: string, now: number, t: (key: GitKey) => string): string {
  * every successful operation re-renders this component with fresh state.
  */
 export function GitCenter({
-  open, onClose, initialTab = 'changes', snapshot, run, query, t, openRequest = null,
+  open, onClose, initialTab = 'changes', snapshot, run, query, t, openRequest = null, records = null,
 }: GitCenterProps): JSX.Element | null {
   const { Modal, Toast } = useUI()
   const [tab, setTab] = useState<TabKey>(initialTab)
@@ -228,10 +230,7 @@ export function GitCenter({
             aria-labelledby="dsh-git-ui-tab-records"
             style={tab === 'records' ? { display: 'contents' } : { display: 'none' }}
           >
-            <RecordsTab
-              snapshot={snapshot}
-              query={(q) => query(q)}
-              t={t}
+            <RecordsTab snapshot={snapshot} records={records} t={t}
               onOpenDiff={(path, base) => {
                 setRecordOpenRequest({ path, base })
                 setTab('changes')

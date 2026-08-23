@@ -743,6 +743,7 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
         query={query}
         t={t}
         openRequest={centerRequest}
+        records={records}
       />
     </span>
   )

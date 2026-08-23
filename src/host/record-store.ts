@@ -74,11 +74,11 @@ export class RecordStore {
     this.require(sessionId).log.append(events, fromSeq)
   }
 
-  /** 观测更新(snapshot 后)。 */
+  /** 观测更新(snapshot 后)。仅在观测实际变化时安排落盘(避免写放大)。 */
   observe(sessionId: string, changes: readonly (import('./types.ts').GitChange)[], now: number, truncated = false): void {
     const state = this.require(sessionId)
-    state.observations.update(changes, now, truncated)
-    this.scheduleFlush(sessionId, state)
+    const changed = state.observations.update(changes, now, truncated)
+    if (changed) this.scheduleFlush(sessionId, state)
   }
 
   /** HEAD 前移:提交路径标注 committedAt。 */
