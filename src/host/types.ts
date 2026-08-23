@@ -3,6 +3,7 @@
  * the client half mirrors it with zod schemas (see src/client/remote.ts) and
  * `tests/remote.spec.ts` keeps the two in sync.
  */
+import type { GitUISettings } from '../contracts/settings.ts'
 
 /** Wire request: the browser never sends paths — only the session identity. */
 export interface GitSnapshotRequest {
@@ -271,3 +272,12 @@ export interface GitStorageWriteRequest {
 export type GitStorageWriteResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly error: { readonly code: 'invalid-file' | 'io-error'; readonly message: string } }
+
+// ── Preset (出厂预设获取) ──────────────────────────────────────────────────
+
+/** 预设请求(无参数——预设是插件级 config,不按会话区分)。 */
+export interface GitPresetRequest {}
+
+/** 预设结果:value = host config.defaultSettings 经迁移补全后的完整设置;
+ * null = 部署方未提供预设,客户端回退到代码内 DEFAULT_SETTINGS。 */
+export type GitPresetResult = { readonly ok: true; readonly value: GitUISettings | null }

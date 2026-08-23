@@ -12,3 +12,11 @@
         maxStatusBytes: 4194304
         maxChanges: 500
         defaultRefreshIntervalMs: 30000
+        # 出厂预设(可选):部署方可在 profile 的 cordis.patch.yml 覆盖此字段,
+        # 定制"安装即用"的默认设置;用户未自定义 settings.json 时使用此预设,
+        # 「恢复预设」按钮也恢复到此值。缺省时回退到代码内 DEFAULT_SETTINGS(标准档)。
+        # 结构与 settings.json 的 settings 字段一致(pill / popup / diff)。
+        # defaultSettings:
+        #   pill: { dot: true, branch: true, counts: { staged: true, modified: true, untracked: true }, sync: true, workRecord: true }
+        #   popup: { rootPath: true, statusBar: true, branchSwitcher: true, branchCreate: true, recentCommits: 3, changesList: true }
+        #   diff: { fontSize: 12, syntaxHighlight: true, foldContext: true }

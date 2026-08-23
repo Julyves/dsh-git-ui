@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GitController, type GitRemoteEnvelope, type GitRemoteLike } from '../../src/client/controller.ts'
-import type { GitActionResult, GitQueryResponse, GitSnapshot, GitSnapshotResult, GitStorageReadResult, GitStorageWriteResult } from '../../src/host/types.ts'
+import type { GitActionResult, GitQueryResponse, GitSnapshot, GitSnapshotResult, GitStorageReadResult, GitStorageWriteResult, GitPresetResult } from '../../src/host/types.ts'
 
 /** Business-result helpers wrapped in the RPC envelope the gateway returns. */
 const ok = (value: GitSnapshotResult): GitRemoteEnvelope<GitSnapshotResult> => ({ ok: true, value })
@@ -60,6 +60,10 @@ class FakeRemote implements GitRemoteLike {
 
   storageWrite(): Promise<GitRemoteEnvelope<GitStorageWriteResult>> {
     return Promise.resolve({ ok: true, value: { ok: true } })
+  }
+
+  getPreset(): Promise<GitRemoteEnvelope<GitPresetResult>> {
+    return Promise.resolve({ ok: true, value: { ok: true, value: null } })
   }
 }
 

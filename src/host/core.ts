@@ -19,6 +19,12 @@ export interface GitStatusConfig {
    * 插件数据存放于 `<home>/plugin-data/dsh-git-ui/`。
    */
   readonly dshHome?: string
+  /**
+   * 出厂预设设置(可选;来自 cordis.patch.yml config.defaultSettings)。
+   * 缺省时 getPreset 返回 null,客户端回退到代码内 DEFAULT_SETTINGS。
+   * 结构性透传(不校验)——wire 边界(客户端 zod)做最终校验。
+   */
+  readonly defaultSettings?: unknown
 }
 
 /** Session identity lookup: live first, persisted fallback. */
@@ -73,6 +79,9 @@ export function normalizeConfig(raw: unknown): GitStatusConfig {
     defaultRefreshIntervalMs: numberOr('defaultRefreshIntervalMs', DEFAULT_CONFIG.defaultRefreshIntervalMs),
     ...(typeof value.dshHome === 'string' && value.dshHome !== ''
       ? { dshHome: value.dshHome }
+      : {}),
+    ...(typeof value.defaultSettings === 'object' && value.defaultSettings !== null
+      ? { defaultSettings: value.defaultSettings }
       : {}),
   }
 }

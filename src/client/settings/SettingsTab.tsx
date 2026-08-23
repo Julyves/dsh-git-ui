@@ -14,7 +14,7 @@
 import { useEffect, useState } from 'react'
 import type { JSX } from 'react'
 import {
-  DEFAULT_SETTINGS, MAX_DIFF_FONT_SIZE, MAX_RECENT_COMMITS, MIN_DIFF_FONT_SIZE, PRESETS,
+  MAX_DIFF_FONT_SIZE, MAX_RECENT_COMMITS, MIN_DIFF_FONT_SIZE, PRESETS,
   applyPreset, patchDiff, patchPill, patchPopup, presetOf, settingsEqualAll,
   type DiffPatch, type GitUISettings, type PillPatch, type PopupPatch, type PresetId,
 } from '../../contracts/settings.ts'
@@ -289,9 +289,9 @@ export function SettingsTab({
           type="button"
           className="dsh-git-ui__refresh"
           style={css.settingsResetButton}
-          disabled={settingsEqualAll(settings, DEFAULT_SETTINGS)}
+          disabled={settingsEqualAll(settings, settingsStore.getPreset())}
           onClick={() => {
-            settingsStore.setSettings(DEFAULT_SETTINGS)
+            settingsStore.resetToPreset()
             notify(t('settings.reset.done'))
           }}
         >

@@ -9,6 +9,7 @@
  */
 import { z } from 'zod'
 import type { RemoteContribution } from '../contracts/client-platform.ts'
+import { gitUISettingsSchema } from './settings/schema.ts'
 
 export const gitCommitSchema = z.object({
   hash: z.string(),
@@ -199,6 +200,15 @@ export const gitStorageWriteResultSchema = z.discriminatedUnion('ok', [
   z.object({ ok: z.literal(false), error: z.object({ code: z.enum(['invalid-file', 'io-error']), message: z.string() }) }),
 ])
 
+// ── Preset（出厂预设获取;镜像 host/types.ts GitPresetRequest/Result） ──────
+
+export const gitPresetRequestSchema = z.object({})
+
+export const gitPresetResultSchema = z.object({
+  ok: z.literal(true),
+  value: gitUISettingsSchema.nullable(),
+})
+
 /** The contribution mounted into `ctx.remote` by the client plugin body. */
 export const gitInfoRemote: RemoteContribution = {
   package: 'dsh-git-ui',
@@ -327,6 +337,30 @@ export const gitInfoRemote: RemoteContribution = {
         mode: 'strict',
         typeSymbol: 'dsh-git-ui/types#GitStorageWriteResult',
         schema: gitStorageWriteResultSchema,
+      },
+    },
+    {
+      id: 'dsh-git-ui#gitInfo/getPreset',
+      service: 'gitInfo',
+      namespace: 'gitInfo',
+      method: 'getPreset',
+      invocation: { kind: 'direct' },
+      parameters: [
+        {
+          name: 'request',
+          wire: 'request',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-git-ui/types#GitPresetRequest',
+            schema: gitPresetRequestSchema,
+          },
+        },
+      ],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-git-ui/types#GitPresetResult',
+        schema: gitPresetResultSchema,
       },
     },
   ],

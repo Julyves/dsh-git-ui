@@ -14,7 +14,7 @@
  */
 import {
   DEFAULT_SETTINGS, SETTINGS_SCHEMA_VERSION, SETTINGS_STORAGE_KEY,
-  migrateSettings, type GitUISettings, type SettingsPersistence, type SettingsStoreLike, type SettingsStorageLike,
+  migrateSettings, type GitUISettings, type SettingsPersistence, type SettingsPresetSource, type SettingsStoreLike, type SettingsStorageLike,
 } from '../../contracts/settings.ts'
 import type { GitRemoteLike } from '../../contracts/client-platform.ts'
 import { settingsEnvelopeSchema } from './schema.ts'
@@ -72,6 +72,10 @@ class SettingsStore implements SettingsStoreLike {
   private loadPromise: Promise<void> | null = null
   /** 当前持久化通道（initialize 后有效）。 */
   private persistence: SettingsPersistence | null = null
+  /** 预设源(host config.defaultSettings;initialize 注入)。 */
+  private presetSource: SettingsPresetSource | null = null
+  /** 当前已知的出厂预设(init 时从 host 加载;未加载前为 DEFAULT_SETTINGS)。 */
+  private preset: GitUISettings = DEFAULT_SETTINGS
   private writeTimer: ReturnType<typeof setTimeout> | undefined
   /** 存在未落盘变更。 */
   private dirty = false
@@ -102,11 +106,20 @@ class SettingsStore implements SettingsStoreLike {
     return () => { this.listeners.delete(listener) }
   }
 
-  initialize(persistence: SettingsPersistence): Promise<void> {
+  initialize(persistence: SettingsPersistence, presetSource?: SettingsPresetSource): Promise<void> {
     if (this.loadPromise !== null) return this.loadPromise
     this.persistence = persistence
+    this.presetSource = presetSource ?? null
     this.loadPromise = this.loadFrom(persistence)
     return this.loadPromise
+  }
+
+  getPreset(): GitUISettings {
+    return this.preset
+  }
+
+  resetToPreset(): void {
+    this.setSettings(this.preset)
   }
 
   flush(): Promise<void> {
@@ -117,16 +130,31 @@ class SettingsStore implements SettingsStoreLike {
     return this.persistNow()
   }
 
-  /** 初始化加载：host 优先；缺失时迁移旧 localStorage；加载不覆盖用户已做的修改。 */
+  /** 初始化加载：host settings.json 优先;缺失时从预设源(host config.defaultSettings)
+   *  加载;再缺失时迁移旧 localStorage;加载不覆盖用户已做的修改。 */
   private async loadFrom(persistence: SettingsPersistence): Promise<void> {
     let loaded: GitUISettings | null = null
+    // 预设源一次性加载(供后续 getPreset/resetToPreset 复用,避免重复 RPC)。
+    let presetFromHost: GitUISettings | null = null
+    if (this.presetSource !== null) {
+      try {
+        presetFromHost = await this.presetSource.getPreset()
+      } catch {
+        // 预设源不可达:保持 DEFAULT_SETTINGS。
+      }
+    }
+    this.preset = presetFromHost ?? DEFAULT_SETTINGS
     try {
       const raw = await persistence.read()
       if (raw !== null) loaded = parseSettings(raw)
     } catch {
       // 读取失败（RPC/网关不可达等）：保持当前内存态（默认或已迁移值）。
     }
-    // host 无数据 → 尝试从 v1 localStorage 迁移（不覆盖已加载值）。
+    // host 无 settings.json → 用预设源(已缓存)。
+    if (loaded === null && presetFromHost !== null) {
+      loaded = presetFromHost
+    }
+    // 预设也缺失 → 尝试从 v1 localStorage 迁移（不覆盖已加载值）。
     if (loaded === null && this.legacy !== null) {
       const legacy = this.legacy.read()
       if (legacy !== null) loaded = parseSettings(legacy)
@@ -203,6 +231,21 @@ export function hostPersistence(remote: GitRemoteLike): SettingsPersistence {
       const envelope = await remote.storageWrite({ file: 'settings.json', data: raw })
       if (!envelope.ok) throw new Error('settings persist failed')
       if (!envelope.value.ok) throw new Error(`settings persist failed: ${envelope.value.error.message}`)
+    },
+  }
+}
+
+/**
+ * 把 host RPC 的 gitInfo 服务适配为预设源。
+ * 双层信封解包:外层传输(transport ok/error),内层 GitPresetResult(ok/value)。
+ */
+export function createPresetSource(remote: GitRemoteLike): SettingsPresetSource {
+  return {
+    async getPreset() {
+      const envelope = await remote.getPreset({})
+      if (!envelope.ok) return null
+      const inner = envelope.value
+      return inner.ok ? inner.value : null
     },
   }
 }

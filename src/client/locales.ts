@@ -194,8 +194,8 @@ export const zh = {
   'settings.recentCommits.none': '隐藏',
   'settings.changesList': '变更文件列表',
   'settings.changesList.desc': '弹窗内变更文件与行内暂存 / 丢弃快捷操作',
-  'settings.reset': '重置为默认',
-  'settings.reset.done': '已恢复默认设置',
+  'settings.reset': '恢复预设',
+  'settings.reset.done': '已恢复预设配置',
 } satisfies Record<string, string>
 
 export type GitKey = keyof typeof zh
@@ -394,6 +394,6 @@ export const en: Record<GitKey, string> = {
   'settings.recentCommits.none': 'Hidden',
   'settings.changesList': 'Changed files',
   'settings.changesList.desc': 'Changed files with inline stage / discard actions',
-  'settings.reset': 'Reset to defaults',
-  'settings.reset.done': 'Restored default settings',
+  'settings.reset': 'Restore preset',
+  'settings.reset.done': 'Restored preset settings',
 }

@@ -21,6 +21,7 @@ import { createGitRunner, type SubprocessLike } from './git.ts'
 import { normalizeConfig, resolveWorkspace, runCommand, type GitStatusConfig, type SnapshotDeps } from './core.ts'
 import { createPluginDataStore, resolvePluginDataRoot, type PluginDataFs } from './plugin-data.ts'
 import { createHostEndpoints, type HostEndpoints } from '../contracts/host-endpoints.ts'
+import { migrateSettings, DEFAULT_SETTINGS, type GitUISettings, type PopupSettings } from '../contracts/settings.ts'
 import { RecordStore, type CommitProbe } from './record-store.ts'
 import { runTurnRecords, type TurnRecordSources } from './turn-records.ts'
 import { parseNameStatusOutput } from './parser.ts'
@@ -29,10 +30,10 @@ import { sliceEvents, type SessionLike } from '../adapters/dsh/session-log.ts'
 import { createToolPresenter, type ToolRegistryLike } from '../adapters/dsh/tools-presenter.ts'
 import { collectSubagentWrites, type SessionsLike as SubagentSessionsLike } from '../adapters/dsh/subagent-adapter.ts'
 import { sessionStorageKey } from './obs-file.ts'
-import type { GitActionRequest, GitActionResult, GitQueryRequest, GitQueryResponse, GitSnapshot, GitSnapshotRequest, GitSnapshotResult, GitStorageReadRequest, GitStorageReadResult, GitStorageWriteRequest, GitStorageWriteResult } from './types.ts'
+import type { GitActionRequest, GitActionResult, GitQueryRequest, GitQueryResponse, GitSnapshot, GitSnapshotRequest, GitSnapshotResult, GitStorageReadRequest, GitStorageReadResult, GitStorageWriteRequest, GitStorageWriteResult, GitPresetRequest, GitPresetResult } from './types.ts'
 import type { MtimeSource } from './record-assembly.ts'
 
-export type { GitSnapshot, GitSnapshotResult, GitSnapshotFailure, GitSnapshotRequest, GitCommit, GitChange, GitAction, GitActionResult, GitActionRequest, GitQuery, GitQueryResult, GitQueryRequest, GitQueryResponse, GitBranch, GitFileStat, GitRef, GitStorageReadRequest, GitStorageReadResult, GitStorageWriteRequest, GitStorageWriteResult, TurnWorkRecord, WorkEntry, WorkEntryState } from './types.ts'
+export type { GitSnapshot, GitSnapshotResult, GitSnapshotFailure, GitSnapshotRequest, GitCommit, GitChange, GitAction, GitActionResult, GitActionRequest, GitQuery, GitQueryResult, GitQueryRequest, GitQueryResponse, GitBranch, GitFileStat, GitRef, GitStorageReadRequest, GitStorageReadResult, GitStorageWriteRequest, GitStorageWriteResult, GitPresetRequest, GitPresetResult, TurnWorkRecord, WorkEntry, WorkEntryState } from './types.ts'
 export { normalizeConfig, DEFAULT_CONFIG } from './core.ts'
 export { parseStatusOutput, parseLogOutput, parseBranchOutput, parseNameStatusOutput } from './parser.ts'
 export { isSafePath, isValidBranchName, runAction } from './actions.ts'
@@ -77,6 +78,8 @@ export class GitStatusService extends TypertRemoteService {
   private readonly presenter: ReturnType<typeof createToolPresenter>
   private readonly sessions: SessionsService | undefined
   private readonly deps: SnapshotDeps
+  /** 规范化后的插件 config(getPreset 读取 defaultSettings)。 */
+  private readonly normalizedConfig: GitStatusConfig
   private readonly probeRoots = new Map<string, string | null>()
   /** 最近一次成功快照缓存(turn-records 复用,避免重复跑 git 命令风暴)。 */
   private readonly snapshotCache = new Map<string, GitSnapshot>()
@@ -85,16 +88,16 @@ export class GitStatusService extends TypertRemoteService {
 
   constructor(ctx: Context, config: unknown) {
     super(ctx, 'gitInfo')
-    const normalizedConfig = normalizeConfig(config)
-    this.deps = this.buildDeps(ctx, normalizedConfig)
+    this.normalizedConfig = normalizeConfig(config)
+    this.deps = this.buildDeps(ctx, this.normalizedConfig)
     this.sessions = ctx.get<SessionsService>('sessions')
     this.storage = createPluginDataStore(pluginDataFs(), {
-      root: resolvePluginDataRoot(normalizedConfig.dshHome),
+      root: resolvePluginDataRoot(this.normalizedConfig.dshHome),
     })
     // 平台写意图解析面:tools 服务为可选(缺失 → args 目录兜底,见 write-paths.ts)。
     this.presenter = createToolPresenter(ctx.get<ToolRegistryLike>('tools'))
     this.records = new RecordStore((sessionId) => this.observationPersistence(sessionId))
-    this.endpoints = createHostEndpoints(this.deps, normalizedConfig, {
+    this.endpoints = createHostEndpoints(this.deps, this.normalizedConfig, {
       run: (sessionId, signal) => this.runTurnRecords(sessionId, signal),
     })
     this.wireLifecycle(ctx)
@@ -420,6 +423,34 @@ export class GitStatusService extends TypertRemoteService {
   @Remote('storageWrite')
   async storageWrite(request: GitStorageWriteRequest): Promise<GitStorageWriteResult> {
     return this.storage.write(request)
+  }
+
+  /**
+   * 出厂预设获取:返回 config.defaultSettings(经 migrateSettings 补全)或 null。
+   * 客户端在 settings.json 缺失时调用此方法作为"出厂值"——首次安装即用
+   * 部署方预设(来自 cordis.patch.yml config.defaultSettings)。
+   * null = 部署方未提供预设,客户端回退到代码内 DEFAULT_SETTINGS。
+   */
+  @Remote('getPreset')
+  async getPreset(_request: GitPresetRequest): Promise<GitPresetResult> {
+    const raw = this.normalizedConfig.defaultSettings
+    if (raw === undefined || typeof raw !== 'object' || raw === null) {
+      return { ok: true, value: null }
+    }
+    const r = raw as Record<string, unknown>
+    try {
+      return {
+        ok: true,
+        value: migrateSettings({
+          pill: r.pill as Parameters<typeof migrateSettings>[0]['pill'],
+          popup: (r.popup as PopupSettings) ?? DEFAULT_SETTINGS.popup,
+          diff: r.diff as Parameters<typeof migrateSettings>[0]['diff'],
+        }),
+      }
+    } catch {
+      // 格式错误:回退 null,客户端用 DEFAULT_SETTINGS(wire 边界 zod 也会校验)
+      return { ok: true, value: null }
+    }
   }
 }
 

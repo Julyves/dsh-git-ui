@@ -14,7 +14,7 @@ import { activatePlugin, type PluginDependencies } from '../contracts/plugin-act
 import { GitController } from './controller.ts'
 import { gitInfoRemote } from './remote.ts'
 import { en, zh } from './locales.ts'
-import { hostPersistence, settingsStore } from './settings/store.ts'
+import { hostPersistence, createPresetSource, settingsStore } from './settings/store.ts'
 
 /**
  * Cordis 插件约定：声明需要的服务。
@@ -53,7 +53,7 @@ export async function apply(ctx: DshClientContext): Promise<void> {
   
   const remote = await activatePlugin(platform, deps, GitPillWithUI)
 
-  // 设置持久化初始化：host 磁盘（~/.dsh/plugin-data/dsh-git-ui/settings.json）
-  // 优先；缺失时从 v1 localStorage 迁移。失败静默保持内存默认。
-  void settingsStore.initialize(hostPersistence(remote)).catch(() => {})
+  // 设置持久化初始化：host 磁盘 settings.json 优先;缺失时从 host 预设
+  // (config.defaultSettings)加载;再缺失时迁移 v1 localStorage。失败静默保持内存默认。
+  void settingsStore.initialize(hostPersistence(remote), createPresetSource(remote)).catch(() => {})
 }

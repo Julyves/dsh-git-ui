@@ -359,7 +359,7 @@ export interface SettingsStorageLike {
   write(raw: string): void
 }
 
-/** 设置存储服务：业务层只依赖此接口（订阅 + 读取 + 覆盖 + 异步初始化）。 */
+/** 设置存储服务：业务层只依赖此接口（订阅 + 读取 + 覆盖 + 异步初始化 + 预设恢复）。 */
 export interface SettingsStoreLike {
   get(): GitUISettings
   /** 以一份完整设置覆盖当前状态（不可变对象）；持久化为去抖异步，失败静默降级内存态。 */
@@ -367,10 +367,21 @@ export interface SettingsStoreLike {
   /** 订阅变更；返回取消订阅函数。 */
   subscribe(listener: () => void): () => void
   /**
-   * 异步初始化：注入持久化通道，读取 → 校验 → 迁移 → 生效并通知订阅者。
+   * 异步初始化：注入持久化通道与可选预设源,读取 → 校验 → 迁移 → 生效并通知订阅者。
    * 幂等单飞：重复调用返回同一次加载。读取/解析失败静默保持当前内存态。
+   * 预设源(host config.defaultSettings)在 settings.json 缺失时作为出厂值。
    */
-  initialize(persistence: SettingsPersistence): Promise<void>
+  initialize(persistence: SettingsPersistence, presetSource?: SettingsPresetSource): Promise<void>
   /** 立即冲刷未落盘的变更（卸载 / 测试用）。 */
   flush(): Promise<void>
+  /** 当前已知的出厂预设值(初始化时从 host 加载;未加载前为 DEFAULT_SETTINGS)。 */
+  getPreset(): GitUISettings
+  /** 恢复到出厂预设(同步:预设已在 init 时缓存)。 */
+  resetToPreset(): void
+}
+
+/** 预设源:从 host 获取部署方配置的出厂预设(config.defaultSettings)。 */
+export interface SettingsPresetSource {
+  /** 返回预设设置;null = 部署方未提供,回退到代码 DEFAULT_SETTINGS。 */
+  getPreset(): Promise<GitUISettings | null>
 }
