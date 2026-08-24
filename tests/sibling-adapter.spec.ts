@@ -31,7 +31,7 @@ function sessionsOf(entries: Array<{ id: string; cwd?: string; meta?: Record<str
 const ROOT = '/repo'
 
 describe('collectSiblingWrites', () => {
-  it('collects same-cwd sibling session writes (post-seed work only)', () => {
+  it('collects same-cwd sibling session writes (post-seed work only)', async () => {
     const sessions = sessionsOf(
       [
         { id: 'self', cwd: ROOT },
@@ -41,11 +41,11 @@ describe('collectSiblingWrites', () => {
         sib: sessionWith(1, [[5, 'write', JSON.stringify({ file_path: 'sib.ts' })]]),
       },
     )
-    const writes = collectSiblingWrites('self', sessions, ROOT, undefined)
+    const writes = await collectSiblingWrites('self', sessions, ROOT, undefined)
     expect([...writes]).toEqual(['sib.ts'])
   })
 
-  it('excludes own subagent subtree (their writes are internal, not sibling)', () => {
+  it('excludes own subagent subtree (their writes are internal, not sibling)', async () => {
     const sessions = sessionsOf(
       [
         { id: 'self', cwd: ROOT },
@@ -59,11 +59,11 @@ describe('collectSiblingWrites', () => {
         sib: sessionWith(1, [[5, 'write', JSON.stringify({ file_path: 'sib.ts' })]]),
       },
     )
-    const writes = collectSiblingWrites('self', sessions, ROOT, undefined)
+    const writes = await collectSiblingWrites('self', sessions, ROOT, undefined)
     expect([...writes]).toEqual(['sib.ts'])
   })
 
-  it('skips sessions with a different or missing cwd (conservative)', () => {
+  it('skips sessions with a different or missing cwd (conservative)', async () => {
     const sessions = sessionsOf(
       [
         { id: 'self', cwd: ROOT },
@@ -75,16 +75,16 @@ describe('collectSiblingWrites', () => {
         nocwd: sessionWith(1, [[5, 'write', JSON.stringify({ file_path: 'y.ts' })]]),
       },
     )
-    expect(collectSiblingWrites('self', sessions, ROOT, undefined).size).toBe(0)
+    expect((await collectSiblingWrites('self', sessions, ROOT, undefined)).size).toBe(0)
   })
 
-  it('skips cold sessions and undefined sessions service', () => {
+  it('skips cold sessions and undefined sessions service', async () => {
     const cold = sessionsOf([{ id: 'self', cwd: ROOT }, { id: 'sib', cwd: ROOT }], {})
-    expect(collectSiblingWrites('self', cold, ROOT, undefined).size).toBe(0)
-    expect(collectSiblingWrites('self', undefined, ROOT, undefined).size).toBe(0)
+    expect((await collectSiblingWrites('self', cold, ROOT, undefined)).size).toBe(0)
+    expect((await collectSiblingWrites('self', undefined, ROOT, undefined)).size).toBe(0)
   })
 
-  it('drops out-of-repo and normalized-escaping paths', () => {
+  it('drops out-of-repo and normalized-escaping paths', async () => {
     const sessions = sessionsOf(
       [
         { id: 'self', cwd: ROOT },
@@ -98,7 +98,55 @@ describe('collectSiblingWrites', () => {
         ]),
       },
     )
-    const writes = collectSiblingWrites('self', sessions, ROOT, undefined)
+    const writes = await collectSiblingWrites('self', sessions, ROOT, undefined)
     expect([...writes]).toEqual(['ok.ts'])
+  })
+})
+
+describe('collectSiblingWrites — cwd 匹配(P3-6:realpath 归一 + 子目录)', () => {
+  it('matches a sibling whose cwd is a symlinked form of the workspace root', async () => {
+    const sessions = sessionsOf(
+      [
+        { id: 'self', cwd: '/real/repo' },
+        { id: 'sib', cwd: '/linked/repo' }, // 启动于符号链接路径
+      ],
+      {
+        sib: sessionWith(1, [[5, 'write', JSON.stringify({ file_path: 'sib.ts' })]]),
+      },
+    )
+    const writes = await collectSiblingWrites('self', sessions, '/real/repo', undefined, {
+      realpath: async (path) => (path === '/linked/repo' ? '/real/repo' : path),
+    })
+    expect([...writes]).toEqual(['sib.ts'])
+  })
+
+  it('includes a sibling whose cwd is a subdirectory of the workspace root', async () => {
+    const sessions = sessionsOf(
+      [
+        { id: 'self', cwd: '/repo' },
+        { id: 'subdir', cwd: '/repo/packages/app' },
+      ],
+      {
+        subdir: sessionWith(1, [[5, 'write', JSON.stringify({ file_path: 'pkg.ts' })]]),
+      },
+    )
+    const writes = await collectSiblingWrites('self', sessions, '/repo', undefined)
+    expect([...writes]).toEqual(['pkg.ts'])
+  })
+
+  it('realpath failure degrades to exact-match (conservative, old behavior)', async () => {
+    const sessions = sessionsOf(
+      [
+        { id: 'self', cwd: '/real/repo' },
+        { id: 'sib', cwd: '/linked/repo' },
+      ],
+      {
+        sib: sessionWith(1, [[5, 'write', JSON.stringify({ file_path: 'sib.ts' })]]),
+      },
+    )
+    const writes = await collectSiblingWrites('self', sessions, '/real/repo', undefined, {
+      realpath: async () => { throw new Error('ENOENT') },
+    })
+    expect(writes.size).toBe(0)
   })
 })

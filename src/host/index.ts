@@ -378,9 +378,11 @@ export class GitStatusService extends TypertRemoteService {
       subagentWrites: (id, root) => Promise.resolve(
         collectSubagentWrites(id, this.records.turns(id), this.sessions, root, this.presenter),
       ),
-      siblingWrites: (id, root) => Promise.resolve(
-        collectSiblingWrites(id, this.sessions, root, this.presenter),
-      ),
+      siblingWrites: (id, root) => collectSiblingWrites(id, this.sessions, root, this.presenter, {
+        // realpath 归一:兄弟 cwd(启动原始路径)与本工作区根(realpath)的
+        // 符号链接形态差异由它抹平(P3-6);失败由适配器保守回退。
+        realpath: (path) => realpath(path),
+      }),
       probe: (id) => this.probeFor(id),
       pathStates: (id) => this.trackedPathStates(id),
       ensurePathStates: async (id) => {
