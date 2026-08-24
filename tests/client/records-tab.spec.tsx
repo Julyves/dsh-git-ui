@@ -115,3 +115,34 @@ describe('RecordsTab — 任务叙事', () => {
     expect(html).toContain('修复登录超时')
   })
 })
+
+describe('RecordsTab — 时段批量暂存（B1 行动闭环）', () => {
+  it('execute 注入且存在仍变更条目时渲染「暂存 AI 变更 / 暂存全部」操作条', () => {
+    const records = [turn({
+      turn: 1,
+      internal: [entry('src/a.ts')],
+      sibling: [entry('gen/c.ts')],
+      external: [entry('docs/b.md')],
+    })]
+    const html = renderToStaticMarkup(
+      <RecordsTab records={records} t={t} onOpenDiff={() => {}} execute={async () => true} />,
+    )
+    expect(html).toContain(t('work.stage.ai'))
+    expect(html).toContain(t('work.stage.all'))
+  })
+
+  it('无 execute 注入时不渲染操作条（测试/降级形态一致）', () => {
+    const records = [turn({ turn: 1, internal: [entry('src/a.ts')] })]
+    const html = render(records)
+    expect(html).not.toContain(t('work.stage.ai'))
+  })
+
+  it('全部条目已提交（无 dirty）时不渲染操作条', () => {
+    const records = [turn({ turn: 1, internal: [entry('src/a.ts', 'committed')] })]
+    const html = renderToStaticMarkup(
+      <RecordsTab records={records} t={t} onOpenDiff={() => {}} execute={async () => true} />,
+    )
+    expect(html).not.toContain(t('work.stage.ai'))
+    expect(html).not.toContain(t('work.stage.all'))
+  })
+})

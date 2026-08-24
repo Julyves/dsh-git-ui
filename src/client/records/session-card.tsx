@@ -8,7 +8,7 @@ import type { CSSProperties, JSX } from 'react'
 import type { WorkEntry } from '../../host/types.ts'
 import type { GitKey } from '../locales.ts'
 import { workBadgeDotExternal, workBadgeDotInternal, workBadgeDotSibling, workBadgeExternal, workBadgeInternal, workBadgeSibling } from '../styles.ts'
-import { ChevronIcon } from '../icons.tsx'
+import { ChevronIcon, StageIcon } from '../icons.tsx'
 import { EntryRow } from './entry-row.tsx'
 import type { WorkSession } from './derive.ts'
 import * as css from './styles.ts'
@@ -23,6 +23,8 @@ export interface SessionCardProps {
   readonly onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
   /** 初始展开态（父组件默认展开最近时段）。 */
   readonly defaultOpen?: boolean
+  /** 批量暂存(仍变更路径;缺省 = 无操作条)。 */
+  readonly onStage?: (paths: readonly string[]) => void
 }
 
 /** HH:mm 钟面。 */
@@ -65,7 +67,7 @@ function EntryGroup({ title, dot, entries, t, onOpenDiff }: {
 }
 
 /** 一个时段卡片（可展开）。 */
-export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = false }: SessionCardProps): JSX.Element {
+export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = false, onStage }: SessionCardProps): JSX.Element {
   const [open, setOpen] = useState(defaultOpen)
   const [hover, setHover] = useState(false)
   const showInternal = filter === 'all' || filter === 'internal'
@@ -75,6 +77,15 @@ export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = fals
   const siblingEntries = showSibling ? session.sibling : []
   const externalEntries = showExternal ? session.external : []
   const hasEntries = internalEntries.length > 0 || siblingEntries.length > 0 || externalEntries.length > 0
+  /** 批量暂存目标:AI 组 = 本会话+其他会话的仍变更;全部 = 三组仍变更。 */
+  const dirtyPaths = (groups: 'ai' | 'all'): readonly string[] => {
+    const pick = (entries: readonly WorkEntry[]): readonly string[] =>
+      entries.filter((entry) => entry.state === 'dirty').map((entry) => entry.path)
+    const ai = [...pick(session.internal), ...pick(session.sibling)]
+    return groups === 'ai' ? ai : [...ai, ...pick(session.external)]
+  }
+  const aiDirty = onStage !== undefined && dirtyPaths('ai').length > 0
+  const allDirty = onStage !== undefined && dirtyPaths('all').length > 0
 
   const toggle = (): void => { if (hasEntries) setOpen(!open) }
 
@@ -146,6 +157,32 @@ export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = fals
               t={t}
               onOpenDiff={onOpenDiff}
             />
+            {(aiDirty || allDirty) && (
+              <div style={css.sessionActions}>
+                {aiDirty && (
+                  <button
+                    type="button"
+                    style={css.sessionActionButton}
+                    title={t('work.stage.aiHint')}
+                    onClick={() => onStage?.(dirtyPaths('ai'))}
+                  >
+                    <StageIcon />
+                    {t('work.stage.ai')}
+                  </button>
+                )}
+                {allDirty && (
+                  <button
+                    type="button"
+                    style={css.sessionActionButtonSecondary}
+                    title={t('work.stage.allHint')}
+                    onClick={() => onStage?.(dirtyPaths('all'))}
+                  >
+                    <StageIcon />
+                    {t('work.stage.all')}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

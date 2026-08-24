@@ -32,6 +32,8 @@ export interface RecordsTabProps {
   readonly onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
   /** 初始过滤（默认全部；测试与未来深度链接可注入）。 */
   readonly initialFilter?: RecordFilter
+  /** 批量暂存执行面(GitCenter 的 execute;缺省 = 无操作条,测试注入)。 */
+  readonly execute?: (action: import('../../host/types.ts').GitAction, successText: string) => Promise<boolean>
 }
 
 /** 空白占位（无记录 / 加载失败）：图标 + 文案。 */
@@ -61,8 +63,13 @@ const FILTERS: readonly { readonly key: RecordFilter; readonly label: GitKey }[]
  *   - 无任何时段 → 「还没有工作时段」；
  *   - 有时段但当前过滤下无条目 → 「当前过滤下没有条目，切换其他筛选」。
  */
-export function RecordsTab({ records, t, onOpenDiff, initialFilter = 'all' }: RecordsTabProps): JSX.Element {
+export function RecordsTab({ records, t, onOpenDiff, initialFilter = 'all', execute }: RecordsTabProps): JSX.Element {
   const [filter, setFilter] = useState<RecordFilter>(initialFilter)
+  /** 批量暂存:P3(只提交 AI 成果)的主出口——AI 组 = internal+sibling 的仍变更路径。 */
+  const stageOf = (paths: readonly string[]): void => {
+    if (execute === undefined || paths.length === 0) return
+    void execute({ kind: 'stage', paths: [...paths] }, t('work.stage.success'))
+  }
 
   if (records === null) {
     return <EmptyNote text={t('work.loadFailed')} t={t} />
@@ -119,6 +126,7 @@ export function RecordsTab({ records, t, onOpenDiff, initialFilter = 'all' }: Re
               t={t}
               onOpenDiff={onOpenDiff}
               defaultOpen={session.turn === latestTurn}
+              onStage={execute === undefined ? undefined : stageOf}
             />
           ))}
         </div>

@@ -240,6 +240,45 @@ export const sessionGroupDotExternal: CSSProperties = {
   background: 'var(--dsw-alias-label-tertiary)',
 }
 
+// ── 时段操作条（批量暂存） ─────────────────────────────────────────────────
+
+/** 展开区底部操作条：右对齐、与分组列表留出间距。 */
+export const sessionActions: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: 8,
+  marginTop: 8,
+  paddingTop: 8,
+  borderTop: '1px solid var(--dsw-alias-border-l2)',
+}
+
+/** 主操作（暂存 AI 变更）：品牌蓝描边按钮。 */
+export const sessionActionButton: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  border: 'none',
+  padding: '3px 10px',
+  borderRadius: 8,
+  fontFamily: 'inherit',
+  fontSize: 11,
+  lineHeight: '18px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  color: 'var(--dsw-alias-brand-blue-strong, var(--dsw-alias-label-primary))',
+  background: 'color-mix(in srgb, var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary)) 12%, transparent)',
+  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary)) 35%, transparent)',
+}
+
+/** 次操作（暂存全部）：中性弱化按钮。 */
+export const sessionActionButtonSecondary: CSSProperties = {
+  ...sessionActionButton,
+  fontWeight: 400,
+  color: 'var(--dsw-alias-label-secondary)',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+}
+
 // ── 条目行（4 元素：chip + 文件名 + 目录 + 状态徽章） ─────────────────────
 
 /** 条目行基座：复用 workRow 的 hover 语义，间距收紧。 */

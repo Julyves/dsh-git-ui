@@ -235,6 +235,7 @@ export function GitCenter({
                 setRecordOpenRequest({ path, base })
                 setTab('changes')
               }}
+              execute={execute}
             />
           </div>
           <div
