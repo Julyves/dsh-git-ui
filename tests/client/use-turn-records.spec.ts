@@ -4,7 +4,7 @@ import type { TurnWorkRecord } from '../../src/host/types.ts'
 
 function turn(overrides: Partial<TurnWorkRecord>): TurnWorkRecord {
   return {
-    turn: 1, startAt: 1000, endAt: 2000, hasWork: true, internal: [], sibling: [], external: [],
+    turn: 1, startAt: 1000, endAt: 2000, hasWork: true, narrative: null, internal: [], sibling: [], external: [],
     ...overrides,
   }
 }

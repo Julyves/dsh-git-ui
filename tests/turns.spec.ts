@@ -120,3 +120,54 @@ describe('TurnLog fold', () => {
     expect(log.foldedUpToSeq).toBe(4)
   })
 })
+function userMessage(seq: number, text: string, time: number): TurnEventSlice {
+  return { type: 'user/message', seq, time, data: { text } }
+}
+
+describe('TurnLog narrative (任务叙事)', () => {
+  it('captures the first user message after turn/start as the narrative', () => {
+    const log = new TurnLog()
+    const narrated = log.append([
+      turnStart(1, 1, 1000),
+      userMessage(2, '修复登录超时', 1050),
+      userMessage(3, '第二条不该覆盖', 1060),
+      toolCall(4, 1, 'c1', 'write', '{}', 1100),
+      turnEnd(5, 1, 2000),
+    ])
+    expect(log.turns[0]?.narrative).toBe('修复登录超时')
+    expect(narrated).toEqual([1])
+  })
+
+  it('clamps whitespace and truncates over-long text', () => {
+    const log = new TurnLog()
+    log.append([
+      turnStart(1, 1, 1000),
+      userMessage(2, `  多行\n\n文本   保留 单空格  ${'x'.repeat(120)}`, 1050),
+    ])
+    const narrative = log.turns[0]?.narrative ?? ''
+    expect(narrative).not.toContain('\n')
+    expect(narrative.endsWith('…')).toBe(true)
+    expect(narrative.length).toBeLessThanOrEqual(81)
+  })
+
+  it('ignores user messages before any turn/start (compaction leftovers)', () => {
+    const log = new TurnLog()
+    const narrated = log.append([userMessage(1, '孤儿消息', 900)])
+    expect(log.turns).toHaveLength(0)
+    expect(narrated).toEqual([])
+  })
+
+  it('restoreNarratives fills empty slots; fresh events still win regardless of ordering', () => {
+    const log = new TurnLog()
+    log.append([
+      turnStart(1, 1, 1000),
+      turnStart(2, 2, 3000),
+    ])
+    log.restoreNarratives([[1, '磁盘旧值'], [2, '磁盘旧值2']])
+    // 恢复先完成、事件后到:turn 2 的新鲜文本覆盖磁盘旧值(优先级契约)。
+    log.append([userMessage(3, '新捕获', 3100)])
+    expect(log.turns[0]?.narrative).toBe('磁盘旧值')
+    expect(log.turns[1]?.narrative).toBe('新捕获')
+    expect(log.narratives()).toEqual([[1, '磁盘旧值'], [2, '新捕获']])
+  })
+})

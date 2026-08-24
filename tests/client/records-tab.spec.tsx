@@ -17,7 +17,7 @@ const t = (key: keyof typeof zh): string => zh[key]
 /** 构造一个 turn（可覆盖）。 */
 function turn(overrides: Partial<TurnWorkRecord>): TurnWorkRecord {
   return {
-    turn: 1, startAt: 0, endAt: 1_000_000, hasWork: true, internal: [], sibling: [], external: [],
+    turn: 1, startAt: 0, endAt: 1_000_000, hasWork: true, narrative: null, internal: [], sibling: [], external: [],
     ...overrides,
   }
 }
@@ -105,5 +105,13 @@ describe('RecordsTab — 正常展示', () => {
     const html = render(records, 'sibling')
     expect(html).toContain('gen/c.ts')
     expect(html).not.toContain('src/a.ts')
+  })
+})
+
+describe('RecordsTab — 任务叙事', () => {
+  it('时段卡片头部渲染用户指令摘要(叙事优先于时间窗)', () => {
+    const records = [turn({ turn: 1, narrative: '修复登录超时', internal: [entry('src/a.ts')] })]
+    const html = render(records)
+    expect(html).toContain('修复登录超时')
   })
 })

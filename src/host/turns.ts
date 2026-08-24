@@ -24,6 +24,7 @@ export type TurnEventSlice =
   | { readonly type: 'tool/call'; readonly seq: number; readonly time: number; readonly data: { readonly turn: number; readonly step?: number; readonly callId: string; readonly name: string; readonly arguments: string } }
   | { readonly type: 'tool/result'; readonly seq: number; readonly time: number; readonly data: { readonly turn: number; readonly step?: number; readonly callId?: string; readonly meta?: unknown } }
   | { readonly type: 'session/end-seed'; readonly seq: number; readonly time: number; readonly data: Record<string, never> }
+  | { readonly type: 'user/message'; readonly seq: number; readonly time: number; readonly data: { readonly text: string } }
 
 /** 一条 turn 内的工具调用记录(写路径提取的输入)。 */
 export interface ToolCallRecord {
@@ -46,6 +47,8 @@ export interface FoldedTurn {
   readonly startAt: number
   /** turn/end 的 Unix 毫秒时间戳;null = 进行中。 */
   readonly endAt: number | null
+  /** 驱动该 turn 的用户指令摘要(首个 user/message;null = 无/未捕获)。 */
+  readonly narrative: string | null
   readonly toolCalls: readonly ToolCallRecord[]
 }
 
@@ -54,6 +57,9 @@ interface MutableTurn {
   turn: number
   startAt: number
   endAt: number | null
+  narrative: string | null
+  /** 叙事来源:true = 折叠器从事件新捕获(优先级最高,可覆盖恢复值)。 */
+  narrativeFresh: boolean
   toolCalls: ToolCallRecord[]
 }
 
@@ -66,6 +72,8 @@ export class TurnLog {
   private readonly list: MutableTurn[] = []
   private readonly index = new Map<number, MutableTurn>()
   private seq = 0
+  /** 最近一次 turn/start 的记录(叙事挂靠点:驱动该 turn 的用户指令)。 */
+  private openTurn: MutableTurn | null = null
 
   /** 已折叠的最大事件 seq(不含);新增事件从该值起处理。 */
   get foldedUpToSeq(): number {
@@ -79,8 +87,10 @@ export class TurnLog {
   /**
    * 处理一批新事件。`fromSeq` 可选:跳过该 seq 之前的事件
    * (子会话日志的 seed 边界过滤由调用方预先算好传参——见模块注释)。
+   * 返回本次新捕获叙事的 turn 号列表(持久化 dirty 判定用)。
    */
-  append(events: readonly TurnEventSlice[], fromSeq = 0): void {
+  append(events: readonly TurnEventSlice[], fromSeq = 0): readonly number[] {
+    const narrated: number[] = []
     for (const event of events) {
       if (event.seq < fromSeq || event.seq < this.seq) continue
       // seq 乱序(损坏/重复注入)时忽略并保持游标连续:seq = log.length 契约,
@@ -94,16 +104,31 @@ export class TurnLog {
             turn,
             startAt: event.time,
             endAt: null,
+            narrative: null,
+            narrativeFresh: false,
             toolCalls: [],
           }
           this.list.push(record)
           this.index.set(turn, record)
+          this.openTurn = record
           break
         }
         case 'turn/end': {
           const record = this.index.get(event.data.turn)
           if (record !== undefined && record.endAt === null) {
             record.endAt = event.time
+          }
+          break
+        }
+        case 'user/message': {
+          // 叙事:turn/start 后的首条用户指令(多条/批量时首条即标题);
+          // 事件已过 compaction 折叠或先于任何 turn/start → 无挂靠点,忽略。
+          // 新捕获可覆盖恢复值(narrativeFresh 优先)——恢复与折叠的完成
+          // 顺序不确定,磁盘旧值不得挡住仍在事件日志里的新鲜文本。
+          if (this.openTurn !== null && !this.openTurn.narrativeFresh) {
+            this.openTurn.narrative = clampNarrative(event.data.text)
+            this.openTurn.narrativeFresh = true
+            narrated.push(this.openTurn.turn)
           }
           break
         }
@@ -140,6 +165,27 @@ export class TurnLog {
           break
       }
     }
+    return narrated
+  }
+
+  /** 恢复持久化叙事(宿主重启后 compaction 已折叠旧 user/message 事件)。
+   * 仅填补未被折叠器捕获过的槽位——事件日志里的新鲜文本优先于磁盘旧值。 */
+  restoreNarratives(entries: ReadonlyArray<readonly [number, string]>): void {
+    for (const [turn, narrative] of entries) {
+      const record = this.index.get(turn)
+      if (record !== undefined && !record.narrativeFresh && record.narrative === null && narrative !== '') {
+        record.narrative = narrative
+      }
+    }
+  }
+
+  /** 全量导出叙事(落盘用)。 */
+  narratives(): ReadonlyArray<readonly [number, string]> {
+    const out: Array<readonly [number, string]> = []
+    for (const record of this.list) {
+      if (record.narrative !== null) out.push([record.turn, record.narrative])
+    }
+    return out
   }
 
   /**
@@ -161,4 +207,14 @@ function findCallIndex(calls: readonly ToolCallRecord[], callId: string): number
     if (calls[index]?.callId === callId) return index
   }
   return -1
+}
+
+/** 叙事长度上限(字符):标题用途,超长截断。 */
+export const NARRATIVE_MAX_CHARS = 80
+
+/** 整理为单行标题:折叠空白 + 截断(NARRATIVE_MAX_CHARS + 省略号)。 */
+function clampNarrative(text: string): string {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= NARRATIVE_MAX_CHARS) return normalized
+  return `${normalized.slice(0, NARRATIVE_MAX_CHARS)}…`
 }

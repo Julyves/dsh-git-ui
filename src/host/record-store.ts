@@ -17,7 +17,7 @@
  */
 
 import { ObservationLog, type ObservationPersistence } from './observation.ts'
-import { decodeObservations, encodeObservations } from './obs-file.ts'
+import { decodeNarratives, decodeObservations, encodeNarratives, encodeObservations } from './obs-file.ts'
 import { TurnLog, type FoldedTurn } from './turns.ts'
 import { assembleAll, type AssembleDeps, type TurnWorkRecord } from './record-assembly.ts'
 
@@ -37,6 +37,8 @@ interface SessionState {
   readonly log: TurnLog
   readonly observations: ObservationLog
   dirty: boolean
+  /** 叙事有新捕获未落盘(与观测 dirty 独立,各自按需写盘)。 */
+  narrDirty: boolean
   lastHead: string | null | undefined
 }
 
@@ -50,6 +52,8 @@ export class RecordStore {
   constructor(
     private readonly persistenceFor: PersistenceFactory,
     private readonly flushDebounceMs: number = OBS_FLUSH_DEBOUNCE_MS,
+    /** 叙事持久化通道(缺省 = 叙事仅内存态,重启后依赖事件日志重折)。 */
+    private readonly narrativeFor?: PersistenceFactory,
   ) {}
 
   /** 会话状态是否存在(会话列表/测试用)。 */
@@ -69,22 +73,31 @@ export class RecordStore {
     })
   }
 
-  /** 事件折叠(增量;fromSeq 用于子会话 seed 边界)。 */
+  /** 事件折叠(增量;fromSeq 用于子会话 seed 边界)。新捕获叙事 → 落盘调度。 */
   fold(sessionId: string, events: Parameters<TurnLog['append']>[0], fromSeq = 0): void {
-    this.require(sessionId).log.append(events, fromSeq)
+    const state = this.require(sessionId)
+    const narrated = state.log.append(events, fromSeq)
+    if (narrated.length > 0 && this.narrativeFor !== undefined) {
+      state.narrDirty = true
+      this.scheduleFlush(sessionId, state)
+    }
   }
 
   /** 观测更新(snapshot 后)。仅在观测实际变化时安排落盘(避免写放大)。 */
   observe(sessionId: string, changes: readonly (import('./types.ts').GitChange)[], now: number, truncated = false): void {
     const state = this.require(sessionId)
     const changed = state.observations.update(changes, now, truncated)
-    if (changed) this.scheduleFlush(sessionId, state)
+    if (changed) {
+      state.dirty = true
+      this.scheduleFlush(sessionId, state)
+    }
   }
 
   /** HEAD 前移:提交路径标注 committedAt。 */
   headAdvanced(sessionId: string, commitPaths: readonly string[], now: number): void {
     const state = this.require(sessionId)
     state.observations.markCommitted(commitPaths, now)
+    state.dirty = true
     this.scheduleFlush(sessionId, state)
   }
 
@@ -111,6 +124,7 @@ export class RecordStore {
     }
     if (commits.length === 0) return
     state.observations.markCommitted(commits, now)
+    state.dirty = true
     this.scheduleFlush(sessionId, state)
   }
 
@@ -155,6 +169,7 @@ export class RecordStore {
       log: new TurnLog(),
       observations: new ObservationLog(),
       dirty: false,
+      narrDirty: false,
       lastHead: undefined,
     }
   }
@@ -188,10 +203,19 @@ export class RecordStore {
     }
     if (committed.length > 0) state.observations.markCommitted(committed, Date.now())
     state.dirty = true
+    // 叙事恢复:compaction 折叠掉的旧 user/message 事件由磁盘叙事补齐
+    // (折叠器新捕获值优先——restoreNarratives 只填 null 槽位)。
+    if (this.narrativeFor !== undefined) {
+      try {
+        const narrRaw = await this.narrativeFor(sessionId).read()
+        if (narrRaw !== null) state.log.restoreNarratives(decodeNarratives(narrRaw) ?? [])
+      } catch {
+        // 叙事读取失败:不阻断观测恢复,叙事退化为内存态。
+      }
+    }
   }
 
   private scheduleFlush(sessionId: string, state: SessionState): void {
-    state.dirty = true
     this.cancelFlush(sessionId)
     const timer = setTimeout(() => {
       this.flushTimers.delete(sessionId)
@@ -209,14 +233,24 @@ export class RecordStore {
   }
 
   private async persist(sessionId: string, state: SessionState): Promise<void> {
-    if (!state.dirty) return
-    const encoded = encodeObservations(state.observations.serialize())
-    state.dirty = false
-    try {
-      await this.persistenceFor(sessionId).write(encoded)
-    } catch {
-      // 写失败(IO/超限):内存态保留,标记 dirty 供下次补写;不崩溃。
-      state.dirty = true
+    if (state.dirty) {
+      const encoded = encodeObservations(state.observations.serialize())
+      state.dirty = false
+      try {
+        await this.persistenceFor(sessionId).write(encoded)
+      } catch {
+        // 写失败(IO/超限):内存态保留,标记 dirty 供下次补写;不崩溃。
+        state.dirty = true
+      }
+    }
+    if (state.narrDirty && this.narrativeFor !== undefined) {
+      const encodedNarr = encodeNarratives(state.log.narratives())
+      state.narrDirty = false
+      try {
+        await this.narrativeFor(sessionId).write(encodedNarr)
+      } catch {
+        state.narrDirty = true
+      }
     }
   }
 }

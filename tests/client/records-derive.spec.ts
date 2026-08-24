@@ -19,6 +19,7 @@ function workTurn(turn: number, startAt: number, endAt: number | null, internal 
     startAt,
     endAt,
     hasWork: true,
+    narrative: null,
     internal: Array.from({ length: internal }, (_, i) => entry(i)),
     sibling: Array.from({ length: sibling }, (_, i) => entry(i)),
     external: Array.from({ length: external }, (_, i) => entry(i)),
@@ -27,7 +28,7 @@ function workTurn(turn: number, startAt: number, endAt: number | null, internal 
 
 /** 空闲 turn（无工具调用）。 */
 function idleTurn(turn: number, startAt: number, endAt: number | null): TurnWorkRecord {
-  return { turn, startAt, endAt, hasWork: false, internal: [], sibling: [], external: [] }
+  return { turn, startAt, endAt, hasWork: false, narrative: null, internal: [], sibling: [], external: [] }
 }
 
 /** 校验时段窗口与计数。 */
@@ -144,5 +145,28 @@ describe('summarizeSessions — 摘要计数', () => {
 
   it('空时段流 → 全零', () => {
     expect(summarizeSessions([])).toEqual({ sessions: 0, files: 0, dirty: 0 })
+  })
+})
+
+describe('buildSessions — 任务叙事', () => {
+  it('session narrative = 首个非空 turn 叙事(首 turn 缺失由后续补位)', () => {
+    const records = [
+      workTurn(1, 1000, 2000, 1, 0),
+      { ...workTurn(2, 3000, 4000, 1, 0), narrative: '优化构建速度' },
+    ]
+    const sessions = buildSessions(records)
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0]?.narrative).toBe('优化构建速度')
+  })
+
+  it('跨时段叙事互不渗透(新时段取自己的首叙事)', () => {
+    const records = [
+      { ...workTurn(1, 1000, 2000, 1, 0), narrative: '任务 A' },
+      { ...workTurn(2, 1000 + SESSION_GAP_MS + 5000, 2000 + SESSION_GAP_MS + 5000, 1, 0), narrative: null },
+    ]
+    const sessions = buildSessions(records)
+    expect(sessions).toHaveLength(2)
+    expect(sessions[0]?.narrative).toBe('任务 A')
+    expect(sessions[1]?.narrative).toBeNull()
   })
 })

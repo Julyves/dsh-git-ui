@@ -336,7 +336,7 @@ function GitPopupBody({
                 <span style={css.workSectionSub}>
                   {windowTurn === undefined
                     ? t('work.empty')
-                    : `${t('work.recentWindow')} · ${t('work.range').replace('{from}', shortTime(windowTurn.startAt)).replace('{to}', windowTurn.endAt === null ? t('work.running') : shortTime(windowTurn.endAt))}`}
+                    : `${windowTurn.narrative !== null ? `${windowTurn.narrative} · ` : ''}${t('work.recentWindow')} · ${t('work.range').replace('{from}', shortTime(windowTurn.startAt)).replace('{to}', windowTurn.endAt === null ? t('work.running') : shortTime(windowTurn.endAt))}`}
                 </span>
               </span>
             </div>

@@ -24,9 +24,11 @@ export interface WorkSession {
   readonly endAt: number | null
   /** 聚合的 turn 数。 */
   readonly turnCount: number
+  /** 任务叙事:时段内首个 turn 的用户指令摘要(null = 未捕获)。 */
+  readonly narrative: string | null
   /** 本会话条目（路径并集；组装层已按路径去重）。 */
   readonly internal: readonly WorkEntry[]
-  /** 其他 dsh 会话(同工作区)AI 写入条目(作者三分)。 */
+  /** 其他 dsh 会话(同工作区)AI 写入条目（作者三分）。 */
   readonly sibling: readonly WorkEntry[]
   /** 外部(人工)条目（路径并集）。 */
   readonly external: readonly WorkEntry[]
@@ -64,6 +66,8 @@ export function buildSessions(
         turnCount: last.turnCount + 1,
         // 进行中(endAt null)优先；否则取更晚的结束时刻。
         endAt: turn.endAt === null ? null : Math.max(last.endAt, turn.endAt),
+        // 叙事取时段内首个非空(首 turn 缺叙事时由后续 turn 补位)。
+        narrative: last.narrative ?? turn.narrative,
         internal: [...last.internal, ...turn.internal],
         sibling: [...last.sibling, ...turn.sibling],
         external: [...last.external, ...turn.external],
@@ -81,6 +85,7 @@ function newSession(turn: TurnWorkRecord): WorkSession {
     startAt: turn.startAt,
     endAt: turn.endAt,
     turnCount: 1,
+    narrative: turn.narrative,
     internal: [...turn.internal],
     sibling: [...turn.sibling],
     external: [...turn.external],

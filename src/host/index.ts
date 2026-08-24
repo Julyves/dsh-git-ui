@@ -22,7 +22,7 @@ import { normalizeConfig, resolveWorkspace, runCommand, type GitStatusConfig, ty
 import { createPluginDataStore, resolvePluginDataRoot, type PluginDataFs } from './plugin-data.ts'
 import { createHostEndpoints, type HostEndpoints } from '../contracts/host-endpoints.ts'
 import { migrateSettings, DEFAULT_SETTINGS, type GitUISettings, type PopupSettings } from '../contracts/settings.ts'
-import { RecordStore, type CommitProbe } from './record-store.ts'
+import { RecordStore, OBS_FLUSH_DEBOUNCE_MS, type CommitProbe } from './record-store.ts'
 import { runTurnRecords, type TurnRecordSources } from './turn-records.ts'
 import { parseNameStatusOutput } from './parser.ts'
 import { PathStateTracker, type PathStateProbe } from './path-state.ts'
@@ -97,7 +97,11 @@ export class GitStatusService extends TypertRemoteService {
     })
     // 平台写意图解析面:tools 服务为可选(缺失 → args 目录兜底,见 write-paths.ts)。
     this.presenter = createToolPresenter(ctx.get<ToolRegistryLike>('tools'))
-    this.records = new RecordStore((sessionId) => this.observationPersistence(sessionId))
+    this.records = new RecordStore(
+      (sessionId) => this.observationPersistence(sessionId),
+      OBS_FLUSH_DEBOUNCE_MS,
+      (sessionId) => this.narrativePersistence(sessionId),
+    )
     this.endpoints = createHostEndpoints(this.deps, this.normalizedConfig, {
       run: (sessionId, signal) => this.runTurnRecords(sessionId, signal),
     })
@@ -302,6 +306,23 @@ export class GitStatusService extends TypertRemoteService {
       write: async (raw) => {
         const result = await this.storage.write({ file, data: raw } satisfies GitStorageWriteRequest)
         if (!result.ok) throw new Error(`obs write failed: ${result.error.message}`)
+      },
+    }
+  }
+
+  /** 叙事持久化通道:narr-<sessionKey>.jsonl(compaction 折叠旧 user/message
+   * 事件后,任务叙事仍可从磁盘恢复;新捕获值优先,磁盘只补 null 槽位)。 */
+  private narrativePersistence(sessionId: string): { read(): Promise<string | null>; write(raw: string): Promise<void> } {
+    const file = `narr-${sessionStorageKey(sessionId)}.jsonl`
+    return {
+      read: async () => {
+        const result = await this.storage.read({ file } satisfies GitStorageReadRequest)
+        if (!result.ok) return null
+        return result.value
+      },
+      write: async (raw) => {
+        const result = await this.storage.write({ file, data: raw } satisfies GitStorageWriteRequest)
+        if (!result.ok) throw new Error(`narr write failed: ${result.error.message}`)
       },
     }
   }

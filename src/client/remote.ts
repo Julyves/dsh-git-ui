@@ -146,6 +146,8 @@ export const turnWorkRecordSchema = z.object({
   startAt: z.number(),
   endAt: z.number().nullable(),
   hasWork: z.boolean(),
+  // 任务叙事:驱动该 turn 的用户指令摘要(compaction 后由 narr 文件恢复)。
+  narrative: z.string().nullable(),
   internal: z.array(workEntryObjectSchema),
   // 作者三分:其他 dsh 会话(同工作区)AI 写入(internal/external 之外的第三组)。
   sibling: z.array(workEntryObjectSchema),

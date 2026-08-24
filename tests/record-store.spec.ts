@@ -180,3 +180,49 @@ describe('RecordStore', () => {
     expect(records[0]?.external).toHaveLength(1)
   })
 })
+describe('RecordStore narrative persistence (任务叙事落盘)', () => {
+  it('persists newly captured narratives and restores them after a restart', async () => {
+    const files = new Map<string, MemoryPersistence>()
+    const factory = (sessionId: string): MemoryPersistence => {
+      let file = files.get(`narr:${sessionId}`)
+      if (file === undefined) {
+        file = memoryPersistence()
+        files.set(`narr:${sessionId}`, file)
+      }
+      return file
+    }
+    const events = [
+      { type: 'turn/start', seq: 1, time: 1000, data: { turn: 1 } },
+      { type: 'user/message', seq: 2, time: 1050, data: { text: '重构登录模块' } },
+      { type: 'tool/call', seq: 3, time: 1100, data: { turn: 1, callId: 'c1', name: 'write', arguments: '{}' } },
+      { type: 'turn/end', seq: 4, time: 2000, data: { turn: 1 } },
+    ] as const
+
+    const first = new RecordStore((id) => factory(`obs:${id}`), 0, (id) => factory(id))
+    first.ensure('s1', { isCommitted: async () => false })
+    first.fold('s1', [...events])
+    first.flush('s1')
+    await new Promise((resolve) => setImmediate(resolve))
+    const raw = files.get('narr:s1')?.written
+    expect(raw).toContain('重构登录模块')
+
+    // 重启:事件日志已被 compaction 折叠(只剩窗口骨架),叙事从磁盘恢复。
+    const second = new RecordStore((id) => factory(`obs:${id}`), 0, (id) => factory(id))
+    second.ensure('s1', { isCommitted: async () => false })
+    second.fold('s1', [events[0] as never, events[3] as never])
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(second.turns('s1')[0]?.narrative).toBe('重构登录模块')
+  })
+
+  it('skips narrative IO when no channel is provided (memory-only)', () => {
+    const store = new RecordStore((id) => memoryPersistence(), 0)
+    store.ensure('s1', { isCommitted: async () => false })
+    store.fold('s1', [
+      { type: 'turn/start', seq: 1, time: 1000, data: { turn: 1 } },
+      { type: 'user/message', seq: 2, time: 1050, data: { text: '内存态叙事' } },
+    ])
+    store.flush('s1')
+    expect(store.turns('s1')[0]?.narrative).toBe('内存态叙事')
+  })
+})

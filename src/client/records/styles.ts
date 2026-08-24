@@ -152,6 +152,27 @@ export const sessionTitle: CSSProperties = {
   textOverflow: 'ellipsis',
 }
 
+/** 任务叙事(用户指令摘要):主标题位,优先于时间窗——「做了什么」先于「何时」。 */
+export const sessionNarrative: CSSProperties = {
+  flex: '0 1 auto',
+  minWidth: 0,
+  maxWidth: 260,
+  fontSize: 13,
+  fontWeight: 600,
+  lineHeight: '20px',
+  color: 'var(--dsw-alias-label-primary)',
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+}
+
+/** 叙事在场时的时间窗:降为次级(弱色常规体,让位主标题)。 */
+export const sessionTitleMuted: CSSProperties = {
+  ...sessionTitle,
+  fontWeight: 400,
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
 /** 聚合轮次弱化段（如「3 轮」）。 */
 export const sessionTurnCount: CSSProperties = {
   flex: 'none',

@@ -95,7 +95,10 @@ export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = fals
           aria-label={windowText(session, t)}
         >
           <ChevronIcon open={hasEntries && open} />
-          <span style={css.sessionTitle}>{windowText(session, t)}</span>
+          {session.narrative !== null && (
+            <span style={css.sessionNarrative} title={session.narrative}>{session.narrative}</span>
+          )}
+          <span style={session.narrative !== null ? css.sessionTitleMuted : css.sessionTitle} title={windowText(session, t)}>{windowText(session, t)}</span>
           {session.turnCount > 1 && (
             <span style={css.sessionTurnCount}>{t('work.sessionTurnCount').replace('{n}', String(session.turnCount))}</span>
           )}

@@ -119,3 +119,37 @@ const STATUSES: readonly ObsRowStatus[] = [
 function isStatus(value: unknown): value is ObsRowStatus {
   return typeof value === 'string' && (STATUSES as readonly string[]).includes(value)
 }
+
+// ── 叙事持久化(narr-<key>.jsonl:turn 号 → 用户指令摘要) ─────────────────
+
+/** 叙事文件格式版本(首行)。 */
+export const NARR_FILE_VERSION = 'v1'
+
+/** 叙事行:turn 号 + 摘要文本。 */
+type NarrRow = { readonly t: number; readonly n: string }
+
+/** 序列化叙事为 JSONL(首行版本)。 */
+export function encodeNarratives(entries: ReadonlyArray<readonly [number, string]>): string {
+  const rows = entries.map(([turn, narrative]): NarrRow => ({ t: turn, n: narrative }))
+  return [NARR_FILE_VERSION, ...rows.map((row) => JSON.stringify(row))].join('\n')
+}
+
+/** 解析叙事 JSONL;坏行跳过,首行非版本号 → null(整体损坏)。 */
+export function decodeNarratives(raw: string): ReadonlyArray<readonly [number, string]> | null {
+  const lines = raw.split('\n')
+  if (lines[0] !== NARR_FILE_VERSION) return null
+  const entries: Array<readonly [number, string]> = []
+  for (const line of lines.slice(1)) {
+    if (line === '') continue
+    try {
+      const parsed = JSON.parse(line) as { t?: unknown; n?: unknown }
+      if (typeof parsed.t === 'number' && Number.isFinite(parsed.t)
+        && typeof parsed.n === 'string' && parsed.n !== '') {
+        entries.push([parsed.t, parsed.n])
+      }
+    } catch {
+      // 坏行跳过(截断/损坏不阻断恢复)
+    }
+  }
+  return entries
+}

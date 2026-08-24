@@ -64,6 +64,7 @@ export function assembleAll(deps: AssembleDeps): readonly TurnWorkRecord[] {
       startAt: folded.startAt,
       endAt: folded.endAt,
       hasWork: folded.toolCalls.length > 0,
+      narrative: folded.narrative,
       internal: internalOf(folded, deps),
       sibling: nonInternal.sibling,
       external: nonInternal.external,

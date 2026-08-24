@@ -205,6 +205,8 @@ export interface TurnWorkRecord {
   readonly endAt: number | null
   /** 是否含工具调用(空 turn 折叠展示用)。 */
   readonly hasWork: boolean
+  /** 驱动该 turn 的用户指令摘要(任务叙事;null = 未捕获)。 */
+  readonly narrative: string | null
   /** 本会话 agent(含 subagent 委托)写入。 */
   readonly internal: readonly WorkEntry[]
   /**

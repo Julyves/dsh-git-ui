@@ -69,9 +69,33 @@ function sliceEvent(event: SessionEventLike): TurnEventSlice | null {
     }
     case 'session/end-seed':
       return { type, seq, time, data: {} }
+    case 'user/message': {
+      // 叙事源:dsh UserMessage.content 为 ContentBlock[],首个 text 块即
+      // 用户指令文本(图片/工具结果块跳过)。压缩(compaction)会折叠旧
+      // surface 事件——叙事由 turns.ts 折叠时捕获并随 narr 文件持久化,
+      // 不依赖事件长期在场。
+      const text = firstTextBlock(data.content)
+      if (text === null) return null
+      return { type, seq, time, data: { text } }
+    }
     default:
       return null
   }
+}
+
+/** 从 UserMessage.content 提取首个 text 块的整理文本;无 → null。 */
+function firstTextBlock(content: unknown): string | null {
+  if (!Array.isArray(content)) return null
+  for (const block of content) {
+    if (typeof block === 'object' && block !== null) {
+      const record = block as Record<string, unknown>
+      if (record.type === 'text' && typeof record.text === 'string') {
+        const normalized = record.text.replace(/\s+/g, ' ').trim()
+        if (normalized !== '') return normalized
+      }
+    }
+  }
+  return null
 }
 
 function numberField(data: Record<string, unknown>, key: string): number | null {
