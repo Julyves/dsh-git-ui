@@ -30,7 +30,8 @@ import { errorText, errorAction } from './error-text.ts'
 import { useSettings } from './settings/use-settings.ts'
 import { renderPill, chipLetter, popupBadgeTexts } from './pill-segments.tsx'
 import { useTurnRecords } from './use-turn-records.ts'
-import { latestWorkTurn, turnEntryCounts, workStateLabel } from './work-record-meta.ts'
+import { latestWorkTurn, turnEntryCounts } from './work-record-meta.ts'
+import { EntryRow } from './records/entry-row.tsx'
 import type { GitUISettings } from '../contracts/settings.ts'
 import type { GitCenterTab } from './GitCenter.tsx'
 import type { TurnWorkRecord } from '../host/types.ts'
@@ -326,30 +327,6 @@ function GitPopupBody({
         const windowTurn = latestWorkTurn(records)
         const { internal, external } = turnEntryCounts(windowTurn)
         const hasAny = internal > 0 || external > 0
-        // 条目行:chip(诚实反映原始变更类型)+ 路径拆分 + 写入时刻 + 状态四色徽章。
-        // 弹窗内不可点击(无 diff 跳转),因此不带 .dsh-git-ui__row hover 类。 
-        const entryRow = (entry: WorkEntry, key: string): JSX.Element => {
-          const { name, dir, isDir } = splitChangePath(entry.path, entry.path.endsWith('/'))
-          return (
-            <div
-              key={key}
-              style={css.workRow}
-            >
-              <span
-                style={{ ...css.changeChip, ...(css.chipStyles[entry.status] ?? css.chipStyles.untracked) }}
-                title={entry.status}
-              >
-                {chipLetter(entry.status)}
-              </span>
-              <span style={css.rowFileIcon} aria-hidden="true">
-                {isDir ? <FolderIcon /> : fileIconForPath(entry.path)}
-              </span>
-              <span style={css.changeNamePop} title={entry.path}>{name}</span>
-              {dir !== '' && <span style={css.changeDirPop}>{dir}</span>}
-              <span style={css.workStateBadgeStyle(entry.state)}>{workStateLabel(entry.state, t)}</span>
-            </div>
-          )
-        }
         return (
           <>
             <div style={css.workSectionHead}>
@@ -365,15 +342,20 @@ function GitPopupBody({
             </div>
             {hasAny ? (
               <>
-                {/* 本 Turn 变更不设分组标题——区块头「最近 turn 工作时段」已说明归属 */}
-                {windowTurn !== undefined && windowTurn.internal.map((entry) => entryRow(entry, `pi-${entry.path}`))}
+                {/* 本 Turn 变更不设分组标题——区块头「最近 turn 工作时段」已说明归属。
+                    条目行与记录页共用 EntryRow（4 元素排版）；仍变更条目可点击跳 Git 中心 diff。 */}
+                {windowTurn !== undefined && windowTurn.internal.map((entry) => (
+                  <EntryRow key={`pi-${entry.path}`} entry={entry} t={t} onOpenDiff={onOpenDiff} />
+                ))}
                 {external > 0 && (
                   <div style={css.workGroupTitle}>
                     <span style={css.workBadgeDotExternal} aria-hidden="true" />
                     {t('work.group.external')} {external}
                   </div>
                 )}
-                {windowTurn !== undefined && windowTurn.external.map((entry) => entryRow(entry, `pe-${entry.path}`))}
+                {windowTurn !== undefined && windowTurn.external.map((entry) => (
+                  <EntryRow key={`pe-${entry.path}`} entry={entry} t={t} onOpenDiff={onOpenDiff} />
+                ))}
               </>
             ) : (
               <div style={css.workEmptyState}>
