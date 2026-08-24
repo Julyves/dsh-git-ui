@@ -7,7 +7,7 @@ import { buildSessions, summarizeSessions, SESSION_GAP_MS, type WorkSession } fr
 import type { TurnWorkRecord, WorkEntry } from '../../src/host/types.ts'
 
 /** 构造一个有工作的 turn（时间窗 [start, end]，内部/外部条目数可指定）。 */
-function workTurn(turn: number, startAt: number, endAt: number | null, internal = 0, external = 0): TurnWorkRecord {
+function workTurn(turn: number, startAt: number, endAt: number | null, internal = 0, external = 0, sibling = 0): TurnWorkRecord {
   const entry = (i: number): WorkEntry => ({
     path: `path-${turn}-${i}.ts`,
     status: 'modified',
@@ -20,13 +20,14 @@ function workTurn(turn: number, startAt: number, endAt: number | null, internal 
     endAt,
     hasWork: true,
     internal: Array.from({ length: internal }, (_, i) => entry(i)),
+    sibling: Array.from({ length: sibling }, (_, i) => entry(i)),
     external: Array.from({ length: external }, (_, i) => entry(i)),
   }
 }
 
 /** 空闲 turn（无工具调用）。 */
 function idleTurn(turn: number, startAt: number, endAt: number | null): TurnWorkRecord {
-  return { turn, startAt, endAt, hasWork: false, internal: [], external: [] }
+  return { turn, startAt, endAt, hasWork: false, internal: [], sibling: [], external: [] }
 }
 
 /** 校验时段窗口与计数。 */

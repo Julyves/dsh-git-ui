@@ -5,13 +5,15 @@
  * (`MtimeSource`,宿主对 git 变更列表 stat 后提供缓存)完成——
  * 不落盘,只在组装期现取(避免轮询噪声固化)。
  *
- * 归因规则(用户视角):
+ * 归因规则(用户视角,三分作者):
  *   - **内外互斥**:文件被本会话 agent 写过(任意 turn)→ 归其写入 turn 的
- *     internal,永不进 external(agent 重写旧文件 → 计该 turn internal);
- *   - **external(T)** = 窗口 [startAt, endAt/now] 内出现且从未被本会话写过的路径;
+ *     internal,永不进 sibling/external(agent 重写旧文件 → 计该 turn internal);
+ *   - **sibling(T)** = 其他 dsh 会话(同工作区)AI 写过且未被本会话写的路径;
+ *   - **external(T)** = 窗口 [startAt, endAt/now] 内出现、既非本会话也非兄弟
+ *     会话写过的路径(人工:IDE / 命令行 / 未识别来源);
  *     窗口内出现 = 观测 firstSeenAt ∈ 窗口,或仍脏路径 mtime ∈ 窗口;
- *   - **记录三态**:仍在工作区 → dirty;HEAD 移动检测标注 → committed;
- *     其余(被还原/改动消失)→ reverted;
+ *   - **记录四态**:仍在工作区 → dirty;HEAD 移动检测标注 → committed;
+ *     权威探测确认未入历史 → reverted;其余 → gone(去向待定,中性);
  *   - pill 单 turn 窗口起点 = 最近一个含工具调用的 turn(latestWorkTurn);
  *     窗口终点 = running ? now : turn/end。
  */
@@ -19,34 +21,12 @@
 import type { FoldedTurn, TurnLog } from './turns.ts'
 import { extractWritePaths, metaWritePaths, type ToolPresenter } from './write-paths.ts'
 import type { ObservationLog } from './observation.ts'
-import type { GitChange, GitChangeStatus } from './types.ts'
+import type { GitChange, GitChangeStatus, TurnWorkRecord, WorkEntry, WorkEntryState } from './types.ts'
 import type { PathStateLookup } from './path-state.ts'
 
-/** 记录条目状态:仍变更 / 已提交 / 已还原(权威判定)/ 已离开待定。
- *
- * `reverted` 仅由权威探测(git log 无历史)得出;无法判定去向时一律
- * `gone`(中性,不再是过度断言)——旧实现把"无提交证据"直接标为
- * reverted,历史 turn 的文件(通常早已提交)被系统性误标。 */
-export type WorkEntryState = 'dirty' | 'committed' | 'reverted' | 'gone'
-
-/** 一条对外展示的工作记录条目。 */
-export interface WorkEntry {
-  readonly path: string
-  readonly status: GitChangeStatus
-  readonly state: WorkEntryState
-  readonly firstSeenAt: number
-}
-
-/** 一个 turn 的对外工作记录。 */
-export interface TurnWorkRecord {
-  readonly turn: number
-  readonly startAt: number
-  readonly endAt: number | null
-  /** 是否含工具调用(空 turn 折叠展示用)。 */
-  readonly hasWork: boolean
-  readonly internal: readonly WorkEntry[]
-  readonly external: readonly WorkEntry[]
-}
+// 记录契约单一来源:TurnWorkRecord / WorkEntry / WorkEntryState 以 types.ts
+// 为权威(host 导出与 client zod 镜像都指向它),本模块仅消费并转发。
+export type { TurnWorkRecord, WorkEntry, WorkEntryState } from './types.ts'
 
 /** mtime 精修源:任意路径的修改时刻(宿主对 git 变更列表 stat 缓存;缺省无)。 */
 export interface MtimeSource {
@@ -64,6 +44,8 @@ export interface AssembleDeps {
   readonly now: number
   /** 子会话写路径:父 turn → 路径(适配层注入;缺省无)。 */
   readonly subagentWrites?: ReadonlyMap<number, readonly string[]>
+  /** 其他 dsh 会话(同工作区)写过的路径全集(适配层注入;缺省 = 全落 external)。 */
+  readonly siblingWrites?: ReadonlySet<string>
   /** 去向判定缓存(权威探测结果;缺省 = 全部待定 → gone)。 */
   readonly pathStates?: PathStateLookup
 }
@@ -75,14 +57,18 @@ export interface AssembleDeps {
 export function assembleAll(deps: AssembleDeps): readonly TurnWorkRecord[] {
   const allInternal = collectAllInternal(deps)
   const internalPaths = new Set(allInternal.map((entry) => entry.path))
-  return deps.log.turns.map((folded) => ({
-    turn: folded.turn,
-    startAt: folded.startAt,
-    endAt: folded.endAt,
-    hasWork: folded.toolCalls.length > 0,
-    internal: internalOf(folded, deps),
-    external: collectExternal(folded, internalPaths, deps),
-  }))
+  return deps.log.turns.map((folded) => {
+    const nonInternal = collectNonInternal(folded, internalPaths, deps)
+    return {
+      turn: folded.turn,
+      startAt: folded.startAt,
+      endAt: folded.endAt,
+      hasWork: folded.toolCalls.length > 0,
+      internal: internalOf(folded, deps),
+      sibling: nonInternal.sibling,
+      external: nonInternal.external,
+    }
+  })
 }
 
 /** 收集全部 turn 的 internal 条目(会话日志 agent 写路径 ∩ 工作区存在性)。 */
@@ -117,15 +103,17 @@ function internalOf(folded: FoldedTurn, deps: AssembleDeps): readonly WorkEntry[
   return entries.sort((a, b) => a.path.localeCompare(b.path))
 }
 
-/** 一个 turn 的 external 条目(窗口内出现 ∧ 全局未写)。 */
-function collectExternal(
+/** 一个 turn 的非 internal 条目(窗口内出现 ∧ 全局未被本会话写过),
+ * 按兄弟会话写路径全集再切分为 sibling(AI)与 external(人工)两组。 */
+function collectNonInternal(
   folded: FoldedTurn,
   internalPaths: ReadonlySet<string>,
   deps: AssembleDeps,
-): readonly WorkEntry[] {
+): { sibling: readonly WorkEntry[]; external: readonly WorkEntry[] } {
   const windowStart = folded.startAt
   const windowEnd = folded.endAt ?? deps.now
-  const entries: WorkEntry[] = []
+  const sibling: WorkEntry[] = []
+  const external: WorkEntry[] = []
   for (const observation of deps.observations.entries()) {
     if (internalPaths.has(observation.path)) continue
     const firstInWindow = observation.firstSeenAt >= windowStart && observation.firstSeenAt <= windowEnd
@@ -138,16 +126,20 @@ function collectExternal(
     if (!firstInWindow && !mtimeInWindow) continue
     const inChanges = deps.changes.some((change) => change.path === observation.path)
     const state = finalStateFor(observation.path, inChanges, observation, deps.pathStates)
-    entries.push({
+    const entry: WorkEntry = {
       path: observation.path,
       status: inChanges
         ? (deps.changes.find((change) => change.path === observation.path)?.status ?? observation.status)
         : observation.status,
       state,
       firstSeenAt: observation.firstSeenAt,
-    })
+    }
+    // 本会话与兄弟会话共写 → internal 胜(全局互斥);仅兄弟写过 → sibling。
+    if (deps.siblingWrites?.has(observation.path) === true) sibling.push(entry)
+    else external.push(entry)
   }
-  return entries.sort((a, b) => a.path.localeCompare(b.path))
+  const byPath = (a: WorkEntry, b: WorkEntry): number => a.path.localeCompare(b.path)
+  return { sibling: sibling.sort(byPath), external: external.sort(byPath) }
 }
 
 /** 单个 entry 的去向判定(四态):

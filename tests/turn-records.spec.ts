@@ -40,6 +40,7 @@ function sources(overrides: Partial<TurnRecordSources> = {}): TurnRecordSources 
     presenter: undefined,
     mtimes: async () => undefined,
     subagentWrites: async () => new Map(),
+    siblingWrites: async () => new Set<string>(),
     probe: () => ({ isCommitted: async () => false }),
     pathStates: () => undefined,
     finalStateProbe: () => undefined,
@@ -91,6 +92,29 @@ describe('runTurnRecords', () => {
     expect(turn.internal[0]?.state).toBe('gone') // a.txt 不在 changes 且无证据:待定
     expect(turn.external.map((e) => e.path)).toEqual(['ext.txt'])
     expect(turn.external[0]?.state).toBe('dirty')
+  })
+
+  it('splits sibling-session writes from human external entries', async () => {
+    const pipeline = new RecordStore(memoryPersistenceFactory(), 0)
+    pipeline.ensure('s1', { isCommitted: async () => false })
+    pipeline.fold('s1', events)
+    pipeline.observe('s1', [
+      { path: 'ext.txt', status: 'modified', staged: false, isDirectory: false },
+      { path: 'sib.ts', status: 'modified', staged: false, isDirectory: false },
+    ], 1500)
+    const result = await runTurnRecords(pipeline, sources({
+      siblingWrites: async () => new Set(['sib.ts']),
+      snapshot: async () => ({ ok: true, value: snapshotOk({ changes: [
+        { path: 'ext.txt', status: 'modified', staged: false, isDirectory: false },
+        { path: 'sib.ts', status: 'modified', staged: false, isDirectory: false },
+      ] }) }),
+    }), 's1')
+    if (!result.ok || result.value.kind !== 'turn-records') throw new Error('failed')
+    const turn = result.value.turns[0]
+    if (turn === undefined) throw new Error('no turn')
+    expect(turn.sibling.map((e) => e.path)).toEqual(['sib.ts'])
+    expect(turn.external.map((e) => e.path)).toEqual(['ext.txt'])
+    expect(turn.sibling[0]?.state).toBe('dirty')
   })
 
   it('passes through subagent writes and mtime refinement', async () => {

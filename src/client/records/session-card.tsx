@@ -7,13 +7,14 @@ import { useState } from 'react'
 import type { CSSProperties, JSX } from 'react'
 import type { WorkEntry } from '../../host/types.ts'
 import type { GitKey } from '../locales.ts'
-import { workBadgeDotExternal, workBadgeDotInternal, workBadgeExternal, workBadgeInternal } from '../styles.ts'
+import { workBadgeDotExternal, workBadgeDotInternal, workBadgeDotSibling, workBadgeExternal, workBadgeInternal, workBadgeSibling } from '../styles.ts'
 import { ChevronIcon } from '../icons.tsx'
 import { EntryRow } from './entry-row.tsx'
 import type { WorkSession } from './derive.ts'
 import * as css from './styles.ts'
 
-export type RecordFilter = 'all' | 'internal' | 'external'
+/** 作者三分过滤:全部 / 本会话 / 其他会话(AI) / 外部(人工)。 */
+export type RecordFilter = 'all' | 'internal' | 'sibling' | 'external'
 
 export interface SessionCardProps {
   readonly session: WorkSession
@@ -68,10 +69,12 @@ export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = fals
   const [open, setOpen] = useState(defaultOpen)
   const [hover, setHover] = useState(false)
   const showInternal = filter === 'all' || filter === 'internal'
+  const showSibling = filter === 'all' || filter === 'sibling'
   const showExternal = filter === 'all' || filter === 'external'
   const internalEntries = showInternal ? session.internal : []
+  const siblingEntries = showSibling ? session.sibling : []
   const externalEntries = showExternal ? session.external : []
-  const hasEntries = internalEntries.length > 0 || externalEntries.length > 0
+  const hasEntries = internalEntries.length > 0 || siblingEntries.length > 0 || externalEntries.length > 0
 
   const toggle = (): void => { if (hasEntries) setOpen(!open) }
 
@@ -103,6 +106,12 @@ export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = fals
                 {t('work.group.internal')} {internalEntries.length}
               </span>
             )}
+            {siblingEntries.length > 0 && (
+              <span style={workBadgeSibling} title={t('work.group.sibling')}>
+                <span style={workBadgeDotSibling} aria-hidden="true" />
+                {t('work.group.sibling')} {siblingEntries.length}
+              </span>
+            )}
             {externalEntries.length > 0 && (
               <span style={workBadgeExternal} title={t('work.group.external')}>
                 <span style={workBadgeDotExternal} aria-hidden="true" />
@@ -117,6 +126,13 @@ export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = fals
               title={t('work.group.internal')}
               dot={css.sessionGroupDotInternal}
               entries={internalEntries}
+              t={t}
+              onOpenDiff={onOpenDiff}
+            />
+            <EntryGroup
+              title={t('work.group.sibling')}
+              dot={css.sessionGroupDotSibling}
+              entries={siblingEntries}
               t={t}
               onOpenDiff={onOpenDiff}
             />

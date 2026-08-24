@@ -24,6 +24,7 @@ export const zh = {
   'work.tab': '记录',
   'work.section': '工作记录',
   'work.group.internal': '本会话',
+  'work.group.sibling': '其他会话',
   'work.group.external': '外部',
   'work.group.turnInternal': '本 Turn',
   // 时段视图（records v2）——单位从 turn 转为工作时段
@@ -34,6 +35,7 @@ export const zh = {
   'work.emptyFiltered': '当前过滤下没有条目，切换其他筛选查看全部时段。',
   'work.badge': '最近工作时段的变更（本 Turn {internal} · 外部 {external}）',
   'work.badgeInternalShort': '本 {n}',
+  'work.badgeSiblingShort': '会 {n}',
   'work.badgeExternalShort': '外 {n}',
   'work.recentWindow': '最近 turn 工作时段',
   'work.state.dirty': '仍变更',
@@ -210,6 +212,7 @@ export const en: Record<GitKey, string> = {
   'work.tab': 'Records',
   'work.section': 'Work record',
   'work.group.internal': 'This session',
+  'work.group.sibling': 'Other sessions',
   'work.group.external': 'External',
   'work.group.turnInternal': 'This turn',
   // Session view (records v2) — the unit shifts from turn to working session
@@ -220,6 +223,7 @@ export const en: Record<GitKey, string> = {
   'work.emptyFiltered': 'No entries under this filter — switch to another view to see all sessions.',
   'work.badge': 'Changes since the latest working period (this turn {internal} · external {external})',
   'work.badgeInternalShort': 'in {n}',
+  'work.badgeSiblingShort': 'sib {n}',
   'work.badgeExternalShort': 'ext {n}',
   'work.recentWindow': 'Latest turn working period',
   'work.state.dirty': 'Dirty',

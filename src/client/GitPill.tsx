@@ -325,8 +325,8 @@ function GitPopupBody({
       )}
       {settings.pill.workRecord && records !== null && (() => {
         const windowTurn = latestWorkTurn(records)
-        const { internal, external } = turnEntryCounts(windowTurn)
-        const hasAny = internal > 0 || external > 0
+        const { internal, sibling, external } = turnEntryCounts(windowTurn)
+        const hasAny = internal > 0 || sibling > 0 || external > 0
         return (
           <>
             <div style={css.workSectionHead}>
@@ -346,6 +346,15 @@ function GitPopupBody({
                     条目行与记录页共用 EntryRow（4 元素排版）；仍变更条目可点击跳 Git 中心 diff。 */}
                 {windowTurn !== undefined && windowTurn.internal.map((entry) => (
                   <EntryRow key={`pi-${entry.path}`} entry={entry} t={t} onOpenDiff={onOpenDiff} />
+                ))}
+                {sibling > 0 && (
+                  <div style={css.workGroupTitle}>
+                    <span style={css.workBadgeDotSibling} aria-hidden="true" />
+                    {t('work.group.sibling')} {sibling}
+                  </div>
+                )}
+                {windowTurn !== undefined && windowTurn.sibling.map((entry) => (
+                  <EntryRow key={`ps-${entry.path}`} entry={entry} t={t} onOpenDiff={onOpenDiff} />
                 ))}
                 {external > 0 && (
                   <div style={css.workGroupTitle}>
@@ -689,12 +698,13 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
   const render = renderPill(display, uiSettings.pill, t)
 
   const workWindow = latestWorkTurn(records)
-  const { internal: internalCount, external: externalCount } = turnEntryCounts(workWindow)
-  const showWorkBadge = uiSettings.pill.workRecord && (internalCount > 0 || externalCount > 0)
+  const { internal: internalCount, sibling: siblingCount, external: externalCount } = turnEntryCounts(workWindow)
+  const showWorkBadge = uiSettings.pill.workRecord && (internalCount > 0 || siblingCount > 0 || externalCount > 0)
   const workBadgeTitle = () => {
     const lines = [t('work.badge').replace('{internal}', String(internalCount)).replace('{external}', String(externalCount))]
     if (workWindow !== undefined) {
       if (workWindow.internal.length > 0) lines.push(`${t('work.group.turnInternal')}: ${workWindow.internal.map((e) => e.path).join(', ')}`)
+      if (workWindow.sibling.length > 0) lines.push(`${t('work.group.sibling')}: ${workWindow.sibling.map((e) => e.path).join(', ')}`)
       if (workWindow.external.length > 0) lines.push(`${t('work.group.external')}: ${workWindow.external.map((e) => e.path).join(', ')}`)
     }
     return lines.join('\n')
@@ -718,6 +728,12 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
               <span style={css.workBadgeInternal} title={t('work.group.turnInternal')}>
                 <span style={css.workBadgeDotInternal} aria-hidden="true" />
                 {t('work.badgeInternalShort').replace('{n}', String(internalCount))}
+              </span>
+            )}
+            {siblingCount > 0 && (
+              <span style={css.workBadgeSibling} title={t('work.group.sibling')}>
+                <span style={css.workBadgeDotSibling} aria-hidden="true" />
+                {t('work.badgeSiblingShort').replace('{n}', String(siblingCount))}
               </span>
             )}
             {externalCount > 0 && (

@@ -208,6 +208,12 @@ export const sessionGroupDotInternal: CSSProperties = {
   background: 'var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary))',
 }
 
+/** 兄弟会话(AI)组点:品牌蓝的相邻色阶——同为 AI 工作但非本会话,与本会话可辨。 */
+export const sessionGroupDotSibling: CSSProperties = {
+  ...sessionGroupDot,
+  background: 'var(--dsw-alias-brand-purple-strong, var(--dsw-alias-brand-blue-strong, var(--dsw-alias-label-secondary)))',
+}
+
 export const sessionGroupDotExternal: CSSProperties = {
   ...sessionGroupDot,
   background: 'var(--dsw-alias-label-tertiary)',

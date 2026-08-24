@@ -4,7 +4,7 @@ import type { TurnWorkRecord } from '../../src/host/types.ts'
 
 function turn(overrides: Partial<TurnWorkRecord>): TurnWorkRecord {
   return {
-    turn: 1, startAt: 1000, endAt: 2000, hasWork: true, internal: [], external: [],
+    turn: 1, startAt: 1000, endAt: 2000, hasWork: true, internal: [], sibling: [], external: [],
     ...overrides,
   }
 }
@@ -32,13 +32,17 @@ describe('latestWorkTurn', () => {
 })
 
 describe('turnEntryCounts', () => {
-  it('counts internal/external entries', () => {
-    const records = [turn({ turn: 1, internal: [{ path: 'a', status: 'modified', state: 'dirty', firstSeenAt: 1 }] })]
-    expect(turnEntryCounts(latestWorkTurn(records))).toEqual({ internal: 1, external: 0 })
+  it('counts internal/sibling/external entries (three-way authorship)', () => {
+    const records = [turn({
+      turn: 1,
+      internal: [{ path: 'a', status: 'modified', state: 'dirty', firstSeenAt: 1 }],
+      sibling: [{ path: 'c', status: 'modified', state: 'dirty', firstSeenAt: 1 }],
+    })]
+    expect(turnEntryCounts(latestWorkTurn(records))).toEqual({ internal: 1, sibling: 1, external: 0 })
   })
 
   it('returns zeros for an undefined window', () => {
-    expect(turnEntryCounts(undefined)).toEqual({ internal: 0, external: 0 })
+    expect(turnEntryCounts(undefined)).toEqual({ internal: 0, sibling: 0, external: 0 })
   })
 })
 

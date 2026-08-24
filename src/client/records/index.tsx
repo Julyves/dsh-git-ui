@@ -45,10 +45,11 @@ function EmptyNote({ text, t }: { readonly text: string; readonly t: (key: GitKe
   )
 }
 
-/** 过滤 Segmented 项定义。 */
+/** 过滤 Segmented 项定义(作者三分:全部 / 本会话 / 其他会话 / 外部)。 */
 const FILTERS: readonly { readonly key: RecordFilter; readonly label: GitKey }[] = [
   { key: 'all', label: 'work.filter.all' },
   { key: 'internal', label: 'work.group.internal' },
+  { key: 'sibling', label: 'work.group.sibling' },
   { key: 'external', label: 'work.group.external' },
 ]
 
@@ -70,6 +71,7 @@ export function RecordsTab({ records, t, onOpenDiff, initialFilter = 'all' }: Re
   // 过滤为纯客户端派生（不复用任何额外查询）。
   const visible = sessions.filter((session) => {
     if (filter === 'internal') return session.internal.length > 0
+    if (filter === 'sibling') return session.sibling.length > 0
     if (filter === 'external') return session.external.length > 0
     return true
   })

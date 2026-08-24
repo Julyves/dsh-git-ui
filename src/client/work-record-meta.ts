@@ -16,10 +16,10 @@ export function latestWorkTurn(records: readonly TurnWorkRecord[] | null): TurnW
   return undefined
 }
 
-/** 单 turn 窗口内的计数(仅非空才显示徽章)。 */
-export function turnEntryCounts(turn: TurnWorkRecord | undefined): { internal: number; external: number } {
-  if (turn === undefined) return { internal: 0, external: 0 }
-  return { internal: turn.internal.length, external: turn.external.length }
+/** 单 turn 窗口内的计数(作者三分;仅非空才显示徽章)。 */
+export function turnEntryCounts(turn: TurnWorkRecord | undefined): { internal: number; sibling: number; external: number } {
+  if (turn === undefined) return { internal: 0, sibling: 0, external: 0 }
+  return { internal: turn.internal.length, sibling: turn.sibling.length, external: turn.external.length }
 }
 
 /** 条目状态的 i18n 文案(dirty/committed/reverted/gone 四态)。 */

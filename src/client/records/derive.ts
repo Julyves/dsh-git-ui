@@ -26,7 +26,9 @@ export interface WorkSession {
   readonly turnCount: number
   /** 本会话条目（路径并集；组装层已按路径去重）。 */
   readonly internal: readonly WorkEntry[]
-  /** 外部条目（路径并集）。 */
+  /** 其他 dsh 会话(同工作区)AI 写入条目(作者三分)。 */
+  readonly sibling: readonly WorkEntry[]
+  /** 外部(人工)条目（路径并集）。 */
   readonly external: readonly WorkEntry[]
 }
 
@@ -63,6 +65,7 @@ export function buildSessions(
         // 进行中(endAt null)优先；否则取更晚的结束时刻。
         endAt: turn.endAt === null ? null : Math.max(last.endAt, turn.endAt),
         internal: [...last.internal, ...turn.internal],
+        sibling: [...last.sibling, ...turn.sibling],
         external: [...last.external, ...turn.external],
       }
     } else {
@@ -79,6 +82,7 @@ function newSession(turn: TurnWorkRecord): WorkSession {
     endAt: turn.endAt,
     turnCount: 1,
     internal: [...turn.internal],
+    sibling: [...turn.sibling],
     external: [...turn.external],
   }
 }
@@ -94,8 +98,11 @@ export function summarizeSessions(sessions: readonly WorkSession[]): SessionSumm
   let files = 0
   let dirty = 0
   for (const session of sessions) {
-    files += session.internal.length + session.external.length
+    files += session.internal.length + session.sibling.length + session.external.length
     for (const entry of session.internal) {
+      if (entry.state === 'dirty') dirty += 1
+    }
+    for (const entry of session.sibling) {
       if (entry.state === 'dirty') dirty += 1
     }
     for (const entry of session.external) {

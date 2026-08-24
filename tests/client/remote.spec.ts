@@ -231,6 +231,7 @@ describe('gitInfoRemote query endpoint', () => {
       turns: [{
         turn: 1, startAt: 1000, endAt: 2000, hasWork: true,
         internal: [{ path: 'a.ts', status: 'modified', state: 'dirty', firstSeenAt: 1500 }],
+        sibling: [{ path: 'c.ts', status: 'modified', state: 'dirty', firstSeenAt: 1550 }],
         external: [{ path: 'b.ts', status: 'untracked', state: 'committed', firstSeenAt: 1600 }],
       }],
     }
@@ -241,14 +242,14 @@ describe('gitInfoRemote query endpoint', () => {
     // 中性态 gone(去向待定)是合法 wire 值。
     const goneParsed = gitQueryResultSchema.parse({
       kind: 'turn-records',
-      turns: [{ turn: 1, startAt: 0, endAt: null, hasWork: false, internal: [{ path: 'x', status: 'modified', state: 'gone', firstSeenAt: 1 }], external: [] }],
+      turns: [{ turn: 1, startAt: 0, endAt: null, hasWork: false, internal: [{ path: 'x', status: 'modified', state: 'gone', firstSeenAt: 1 }], sibling: [], external: [] }],
     })
     if (goneParsed.kind !== 'turn-records') throw new Error('wrong kind')
     expect(goneParsed.turns[0]?.internal[0]?.state).toBe('gone')
     // strict 镜像:未知 state 会被 reject(host 类型演进时此处先行失败)。
     expect(() => gitQueryResultSchema.parse({
       kind: 'turn-records',
-      turns: [{ turn: 1, startAt: 0, endAt: null, hasWork: false, internal: [{ path: 'x', status: 'modified', state: 'mystery', firstSeenAt: 1 }], external: [] }],
+      turns: [{ turn: 1, startAt: 0, endAt: null, hasWork: false, internal: [{ path: 'x', status: 'modified', state: 'mystery', firstSeenAt: 1 }], sibling: [], external: [] }],
     })).toThrow()
     // 请求形状:最简单的 turn-records 查询通过。
     expect(gitQueryRequestSchema.parse({ sessionId: 's1', query: { kind: 'turn-records' } }).query.kind).toBe('turn-records')

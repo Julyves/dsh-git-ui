@@ -29,6 +29,7 @@ import { PathStateTracker, type PathStateProbe } from './path-state.ts'
 import { sliceEvents, type SessionLike } from '../adapters/dsh/session-log.ts'
 import { createToolPresenter, type ToolRegistryLike } from '../adapters/dsh/tools-presenter.ts'
 import { collectSubagentWrites, type SessionsLike as SubagentSessionsLike } from '../adapters/dsh/subagent-adapter.ts'
+import { collectSiblingWrites } from '../adapters/dsh/sibling-adapter.ts'
 import { sessionStorageKey } from './obs-file.ts'
 import type { GitActionRequest, GitActionResult, GitQueryRequest, GitQueryResponse, GitSnapshot, GitSnapshotRequest, GitSnapshotResult, GitStorageReadRequest, GitStorageReadResult, GitStorageWriteRequest, GitStorageWriteResult, GitPresetRequest, GitPresetResult } from './types.ts'
 import type { MtimeSource } from './record-assembly.ts'
@@ -335,6 +336,9 @@ export class GitStatusService extends TypertRemoteService {
       mtimes: (snapshot) => this.mtimesFor(snapshot),
       subagentWrites: (id, root) => Promise.resolve(
         collectSubagentWrites(id, this.records.turns(id), this.sessions, root, this.presenter),
+      ),
+      siblingWrites: (id, root) => Promise.resolve(
+        collectSiblingWrites(id, this.sessions, root, this.presenter),
       ),
       probe: (id) => this.probeFor(id),
       pathStates: (id) => this.trackedPathStates(id),

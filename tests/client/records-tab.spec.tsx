@@ -17,7 +17,7 @@ const t = (key: keyof typeof zh): string => zh[key]
 /** 构造一个 turn（可覆盖）。 */
 function turn(overrides: Partial<TurnWorkRecord>): TurnWorkRecord {
   return {
-    turn: 1, startAt: 0, endAt: 1_000_000, hasWork: true, internal: [], external: [],
+    turn: 1, startAt: 0, endAt: 1_000_000, hasWork: true, internal: [], sibling: [], external: [],
     ...overrides,
   }
 }
@@ -28,7 +28,7 @@ function entry(path: string, state: WorkEntry['state'] = 'dirty'): WorkEntry {
 }
 
 /** 渲染 RecordsTab 为静态 HTML 字符串。 */
-function render(records: readonly TurnWorkRecord[] | null, initialFilter: 'all' | 'internal' | 'external' = 'all'): string {
+function render(records: readonly TurnWorkRecord[] | null, initialFilter: 'all' | 'internal' | 'sibling' | 'external' = 'all'): string {
   return renderToStaticMarkup(
     <RecordsTab records={records} t={t} onOpenDiff={() => {}} initialFilter={initialFilter} />,
   )
@@ -47,6 +47,7 @@ describe('RecordsTab — 过滤空态不卡死（回归）', () => {
     // 三个过滤按钮（退出通道）全部在场
     expect(html).toContain(t('work.filter.all'))
     expect(html).toContain(t('work.group.internal'))
+    expect(html).toContain(t('work.group.sibling'))
     expect(html).toContain(t('work.group.external'))
     // 「外部」为激活态（aria-pressed）
     expect(html).toContain('aria-pressed="true"')
@@ -82,14 +83,27 @@ describe('RecordsTab — 正常展示', () => {
     const records = [turn({
       turn: 1,
       internal: [entry('src/a.ts')],
+      sibling: [entry('gen/c.ts')],
       external: [entry('docs/b.md')],
     })]
     const html = render(records)
 
     expect(html).toContain('src/a.ts')
+    expect(html).toContain('gen/c.ts')
     expect(html).toContain('docs/b.md')
-    // 两个分组标题在场（本会话 / 外部）
+    // 三个分组标题在场（本会话 / 其他会话 / 外部）
     expect(html).toContain(t('work.group.internal'))
+    expect(html).toContain(t('work.group.sibling'))
     expect(html).toContain(t('work.group.external'))
+  })
+
+  it('「其他会话」过滤下仅保留含 sibling 条目的时段', () => {
+    const records = [
+      turn({ turn: 1, internal: [entry('src/a.ts')] }),
+      turn({ turn: 2, startAt: 2_000_000, endAt: 3_000_000, sibling: [entry('gen/c.ts')] }),
+    ]
+    const html = render(records, 'sibling')
+    expect(html).toContain('gen/c.ts')
+    expect(html).not.toContain('src/a.ts')
   })
 })

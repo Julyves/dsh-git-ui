@@ -205,7 +205,14 @@ export interface TurnWorkRecord {
   readonly endAt: number | null
   /** 是否含工具调用(空 turn 折叠展示用)。 */
   readonly hasWork: boolean
+  /** 本会话 agent(含 subagent 委托)写入。 */
   readonly internal: readonly WorkEntry[]
+  /**
+   * 其他 dsh 会话(同工作区)AI 写入——既非本会话也非人工。
+   * 归因轴对齐用户心智:「AI 改的」与「我改的」不再混在同一个「外部」桶。
+   */
+  readonly sibling: readonly WorkEntry[]
+  /** 外部(人工:IDE / 命令行 / 未识别来源)。 */
   readonly external: readonly WorkEntry[]
 }
 

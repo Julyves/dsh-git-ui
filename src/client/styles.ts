@@ -87,6 +87,20 @@ export const workBadgeExternal: CSSProperties = {
   boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
 }
 
+/** 工作记录徽章(其他会话 AI):品牌紫淡晕底——同为 AI 工作但非本会话,
+ * 与本会话(蓝)/外部(灰)在色相上三分可辨。 */
+export const workBadgeSibling: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: '0 6px',
+  borderRadius: 8,
+  fontWeight: 600,
+  color: 'var(--dsw-alias-brand-purple-strong, var(--dsw-alias-label-primary))',
+  background: 'color-mix(in srgb, var(--dsw-alias-brand-purple-strong, var(--dsw-alias-brand-blue-strong)) 14%, transparent)',
+  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-brand-purple-strong, var(--dsw-alias-brand-blue-strong)) 35%, transparent)',
+}
+
 /** 工作记录徽章小圆点(本会话=蓝 / 外部=灰)。 */
 export const workBadgeDot: CSSProperties = {
   width: 6,
@@ -99,6 +113,11 @@ export const workBadgeDot: CSSProperties = {
 export const workBadgeDotInternal: CSSProperties = {
   ...workBadgeDot,
   background: 'var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary))',
+}
+
+export const workBadgeDotSibling: CSSProperties = {
+  ...workBadgeDot,
+  background: 'var(--dsw-alias-brand-purple-strong, var(--dsw-alias-brand-blue-strong))',
 }
 
 export const workBadgeDotExternal: CSSProperties = {

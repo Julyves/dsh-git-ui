@@ -20,7 +20,7 @@ import { sliceEvents, type SessionLike } from './session-log.ts'
 /** dsh sessions 服务切片(与本插件 host 注入的 'sessions' 一致)。 */
 export interface SessionsLike {
   get(id: string): SessionLike | undefined
-  list(): readonly { readonly id: string; readonly header?: { readonly meta?: Record<string, unknown> } }[]
+  list(): readonly { readonly id: string; readonly header?: { readonly cwd?: string; readonly meta?: Record<string, unknown> } }[]
 }
 
 /**

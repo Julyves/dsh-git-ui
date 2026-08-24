@@ -32,6 +32,8 @@ export interface TurnRecordSources {
   mtimes(snapshot: GitSnapshot): Promise<MtimeSource | undefined>
   /** 子会话写路径(父 turn → 路径;可缺省面)。 */
   subagentWrites(sessionId: string, root: string): Promise<ReadonlyMap<number, readonly string[]>>
+  /** 其他 dsh 会话(同工作区)写过的路径全集(可缺省 = 空,全落 external)。 */
+  siblingWrites(sessionId: string, root: string): Promise<ReadonlySet<string>>
   /** 恢复对账探针(按 sessionId 取)。 */
   probe(sessionId: string): CommitProbe
   /** 去向判定缓存(每会话一份;可缺省 = 不升级,全部保持 gone)。 */
@@ -69,6 +71,7 @@ export async function runTurnRecords(
 
   const mtimes = await sources.mtimes(snapshot.value)
   const subagentWrites = await sources.subagentWrites(sessionId, snapshot.value.root)
+  const siblingWrites = await sources.siblingWrites(sessionId, snapshot.value.root)
   const pathStates = sources.pathStates(sessionId)
   const assembleTurns = (): readonly TurnWorkRecord[] => pipeline.assemble(sessionId, {
     changes: snapshot.value.changes,
@@ -77,6 +80,7 @@ export async function runTurnRecords(
     mtimes,
     now: sources.now(),
     subagentWrites,
+    siblingWrites,
     pathStates,
   })
   const records = assembleTurns()

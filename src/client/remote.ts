@@ -134,23 +134,22 @@ export const gitQuerySchema = z.discriminatedUnion('kind', [
 /** Turn 工作记录(wire 镜像 host/types.ts 的 TurnWorkRecord/WorkEntry)。 */
 export const workEntryStateSchema = z.enum(['dirty', 'committed', 'reverted', 'gone'])
 
+const workEntryObjectSchema = z.object({
+  path: z.string(),
+  status: z.enum(['added', 'modified', 'deleted', 'renamed', 'untracked', 'conflicted', 'typechange']),
+  state: workEntryStateSchema,
+  firstSeenAt: z.number(),
+})
+
 export const turnWorkRecordSchema = z.object({
   turn: z.number().int(),
   startAt: z.number(),
   endAt: z.number().nullable(),
   hasWork: z.boolean(),
-  internal: z.array(z.object({
-    path: z.string(),
-    status: z.enum(['added', 'modified', 'deleted', 'renamed', 'untracked', 'conflicted', 'typechange']),
-    state: workEntryStateSchema,
-    firstSeenAt: z.number(),
-  })),
-  external: z.array(z.object({
-    path: z.string(),
-    status: z.enum(['added', 'modified', 'deleted', 'renamed', 'untracked', 'conflicted', 'typechange']),
-    state: workEntryStateSchema,
-    firstSeenAt: z.number(),
-  })),
+  internal: z.array(workEntryObjectSchema),
+  // 作者三分:其他 dsh 会话(同工作区)AI 写入(internal/external 之外的第三组)。
+  sibling: z.array(workEntryObjectSchema),
+  external: z.array(workEntryObjectSchema),
 })
 
 const gitFileStatSchema = z.object({ path: z.string(), status: z.enum(['added', 'modified', 'deleted', 'renamed', 'untracked', 'conflicted', 'typechange']) })
