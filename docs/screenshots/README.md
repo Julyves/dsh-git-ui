@@ -15,6 +15,8 @@ that already points at these paths.
 | `03-Git中心统一阅览文件变更.png` | Git center — Changes tab | Grouped lists (staged / unstaged / untracked), bulk action buttons, the commit box, and the side-by-side diff for a selected file. Prefer a repo with a few staged + unstaged + untracked files so all three groups are visible. |
 | `04-Git中心查看分支历史.png` | Git center — History tab (commit list + branch graph) | A repo with several commits across 2+ branches so the branch graph shows forks/merges; keep the filter tree on the left in frame. |
 | `04-Git中心查看提交详情.png` | Git center — History tab (commit details) | Select a commit to show its subject · body · changed-file tree in the right pane. |
+| `05-Git中心查看Turn记录.png` | Git center — Records tab (turn work-record timeline) | A workspace with a few working turns across the session; prefer at least one expandable period (dimmed "无变更产出" header) and one expanded showing grouped files. |
+| `06-Git中心管理插件设置.png` | Git center — Settings tab (display modes + switches) | Keep the live preview and the mode presets / component switches in frame. |
 
 ## File rules
 

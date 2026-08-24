@@ -14,59 +14,88 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) plug
 
 ## Features
 
-- **Branch pill** in the session header (right-aligned, per-session): a status dot (green when clean, orange when dirty) followed by the branch name and dirty / ahead-behind badges — click to open the detail popover:
+### Branch pill in the session header
 
-  <img src="docs/screenshots/01-pill面板内容展示.png" alt="Branch pill and the detail popover it opens" width="720">
+A status capsule on the right of each session header: a status dot (green when clean, orange when dirty), the branch name, and dirty / ahead-behind badges — click to open the detail popover:
 
-  | State | Pill |
-  |---|---|
-  | Clean | `● main` |
-  | Dirty | `● main · +2 −1 ?3` |
-  | Ahead / behind | `● main · ↑1 ↓2` |
-  | Detached HEAD | `● (detached HEAD) · a1b2c3d` |
-  | Unborn (no commits) | `● main · 无提交` |
-  | Not a git repo | Dimmed `无 Git 仓库` |
-  | Git unavailable / error | Dimmed `Git 不可用` (reason in tooltip) |
+<img src="docs/screenshots/01-pill面板内容展示.png" alt="Branch pill and the detail popover it opens" width="720">
 
-  `+N −N ?N` = staged / modified / untracked; `↑N ↓N` = ahead / behind. When both dirty and ahead/behind, the badges combine (e.g. `● main · +2 −1 ?3 · ↑1 ↓2`).
+| State | Pill |
+|---|---|
+| Clean | `● main` |
+| Dirty | `● main · +2 −1 ?3` |
+| Ahead / behind | `● main · ↑1 ↓2` |
+| Detached HEAD | `● (detached HEAD) · a1b2c3d` |
+| Unborn (no commits) | `● main · 无提交` |
+| Not a git repo | Dimmed `无 Git 仓库` |
+| Git unavailable / error | Dimmed `Git 不可用` (reason in tooltip) |
 
-- **Detail popover** (click the pill): repository root, status counts (staged / modified / untracked) with dirty and ahead/behind badges, recent commits (hash · subject · author · relative time), a changed-file list with status chips and inline per-file actions (stage / unstage / discard), an inline branch switcher, a manual refresh button, and last-checked time:
+`+N −N ?N` = staged / modified / untracked; `↑N ↓N` = ahead / behind. When both dirty and ahead/behind, the badges combine (e.g. `● main · +2 −1 ?3 · ↑1 ↓2`).
 
-  <img src="docs/screenshots/02-面板选择切换分支.png" alt="Inline branch switching in the detail popover" width="720">
+### Detail popover
 
-- **Git center** (management panel opened from the popover): four tabs — **Changes**, **History**, **Records** and **Settings**.
-  - *Changes*: IDE-style grouped lists (staged / unstaged / untracked), per-file and bulk stage / unstage / discard (two-step confirm), a commit box (selected files or everything staged), and an inline side-by-side diff for the selected file with prev/next navigation.
-  - *History*: a paginated commit list with a rendered branch graph, per-commit details (subject · body · changed-file tree), and filters by branch / tag / author / date / text-or-hash, plus a fetch-remote button.
-  - *Records*: the turn work-record session timeline — see the [Turn work records](#turn-work-records) section below.
-  - *Settings*: **configurable pill information components** — a live preview, four display presets (minimal / standard / full / custom, purely derived so any manual tweak snaps back when it matches a preset again), and per-component switches (status dot, branch name, the three change-count badges, ahead/behind; plus popup blocks: repository path, status bar, branch switcher, new-branch row, recent-commit count, changed-file list). Also reachable via the gear icon in the popup header:
+Clicking the pill opens: the repository root path, status counts with dirty and ahead/behind badges, recent commits (hash · subject · author · relative time), the changed-file list with status chips and inline per-file actions (stage / unstage / discard), an inline branch switcher, a manual refresh button, and the last-checked time:
 
-- **Polished diff viewer** (Changes tab side-by-side):
-  - **New files shown directly**: a pure-add diff (`--- /dev/null` shape) no longer renders an empty comparison column — the created file's full content is displayed single-column with line numbers; 0-byte empty files show "file is empty" instead of a meaningless empty diff.
-  - **Syntax highlighting**: per file type (shiki TextMate grammars, JS regex engine — no WASM) with keyword/string/comment/number coloring; the whole file is tokenized once and rendered line-by-line, so multi-line comments and strings stay correct. Colors reuse the host theme's `--shiki-*` tokens (auto light/dark); the highlight switch and code font size are configurable. The language subset and approximation mapping (C++→C, HTML→XML, SCSS/LESS→CSS) under the bundle budget are listed under [Known Limitations](#known-limitations).
-  - **Context folding**: runs of 12+ unchanged lines collapse into an expandable "… N unchanged lines" strip (click to expand/collapse); can be disabled in settings.
-  - **Bug fix**: the `\ No newline at end of file` marker no longer shifts line-number alignment.
-  - **Settings**: a diff-viewer group — code font size (10–16px), syntax-highlight switch, context-folding switch; independent of the display presets (adjusting them does not flip the preset back to "custom").
+<img src="docs/screenshots/02-面板选择切换分支.png" alt="Inline branch switching in the detail popover" width="720">
 
-- **Settings persisted on the host disk (v2)**: settings no longer live in localStorage — they are stored under the dsh Harness home at `plugin-data/dsh-git-ui/settings.json` (`$DSH_HOME` → `~/.dsh`, overridable via `dshHome` in the profile config), written atomically (temp file + rename) and surviving restarts across devices. The browser only reads/writes through host RPC (strict file-name whitelist); on initialization, v1 localStorage settings are migrated once to disk (the key is not read anymore afterwards).
-- **Turn work records**: per-turn attribution of file-system changes, strictly git-based (ignored / out-of-repo files never count). Two modes:
-  - **Single-turn mode (pill, default)**: the pill leads with an incremental unread badge (`new N` since your last view — opening the popup or Records tab clears it), then three-way authorship counts — `in` (this session's agent, subagents included) / `sib` (AI of other dsh sessions in the same workspace) / `ext` (human: IDE, terminal, unknown). Click the pill for the grouped file lists and the task narrative; the switch in Settings hides the badge.
-  - **All-session mode (Records tab in the Git center)**: consecutive working turns are merged into **working sessions** (default 10-minute gap) — a single-column session-card timeline: each card header shows the **task narrative** (the user instruction driving that period — "what" before "when"), the time window, and three-way counts, expanding into three file groups (this session / other sessions / external) with state badges (still dirty / committed / reverted / left); the toolbar offers a summary (sessions · files · dirty) and a four-way filter. **Every period is expandable** — periods that produced no file changes carry a dimmed "no changes" chip on the header and show an empty-state note when opened, so "did this turn touch anything?" is answered at a glance.
-  - **Three-way authorship**: `this session` / `other sessions` (AI writing in the same workspace) / `external` (human) — the attribution axis now matches the user's mental model: "AI changed it" vs "I changed it" no longer share one bucket.
-  - **Action loop**: each session card offers **bulk staging** — "Stage AI changes" (this + other sessions' dirty files, human WIP excluded) and "Stage all"; **committed entries deep-link to the exact commit** in the History tab (hash carried by the same HEAD-detection git command, zero extra runs).
-  - **Attribution confidence + manual correction**: entries backed by platform-declared write intent (diff cards / write-kind cards / result meta) render as solid badges; heuristic ones (bash static targets / args fallback / time-window attribution) get a dashed badge with `≈` — the error is visible. Hover an entry and press `⇄` to reclassify its authorship (persisted per repository under `plugin-data/dsh-git-ui/overrides.json`; applied uniformly across popup, Records tab, and unread counts).
-  - **Checkpoint foundation (turn-boundary fingerprints)**: each snapshot idempotently captures the latest turn's boundary change-set (`fp-<session>.jsonl`, restored across restarts); entries absent from the *previous* turn's fingerprint are marked `new`. Content-level snapshots and per-turn rollback remain the endgame, not yet provided.
-  - **How it works**: the host folds the session event log (`turn/start`·`turn/end`·`tool/call`·`user/message` timestamps) into exact per-turn windows plus task narratives (recovered from `narr-<session>.jsonl` after compaction), extracts agent-written paths by reusing each tool's own `presentCall` write intent (bash gets a static-target heuristic: redirects / tee / sed -i / cp-mv / dd of=), merges other-session writes by enumerating same-cwd sessions (zero git commands), and attributes external changes through a polling observation timeline (first-seen per path, HEAD-move commit detection — `--format=%H` carries the commit hash on the same command for deep links — and mtime refinement for still-dirty files). The observation timeline is persisted under `plugin-data/dsh-git-ui/obs-<session>.jsonl` (atomic writes, reconciled against commits on restore), so records survive host restarts. **L3 seam**: `TurnRecordSources.filesWritten` — when the upstream sandbox provides per-turn authoritative write sets, the whole heuristic pipeline is bypassed for those turns.
+### Git center
 
-  Every operation refreshes the status instantly:
+The full management panel, opened from the popover — four tabs: **Changes**, **History**, **Records** and **Settings**.
 
-  <img src="docs/screenshots/03-Git中心统一阅览文件变更.png" alt="Git center — Changes tab (grouped file changes)" width="720">
+#### Changes
 
-  <img src="docs/screenshots/04-Git中心查看分支历史.png" alt="Git center — History tab (commit list with branch graph)" width="720">
+IDE-style grouped lists (staged / unstaged / untracked), per-file and bulk stage / unstage / discard (two-step confirm), a commit box (selected files or everything staged), and an inline side-by-side diff for the selected file with prev/next navigation:
 
-  <img src="docs/screenshots/04-Git中心查看提交详情.png" alt="Git center — commit details and changed-file tree" width="720">
+<img src="docs/screenshots/03-Git中心统一阅览文件变更.png" alt="Git center — Changes tab (grouped file changes)" width="720">
 
-- **Always-fresh data, zero interaction**: automatic status snapshot on session open, silent polling (host-configured interval, default 30s, no overlapping requests), **immediate refresh when an agent turn completes** (best-effort — the working tree most likely changed right then), resync after reconnect, and a manual refresh button.
-- **Deterministic degradation**: non-git directories, missing cwd, missing git, timeouts, and oversized repositories show stable fallback states — never crashes, never spams.
+#### History
+
+A paginated commit list with a rendered branch graph, filters by branch / tag / author / date / text-or-hash, a fetch-remote button, and per-commit details:
+
+<img src="docs/screenshots/04-Git中心查看分支历史.png" alt="Git center — History tab (commit list with branch graph)" width="720">
+
+Selecting a commit shows its subject · body · changed-file tree (foldable directories) in the detail pane:
+
+<img src="docs/screenshots/04-Git中心查看提交详情.png" alt="Git center — commit details and changed-file tree" width="720">
+
+#### Records
+
+The turn work-record session timeline — see [Turn work records](#turn-work-records) below:
+
+<img src="docs/screenshots/05-Git中心查看Turn记录.png" alt="Git center — Records tab (turn work-record session timeline)" width="720">
+
+#### Settings
+
+Configurable pill information components and diff-viewer options: a live preview, four display presets (minimal / standard / full / custom — purely derived, so any manual tweak snaps back when it matches a preset again), and per-component switches (status dot, branch name, the three change-count badges, ahead/behind; plus popup blocks: repository path, status bar, branch switcher, new-branch row, recent-commit count, changed-file list). Also reachable via the gear icon in the popup header:
+
+<img src="docs/screenshots/06-Git中心管理插件设置.png" alt="Git center — Settings tab (display presets and switches)" width="720">
+
+### Turn work records
+
+Answer "**what did this round of work touch, and who touched it**" with per-turn attribution of filesystem changes — strictly git-based (ignored / out-of-repo files never count).
+
+- **Single-turn mode (pill, default)**: a compact badge for the latest working period — an incremental unread count first (`new N` since your last view, cleared on view), then three-way authorship counts: `本` this session's agent (subagents included) / `会` AI of other dsh sessions in the same workspace / `外` human (IDE / terminal / unknown). Click the pill for the grouped file lists and the task narrative; a Settings switch hides the badge.
+- **All-session mode (Records tab)**: consecutive working turns are merged into **working periods** (default: gaps ≤ 10 min). Each period card carries the **task narrative** (the user instruction driving that period — "what" before "when"), its time window, and three-way counts; expanding reveals three file groups (this session / other sessions / external) with state badges (still dirty / committed / reverted / gone). The toolbar offers a summary (periods · files · still-dirty) and a four-way filter. **Every period is expandable** — periods that produced no file changes dim the header with a `无变更产出` chip and show an empty state when opened, so "did this turn touch anything?" is answered at a glance.
+- **Three-way authorship**: `this session` (agent + delegated subagents) / `other sessions` (AI writes from other dsh sessions in the same workspace) / `external` (human: IDE, terminal, unidentified) — the attribution axis matches the user's mental model: "AI changed it" and "I changed it" no longer share one bucket. Sibling-session attribution is frozen into the observation timeline, so it never drifts after the sibling session leaves or the host restarts.
+- **Action loop**: each period card offers **bulk staging** — "Stage AI changes" (this + other sessions' still-dirty files, human WIP excluded) and "Stage all"; **committed entries deep-link to the exact commit** in the History tab (auto-located and selected).
+- **Attribution confidence + manual correction**: entries backed by platform-declared write intent get a solid badge; heuristic ones get a dashed badge with `≈` — the uncertainty stays visible. Hover an entry and press `⇄` to reclassify its authorship (repository-scoped, persisted to disk; applied uniformly across the popup, the Records tab and the unread count).
+- **New-output marking**: each turn's boundary is captured in a fingerprint; entries absent from the *previous* turn's boundary are marked `新`, so this round's new output is distinguishable from the existing history at a glance.
+
+How it works: the host folds the session event log (`turn/start` · `turn/end` · `tool/call` · `user/message` carry timestamps) into exact per-turn windows plus task narratives; agent-written paths are extracted by reusing each tool's declared write intent (bash falls back to a static-target heuristic: redirects / tee / sed -i / cp-mv / dd of=); sibling writes are merged by enumerating same-cwd sessions; external changes are attributed through a polling observation timeline (first-seen per path + HEAD-move commit detection + mtime refinement for still-dirty files). The observation timeline, narratives and fingerprints persist under the host plugin-data directory, so records survive host restarts.
+
+### Polished diff viewer
+
+Side-by-side diff in the Changes tab:
+
+- **New files shown directly**: a pure-add diff (`--- /dev/null` shape) renders the created file's full content in a single column with line numbers instead of an empty comparison; 0-byte files show "file is empty".
+- **Syntax highlighting**: keyword / string / comment / number coloring per file type; the whole file is tokenized once and rendered line-by-line, so multi-line comments and strings stay correct. Colors reuse the host theme tokens (auto light/dark); the highlight switch and code font size are configurable.
+- **Context folding**: runs of 12+ unchanged lines collapse into an expandable "… N unchanged lines" strip (click to expand/collapse); can be disabled in settings.
+- **Settings**: code font size (10–16px), syntax-highlight switch and context-folding switch live in a diff-viewer group, independent of the display presets.
+
+### Fresh data & graceful degradation
+
+- **Always fresh, zero interaction**: a status snapshot loads automatically on session open; silent polling (host-configured interval, default 30s, no overlapping requests); an **immediate refresh when an agent turn completes** (the working tree most likely changed right then); resync after reconnect; and a manual refresh button.
+- **Deterministic degradation**: non-git directories, missing cwd, missing git, timeouts and oversized repositories show stable fallback states — never crashes, never spams.
 - **Zero agent impact**: adds no model tools and writes no session events — it never changes agent behavior. Git operations in the center (stage / commit / branch / fetch) are user-initiated from the UI, never agent-driven.
 
 ## Installation
@@ -135,9 +164,9 @@ All defaults work out of the box. Advanced users may override the plugin config 
 - Polling-based refresh (default 30s); file-watcher event push is a planned extension.
 - Changed-file list is capped (`maxChanges`); untracked-directory contents are enumerated individually. When status output overflows the in-memory cap (default 4 MiB) it is recovered from a private spill file so counts stay exact — only if the spill cap (64 MiB) also overflows does the snapshot fall back to approximate (`truncated: true`).
 - Browser never sends paths — only a `sessionId`; the host resolves the authoritative cwd and runs git commands (write operations use `--` path separation and reject absolute / `..` escapes).
+- **Turn work records**: bash writes with dynamically-constructed targets (`$(...)`, globs, `find -exec`, `eval`) are not statically extractable and fall back to external with a visible `≈` inferred mark (a per-turn authoritative write set from the upstream sandbox would bypass the heuristic pipeline entirely); cold (unloaded) subagent / sibling sessions are skipped for their attribution — sibling attribution is frozen into the observation timeline (already-judged entries never drift after the session leaves or the host restarts), but sibling writes never judged by any query still land in external; sibling-session detection resolves cwd through realpath and includes subdirectories of the repo; the observation timeline is capped (2,000 paths/session, oldest pruned) and external changes that appear and vanish within one poll interval cannot be reconstructed after a host restart; turn-boundary fingerprints approximate the boundary at first observation (write-then-revert within one poll interval is indistinguishable); changes predating the first turn have no owning window; manual authorship overrides are repository-scoped (they outlive sessions and are never garbage-collected with them).
 - Syntax highlighting ships a bundle-budget language subset (TypeScript/JS family, JSON/YAML/TOML/INI, Markdown, XML/HTML, CSS/SCSS/LESS, Python, Shell, Java, Go, Rust, C, C#, Kotlin, SQL, Makefile). C++ is approximated with the C grammar, HTML with XML, and SCSS/LESS with CSS (core tokens correct; language-specific constructs fall back to plain text); unregistered languages such as PHP, Swift, Ruby and Lua fall back to plain text wholesale (still monospace, never an error).
-- **Turn work records**: bash writes with dynamically-constructed targets (`$(...)`, globs, `find -exec`, `eval`) are not statically extractable and fall back to external with a visible `≈` inferred mark (the root fix is the L3 `filesWritten` seam, pending an upstream sandbox). Cold (unloaded) subagent / sibling sessions are skipped for their attribution — sibling attribution is frozen into the observation timeline (already-judged entries never drift after the session leaves or the host restarts), but sibling writes **never judged by any query** (the sibling wrote and left between two queries) still land in external; sibling-session detection resolves cwd through realpath and includes subdirectories of the repo (realpath failure degrades to exact match); the observation timeline is capped (2 000 paths/session, oldest pruned) and external changes that appear and vanish within one poll interval cannot be reconstructed after a host restart; turn-boundary fingerprints approximate the boundary at first observation (write-then-revert within one poll interval is indistinguishable); changes predating the first turn have no owning window; manual authorship overrides are repository-scoped (they outlive sessions and are never garbage-collected with them).
-- After the v2 storage migration, settings no longer write to localStorage; if the host RPC is unreachable (degraded mode), settings stay in memory only (valid for the session).
+- Settings persist on the host disk; if the host RPC is unreachable (degraded mode), settings stay in memory only (valid for the session).
 
 ## Development
 
