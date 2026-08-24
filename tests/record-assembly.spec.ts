@@ -213,7 +213,7 @@ describe('assembleAll — subagent writes and empty turns', () => {
     const { log, observations, deps } = fixture()
     const records = assembleAll({
       log, observations, ...deps,
-      subagentWrites: new Map([[1, ['sub/written.ts']]]),
+      subagentWrites: new Map([[1, [{ path: 'sub/written.ts', authoritative: true }]]]),
       changes: [change('external.txt'), change('sub/written.ts')],
     })
     expect(records[0]?.internal.map((e) => e.path)).toEqual(['docs/test.txt', 'sub/written.ts'])
@@ -230,5 +230,42 @@ describe('assembleAll — subagent writes and empty turns', () => {
       repoRoot: '/repo', presenter: undefined, mtimes: undefined, now: 3000,
     })
     expect(records[0]).toMatchObject({ turn: 1, hasWork: false, internal: [], external: [] })
+  })
+})
+describe('assembleAll — 归因置信度(B3)', () => {
+  it('diff-card writes are authoritative; args-fallback and observed entries are inferred', () => {
+    const { log, observations, deps } = fixture()
+    // fixture presenter = diff 卡 → 权威。
+    const records = assembleAll({ log, observations, ...deps })
+    expect(records[0]?.internal.find((e) => e.path === 'docs/test.txt')?.attribution).toBe('authoritative')
+    // 观测条目(external)恒 inferred。
+    expect(records[0]?.external[0]?.attribution).toBe('inferred')
+    // 无 presenter:write 走 args 兜底目录 → inferred。
+    const bareLog = new TurnLog()
+    bareLog.append([
+      { type: 'turn/start', seq: 1, time: 1000, data: { turn: 1 } },
+      { type: 'tool/call', seq: 2, time: 1100, data: { turn: 1, callId: 'c1', name: 'write', arguments: '{"file_path":"docs/test.txt"}' } },
+    ])
+    const bare = assembleAll({
+      log: bareLog, observations,
+      changes: [change('docs/test.txt'), change('external.txt')], repoRoot: '/repo', presenter: undefined, mtimes: undefined, now: 2000,
+    })
+    expect(bare[0]?.internal.find((e) => e.path === 'docs/test.txt')?.attribution).toBe('inferred')
+  })
+
+  it('result-meta diffs mark their paths authoritative', () => {
+    const log = new TurnLog()
+    log.append([
+      { type: 'turn/start', seq: 1, time: 1000, data: { turn: 1 } },
+      { type: 'tool/call', seq: 2, time: 1100, data: { turn: 1, callId: 'c1', name: 'write', arguments: '{"file_path":"src/meta.ts"}' } },
+      { type: 'tool/result', seq: 3, time: 1200, data: { turn: 1, callId: 'c1', meta: { diffs: [{ path: '/repo/src/meta.ts' }] } } },
+    ])
+    const observations = new ObservationLog()
+    observations.update([change('src/meta.ts')], 1500)
+    const records = assembleAll({
+      log, observations,
+      changes: [change('src/meta.ts')], repoRoot: '/repo', presenter: undefined, mtimes: undefined, now: 2000,
+    })
+    expect(records[0]?.internal.find((e) => e.path === 'src/meta.ts')?.attribution).toBe('authoritative')
   })
 })

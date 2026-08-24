@@ -61,6 +61,10 @@ export interface GitInjected {
   run: (action: GitAction) => Promise<GitActionResult>
   /** 执行一条只读查询（历史/差异/分支等）。 */
   query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
+  /** 读取插件数据文件（归因纠错 overrides 等轻量客户端态）。 */
+  storageRead: (file: string) => Promise<string | null>
+  /** 原子写入插件数据文件。 */
+  storageWrite: (file: string, data: string) => Promise<boolean>
 }
 
 /** Slot 条目描述符：注册到宿主 slot 系统的一条记录。 */

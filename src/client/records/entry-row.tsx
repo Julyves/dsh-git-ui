@@ -19,10 +19,14 @@ export interface EntryRowProps {
   readonly onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
   /** 已提交条目 → 打开 Git 中心历史页定位该提交(缺省 = 纯展示)。 */
   readonly onOpenCommit?: (hash: string) => void
+  /** 该条目所属分组(纠错按钮的改判方向)。 */
+  readonly group?: 'internal' | 'sibling' | 'external'
+  /** 人工改判归因(仓库级持久化;缺省 = 无纠错入口)。 */
+  readonly onReclassify?: (path: string, to: 'internal' | 'external') => void
 }
 
 /** 一条工作条目（状态 chip + 文件名 + 目录 + 状态徽章）。 */
-export function EntryRow({ entry, t, onOpenDiff, onOpenCommit }: EntryRowProps): JSX.Element {
+export function EntryRow({ entry, t, onOpenDiff, onOpenCommit, group, onReclassify }: EntryRowProps): JSX.Element {
   const { name, dir, isDir } = splitChangePath(entry.path, entry.path.endsWith('/'))
   const commitJump = entry.state === 'committed' && entry.commitHash !== null && onOpenCommit !== undefined
   const clickable = entry.state === 'dirty' || commitJump
@@ -60,8 +64,28 @@ export function EntryRow({ entry, t, onOpenDiff, onOpenCommit }: EntryRowProps):
         <span style={css.entryName} title={hint}>{name}</span>
       )}
       {dir !== '' && <span style={css.entryDir} title={dir}>{dir}</span>}
+      <span className="dsh-git-ui__row-actions" style={css.entryActions}>
+        {onReclassify !== undefined && group !== undefined && (
+          <button
+            type="button"
+            className="dsh-git-ui__icon-btn"
+            style={css.entryReclassifyButton}
+            title={group === 'internal' ? t('work.reclassify.external') : t('work.reclassify.internal')}
+            aria-label={group === 'internal' ? t('work.reclassify.external') : t('work.reclassify.internal')}
+            onClick={() => onReclassify(entry.path, group === 'internal' ? 'external' : 'internal')}
+          >
+            ⇄
+          </button>
+        )}
+      </span>
       <span style={css.entryState}>
-        <span style={css.entryStateStyle(entry.state)}>{workStateLabel(entry.state, t)}</span>
+        <span
+          style={entry.attribution === 'inferred' ? css.entryStateStyleInferred(entry.state) : css.entryStateStyle(entry.state)}
+          title={entry.attribution === 'inferred' ? `${workStateLabel(entry.state, t)} · ${t('work.attribution.inferredHint')}` : undefined}
+        >
+          {workStateLabel(entry.state, t)}
+          {entry.attribution === 'inferred' ? ' ≈' : ''}
+        </span>
       </span>
     </div>
   )

@@ -27,6 +27,8 @@ export interface SessionCardProps {
   readonly onStage?: (paths: readonly string[]) => void
   /** 已提交条目 → Git 中心历史页定位该提交。 */
   readonly onOpenCommit?: (hash: string) => void
+  /** 人工改判归因(仓库级持久化;缺省 = 无纠错入口)。 */
+  readonly onReclassify?: (path: string, to: 'internal' | 'external') => void
 }
 
 /** HH:mm 钟面。 */
@@ -47,13 +49,15 @@ function windowText(session: WorkSession, t: (key: GitKey) => string): string {
 }
 
 /** 一条分区条目包装（统一渲染路径）。 */
-function EntryGroup({ title, dot, entries, t, onOpenDiff, onOpenCommit }: {
+function EntryGroup({ title, dot, group, entries, t, onOpenDiff, onOpenCommit, onReclassify }: {
   readonly title: string
   readonly dot: CSSProperties
+  readonly group: 'internal' | 'sibling' | 'external'
   readonly entries: readonly WorkEntry[]
   readonly t: (key: GitKey) => string
   readonly onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
   readonly onOpenCommit?: (hash: string) => void
+  readonly onReclassify?: (path: string, to: 'internal' | 'external') => void
 }): JSX.Element | null {
   if (entries.length === 0) return null
   return (
@@ -63,14 +67,14 @@ function EntryGroup({ title, dot, entries, t, onOpenDiff, onOpenCommit }: {
         {title}
       </div>
       {entries.map((entry) => (
-        <EntryRow key={entry.path} entry={entry} t={t} onOpenDiff={onOpenDiff} onOpenCommit={onOpenCommit} />
+        <EntryRow key={entry.path} entry={entry} t={t} onOpenDiff={onOpenDiff} onOpenCommit={onOpenCommit} group={group} onReclassify={onReclassify} />
       ))}
     </>
   )
 }
 
 /** 一个时段卡片（可展开）。 */
-export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = false, onStage, onOpenCommit }: SessionCardProps): JSX.Element {
+export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = false, onStage, onOpenCommit, onReclassify }: SessionCardProps): JSX.Element {
   const [open, setOpen] = useState(defaultOpen)
   const [hover, setHover] = useState(false)
   const showInternal = filter === 'all' || filter === 'internal'
@@ -140,28 +144,34 @@ export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = fals
         {hasEntries && open && (
           <div style={css.sessionBody}>
             <EntryGroup
+              group="internal"
               title={t('work.group.internal')}
               dot={css.sessionGroupDotInternal}
               entries={internalEntries}
               t={t}
               onOpenDiff={onOpenDiff}
               onOpenCommit={onOpenCommit}
+              onReclassify={onReclassify}
             />
             <EntryGroup
+              group="sibling"
               title={t('work.group.sibling')}
               dot={css.sessionGroupDotSibling}
               entries={siblingEntries}
               t={t}
               onOpenDiff={onOpenDiff}
               onOpenCommit={onOpenCommit}
+              onReclassify={onReclassify}
             />
             <EntryGroup
+              group="external"
               title={t('work.group.external')}
               dot={css.sessionGroupDotExternal}
               entries={externalEntries}
               t={t}
               onOpenDiff={onOpenDiff}
               onOpenCommit={onOpenCommit}
+              onReclassify={onReclassify}
             />
             {(aiDirty || allDirty) && (
               <div style={css.sessionActions}>

@@ -35,8 +35,8 @@ describe('turnEntryCounts', () => {
   it('counts internal/sibling/external entries (three-way authorship)', () => {
     const records = [turn({
       turn: 1,
-      internal: [{ path: 'a', status: 'modified', state: 'dirty', firstSeenAt: 1, commitHash: null }],
-      sibling: [{ path: 'c', status: 'modified', state: 'dirty', firstSeenAt: 1, commitHash: null }],
+      internal: [{ path: 'a', status: 'modified', state: 'dirty', firstSeenAt: 1, commitHash: null, attribution: 'authoritative' }],
+      sibling: [{ path: 'c', status: 'modified', state: 'dirty', firstSeenAt: 1, commitHash: null, attribution: 'authoritative' }],
     })]
     expect(turnEntryCounts(latestWorkTurn(records))).toEqual({ internal: 1, sibling: 1, external: 0 })
   })

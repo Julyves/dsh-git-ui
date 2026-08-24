@@ -19,7 +19,7 @@
  */
 
 import type { FoldedTurn, TurnLog } from './turns.ts'
-import { extractWritePaths, metaWritePaths, type ToolPresenter } from './write-paths.ts'
+import { extractWritePathDetails, metaWritePaths, type ToolPresenter, type WritePathDetail } from './write-paths.ts'
 import type { ObservationLog } from './observation.ts'
 import type { GitChange, GitChangeStatus, TurnWorkRecord, WorkEntry, WorkEntryState } from './types.ts'
 import type { PathStateLookup } from './path-state.ts'
@@ -42,8 +42,8 @@ export interface AssembleDeps {
   readonly presenter: ToolPresenter | undefined
   readonly mtimes: MtimeSource | undefined
   readonly now: number
-  /** 子会话写路径:父 turn → 路径(适配层注入;缺省无)。 */
-  readonly subagentWrites?: ReadonlyMap<number, readonly string[]>
+  /** 子会话写路径明细:父 turn → {path, authoritative}(适配层注入;缺省无)。 */
+  readonly subagentWrites?: ReadonlyMap<number, readonly WritePathDetail[]>
   /** 其他 dsh 会话(同工作区)写过的路径全集(适配层注入;缺省 = 全落 external)。 */
   readonly siblingWrites?: ReadonlySet<string>
   /** 去向判定缓存(权威探测结果;缺省 = 全部待定 → gone)。 */
@@ -81,25 +81,29 @@ function collectAllInternal(deps: AssembleDeps): readonly WorkEntry[] {
   return entries
 }
 
-/** 一个 turn 的 internal 条目。 */
+/** 一个 turn 的 internal 条目(含归因置信度:平台自证 vs 启发式推断)。 */
 function internalOf(folded: FoldedTurn, deps: AssembleDeps): readonly WorkEntry[] {
-  const written = new Set<string>()
+  // path → 权威?同一路径权威源与启发式并存时权威胜(写意图自证优先)。
+  const authority = new Map<string, boolean>()
+  const mark = (path: string, authoritative: boolean): void => {
+    const existing = authority.get(path)
+    authority.set(path, existing === true ? true : authoritative)
+  }
   for (const call of folded.toolCalls) {
-    for (const path of extractWritePaths(call.name, call.argsJson, deps.repoRoot, deps.presenter)) {
-      written.add(path)
+    for (const detail of extractWritePathDetails(call.name, call.argsJson, deps.repoRoot, deps.presenter)) {
+      mark(detail.path, detail.authoritative)
     }
     if (call.meta !== undefined) {
-      for (const path of metaWritePaths(call.meta, deps.repoRoot)) {
-        written.add(path)
-      }
+      // result meta diff = 平台结果期自证 → 权威。
+      for (const path of metaWritePaths(call.meta, deps.repoRoot)) mark(path, true)
     }
   }
-  // subagent 写路径(适配层按父 turn 归并)。
-  for (const path of deps.subagentWrites?.get(folded.turn) ?? []) written.add(path)
+  // subagent 写路径明细(适配层按父 turn 归并)。
+  for (const detail of deps.subagentWrites?.get(folded.turn) ?? []) mark(detail.path, detail.authoritative)
 
   const entries: WorkEntry[] = []
-  for (const path of written) {
-    entries.push(entryFor(path, deps, folded.startAt))
+  for (const [path, authoritative] of authority) {
+    entries.push({ ...entryFor(path, deps, folded.startAt), attribution: authoritative ? 'authoritative' : 'inferred' })
   }
   return entries.sort((a, b) => a.path.localeCompare(b.path))
 }
@@ -135,6 +139,8 @@ function collectNonInternal(
       state,
       firstSeenAt: observation.firstSeenAt,
       commitHash: observation.commitHash,
+      // 观测窗口归因(非写意图自证)→ 一律推断。
+      attribution: 'inferred',
     }
     // 本会话与兄弟会话共写 → internal 胜(全局互斥);仅兄弟写过 → sibling。
     if (deps.siblingWrites?.has(observation.path) === true) sibling.push(entry)
@@ -158,7 +164,8 @@ function finalStateFor(path: string, inChanges: boolean, observation: { readonly
   return 'gone'
 }
 
-/** 单条 entry:状态四态 + 当前/观测 status + 首见时刻 + 提交哈希。 */
+/** 单条 entry:状态四态 + 当前/观测 status + 首见时刻 + 提交哈希
+ * (attribution 由调用方覆盖:internal 按提取来源,观测条目恒 inferred)。 */
 function entryFor(path: string, deps: AssembleDeps, fallbackFirstSeenAt: number): WorkEntry {
   const observation = deps.observations.get(path)
   const inChanges = deps.changes.some((change) => change.path === path)
@@ -171,5 +178,6 @@ function entryFor(path: string, deps: AssembleDeps, fallbackFirstSeenAt: number)
     state,
     firstSeenAt: observation?.firstSeenAt ?? fallbackFirstSeenAt,
     commitHash: observation?.commitHash ?? null,
+    attribution: 'inferred',
   }
 }

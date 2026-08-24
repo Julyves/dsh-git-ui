@@ -38,6 +38,14 @@ export interface ToolPresenter {
   presentCall(name: string, args: unknown): ToolViewSlice | undefined
 }
 
+/** 一条写路径及其归因置信度:authoritative = 平台自证写意图
+ * (diff 卡 / generic 写类卡 / result meta);inferred = 启发式推断
+ * (bash 静态目标 / args 兜底目录)。UI 以此区分实心/推断标记。 */
+export interface WritePathDetail {
+  readonly path: string
+  readonly authoritative: boolean
+}
+
 /** generic 卡的写类 kind(读/搜索/执行/网络类排除)。 */
 const WRITE_KINDS: ReadonlySet<string> = new Set(['edit', 'delete', 'move'])
 
@@ -54,6 +62,72 @@ export function isWriteKind(kind: string | undefined): boolean {
 }
 
 /**
+ * 从一个 turn 的工具调用提取写路径及其归因置信度(repo-relative,按路径去重;
+ * 同一路径权威源与启发式并存时权威胜)。
+ */
+export function extractWritePathDetails(
+  name: string,
+  argsJson: string,
+  repoRoot: string,
+  presenter: ToolPresenter | undefined,
+): readonly WritePathDetail[] {
+  let args: unknown
+  try {
+    args = JSON.parse(argsJson)
+  } catch {
+    args = null
+  }
+  const authoritative = new Set<string>()
+  const heuristic = new Set<string>()
+  const add = (raw: string, isAuthoritative: boolean): void => {
+    const normalized = normalizeRepoPath(raw, repoRoot)
+    if (normalized === null) return
+    if (isAuthoritative) {
+      authoritative.add(normalized)
+      heuristic.delete(normalized)
+    } else if (!authoritative.has(normalized)) {
+      heuristic.add(normalized)
+    }
+  }
+
+  // 源 1-3:平台写意图(diff 卡 / generic 写类卡 = 权威)。
+  const view = args !== null ? presenter?.presentCall(name, args) : undefined
+  if (view?.card === 'diff') {
+    for (const location of view.locations ?? []) add(location.path, true)
+    for (const diff of view.diffs ?? []) add(diff.path, true)
+  } else if (view?.card === 'generic' && isWriteKind(view.kind)) {
+    for (const location of view.locations ?? []) add(location.path, true)
+  }
+
+  // 源 3b:shell 工具(terminal 卡或工具名命中)——命令串静态写目标启发式(推断)。
+  const command = view?.card === 'terminal'
+    ? view.title
+    : (isShellName(name) && typeof args === 'object' && args !== null
+        ? (args as { command?: unknown }).command
+        : undefined)
+  if (typeof command === 'string' && command !== '') {
+    const cwd = view?.card === 'terminal' ? view.cwd : undefined
+    for (const target of bashWriteTargets(command, cwd, repoRoot)) add(target, false)
+  }
+
+  // 源 4:args 兜底目录(仅当前面源全无输出时;保守——不熟的工具不猜;推断)。
+  if (authoritative.size === 0 && heuristic.size === 0 && args !== null && typeof args === 'object') {
+    const record = args as Record<string, unknown>
+    if (ARGS_WRITE_TOOLS.has(name)) {
+      for (const field of ARGS_PATH_FIELDS) {
+        const value = record[field]
+        if (typeof value === 'string' && value !== '') add(value, false)
+      }
+    }
+  }
+
+  return [
+    ...[...authoritative].map((path): WritePathDetail => ({ path, authoritative: true })),
+    ...[...heuristic].map((path): WritePathDetail => ({ path, authoritative: false })),
+  ]
+}
+
+/**
  * 从一个 turn 的工具调用提取写路径(repo-relative,去重,保序)。
  * @param name     工具名
  * @param argsJson 模型原文 args JSON
@@ -66,50 +140,7 @@ export function extractWritePaths(
   repoRoot: string,
   presenter: ToolPresenter | undefined,
 ): readonly string[] {
-  let args: unknown
-  try {
-    args = JSON.parse(argsJson)
-  } catch {
-    args = null
-  }
-  const out = new Set<string>()
-  const add = (raw: string): void => {
-    const normalized = normalizeRepoPath(raw, repoRoot)
-    if (normalized !== null) out.add(normalized)
-  }
-
-  // 源 1-3:平台写意图。
-  const view = args !== null ? presenter?.presentCall(name, args) : undefined
-  if (view?.card === 'diff') {
-    for (const location of view.locations ?? []) add(location.path)
-    for (const diff of view.diffs ?? []) add(diff.path)
-  } else if (view?.card === 'generic' && isWriteKind(view.kind)) {
-    for (const location of view.locations ?? []) add(location.path)
-  }
-
-  // 源 3b:shell 工具(terminal 卡或工具名命中)——命令串静态写目标启发式。
-  const command = view?.card === 'terminal'
-    ? view.title
-    : (isShellName(name) && typeof args === 'object' && args !== null
-        ? (args as { command?: unknown }).command
-        : undefined)
-  if (typeof command === 'string' && command !== '') {
-    const cwd = view?.card === 'terminal' ? view.cwd : undefined
-    for (const target of bashWriteTargets(command, cwd, repoRoot)) add(target)
-  }
-
-  // 源 4:args 兜底目录(仅当前面源全无输出时;保守——不熟的工具不猜)。
-  if (out.size === 0 && args !== null && typeof args === 'object') {
-    const record = args as Record<string, unknown>
-    if (ARGS_WRITE_TOOLS.has(name)) {
-      for (const field of ARGS_PATH_FIELDS) {
-        const value = record[field]
-        if (typeof value === 'string' && value !== '') add(value)
-      }
-    }
-  }
-
-  return [...out]
+  return extractWritePathDetails(name, argsJson, repoRoot, presenter).map((detail) => detail.path)
 }
 
 /**

@@ -36,6 +36,8 @@ export interface RecordsTabProps {
   readonly execute?: (action: import('../../host/types.ts').GitAction, successText: string) => Promise<boolean>
   /** 已提交条目 → Git 中心历史页定位该提交。 */
   readonly onOpenCommit?: (hash: string) => void
+  /** 人工改判归因(仓库级持久化;缺省 = 无纠错入口)。 */
+  readonly onReclassify?: (path: string, to: 'internal' | 'external') => void
 }
 
 /** 空白占位（无记录 / 加载失败）：图标 + 文案。 */
@@ -65,7 +67,7 @@ const FILTERS: readonly { readonly key: RecordFilter; readonly label: GitKey }[]
  *   - 无任何时段 → 「还没有工作时段」；
  *   - 有时段但当前过滤下无条目 → 「当前过滤下没有条目，切换其他筛选」。
  */
-export function RecordsTab({ records, t, onOpenDiff, initialFilter = 'all', execute, onOpenCommit }: RecordsTabProps): JSX.Element {
+export function RecordsTab({ records, t, onOpenDiff, initialFilter = 'all', execute, onOpenCommit, onReclassify }: RecordsTabProps): JSX.Element {
   const [filter, setFilter] = useState<RecordFilter>(initialFilter)
   /** 批量暂存:P3(只提交 AI 成果)的主出口——AI 组 = internal+sibling 的仍变更路径。 */
   const stageOf = (paths: readonly string[]): void => {
@@ -130,6 +132,7 @@ export function RecordsTab({ records, t, onOpenDiff, initialFilter = 'all', exec
               defaultOpen={session.turn === latestTurn}
               onStage={execute === undefined ? undefined : stageOf}
               onOpenCommit={onOpenCommit}
+              onReclassify={onReclassify}
             />
           ))}
         </div>

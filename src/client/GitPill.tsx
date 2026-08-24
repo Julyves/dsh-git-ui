@@ -33,6 +33,7 @@ import { useTurnRecords } from './use-turn-records.ts'
 import { latestWorkTurn, turnEntryCounts } from './work-record-meta.ts'
 import { EntryRow } from './records/entry-row.tsx'
 import { countUnseen, markSeen, readSeenAt } from './records/unread.ts'
+import { applyAuthorOverrides, OVERRIDES_FILE, parseOverrides, serializeOverrides, setOverride, type AuthorOverrideMap } from './records/overrides.ts'
 import type { GitUISettings } from '../contracts/settings.ts'
 import type { GitCenterTab } from './GitCenter.tsx'
 import type { TurnWorkRecord } from '../host/types.ts'
@@ -535,7 +536,7 @@ const VIEW_GUTTER = 8
  * The header utility entry: a branch pill that opens a portaled detail popup
  * and the Git center management panel.
  */
-export function GitPill({ sessionId, useGit, useSession, refresh, run, query, t }: GitPillProps): JSX.Element | null {
+export function GitPill({ sessionId, useGit, useSession, refresh, run, query, storageRead, storageWrite, t }: GitPillProps): JSX.Element | null {
   // The selector hook requires a selector function (with-selector calls it
   // unconditionally); identity selection reads the whole view snapshot.
   const view = useGit((view) => view)
@@ -585,6 +586,28 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, t 
   const [centerTab, setCenterTab] = useState<GitCenterTab>('changes')
   /** 工作记录已读时刻(未读徽章的增量基准;查看即刷新)。 */
   const [seenAt, setSeenAt] = useState(() => readSeenAt(sessionId))
+  /** 人工改判归因(仓库级,overrides.json;一次加载,改动即持久化)。 */
+  const [overrides, setOverrides] = useState<AuthorOverrideMap>({})
+  const overridesLoaded = useRef(false)
+  useEffect(() => {
+    if (overridesLoaded.current || display.state !== 'ready') return
+    overridesLoaded.current = true
+    void storageRead(OVERRIDES_FILE).then((raw) => setOverrides(parseOverrides(raw)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 首个就绪快照后加载一次
+  }, [display.state])
+
+  /** 改判一条归因:不可变更新 + fire-and-forget 持久化(失败静默,内存态仍生效)。 */
+  const reclassify = (path: string, to: 'internal' | 'external'): void => {
+    setOverrides((prev) => {
+      const next = setOverride(prev, display.state === 'ready' ? display.snapshot.root : '', path, to)
+      void storageWrite(OVERRIDES_FILE, serializeOverrides(next)).catch(() => {})
+      return next
+    })
+  }
+
+  /** 展示层记录 = host 记录 ∪ 人工改判(弹窗/记录页/未读计数统一走此视图)。 */
+  const workspaceRoot = display.state === 'ready' ? display.snapshot.root : ''
+  const viewRecords = records === null ? null : applyAuthorOverrides(records, workspaceRoot, overrides)
 
   /** 查看即已读:弹窗打开或 Git 中心停驻记录页时标记,未读徽章清零。 */
   const markWorkSeen = (): void => setSeenAt(markSeen(sessionId))
@@ -711,9 +734,9 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, t 
 
   const render = renderPill(display, uiSettings.pill, t)
 
-  const workWindow = latestWorkTurn(records)
+  const workWindow = latestWorkTurn(viewRecords)
   const { internal: internalCount, sibling: siblingCount, external: externalCount } = turnEntryCounts(workWindow)
-  const unseenCount = uiSettings.pill.workRecord ? countUnseen(records, seenAt) : 0
+  const unseenCount = uiSettings.pill.workRecord ? countUnseen(viewRecords, seenAt) : 0
   const showWorkBadge = uiSettings.pill.workRecord
     && (internalCount > 0 || siblingCount > 0 || externalCount > 0 || unseenCount > 0)
   const workBadgeTitle = () => {
@@ -786,7 +809,7 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, t 
             onOpenDiff={openDiffInCenter}
             run={run}
             query={query}
-            records={records}
+            records={viewRecords}
             t={t}
           />
         </div>,
@@ -801,7 +824,8 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, t 
         query={query}
         t={t}
         openRequest={centerRequest}
-        records={records}
+        records={viewRecords}
+        onReclassify={reclassify}
       />
     </span>
   )

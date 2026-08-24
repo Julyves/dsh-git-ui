@@ -24,7 +24,7 @@ function turn(overrides: Partial<TurnWorkRecord>): TurnWorkRecord {
 
 /** 一条工作条目。 */
 function entry(path: string, state: WorkEntry['state'] = 'dirty'): WorkEntry {
-  return { path, status: 'modified', state, firstSeenAt: 0, commitHash: null }
+  return { path, status: 'modified', state, firstSeenAt: 0, commitHash: null, attribution: 'authoritative' }
 }
 
 /** 渲染 RecordsTab 为静态 HTML 字符串。 */

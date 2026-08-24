@@ -9,7 +9,7 @@ import type { TurnWorkRecord } from '../../src/host/types.ts'
 
 function turn(turnNo: number, entries: Array<{ path: string; firstSeenAt: number; group?: 'i' | 's' | 'e' }>): TurnWorkRecord {
   const pick = (group: 'i' | 's' | 'e') => entries.filter((e) => (e.group ?? 'i') === group)
-    .map((e) => ({ path: e.path, status: 'modified' as const, state: 'dirty' as const, firstSeenAt: e.firstSeenAt, commitHash: null }))
+    .map((e) => ({ path: e.path, status: 'modified' as const, state: 'dirty' as const, firstSeenAt: e.firstSeenAt, commitHash: null, attribution: 'authoritative' as const }))
   return {
     turn: turnNo, startAt: 1000, endAt: 2000, hasWork: true, narrative: null,
     internal: pick('i'), sibling: pick('s'), external: pick('e'),

@@ -13,8 +13,8 @@
  * 仅父会话 internal。
  */
 
-import type { ToolPresenter } from '../../host/write-paths.ts'
-import { extractWritePaths } from '../../host/write-paths.ts'
+import type { ToolPresenter, WritePathDetail } from '../../host/write-paths.ts'
+import { extractWritePathDetails } from '../../host/write-paths.ts'
 import { sliceEvents, type SessionLike } from './session-log.ts'
 
 /** dsh sessions 服务切片(与本插件 host 注入的 'sessions' 一致)。 */
@@ -25,7 +25,7 @@ export interface SessionsLike {
 
 /**
  * 收集父会话全部子会话(含孙代,经 sessions.list 递归匹配)的写路径,
- * 按父 turn 归并。返回 Map<父 turn 号, 路径[]>。
+ * 按父 turn 归并。返回 Map<父 turn 号, 写路径明细(含归因置信度)>。
  */
 export function collectSubagentWrites(
   parentSessionId: string,
@@ -33,8 +33,8 @@ export function collectSubagentWrites(
   sessions: SessionsLike | undefined,
   repoRoot: string,
   presenter: ToolPresenter | undefined,
-): ReadonlyMap<number, readonly string[]> {
-  const byParentTurn = new Map<number, string[]>()
+): ReadonlyMap<number, readonly WritePathDetail[]> {
+  const byParentTurn = new Map<number, WritePathDetail[]>()
   if (sessions === undefined) return byParentTurn
   const children = (sessions.list() ?? []).filter((entry) => {
     const meta = entry.header?.meta
@@ -51,15 +51,15 @@ export function collectSubagentWrites(
     }
     for (const event of events) {
       if (event.type !== 'tool/call' || event.seq < fromSeq) continue
-      const paths = extractWritePaths(event.data.name, event.data.arguments, repoRoot, presenter)
-      if (paths.length === 0) continue
+      const details = extractWritePathDetails(event.data.name, event.data.arguments, repoRoot, presenter)
+      if (details.length === 0) continue
       const parentTurn = parentTurns.find((turn) => {
         const end = turn.endAt ?? Number.POSITIVE_INFINITY
         return event.time >= turn.startAt && event.time <= end
       })
       if (parentTurn === undefined) continue
       const bucket = byParentTurn.get(parentTurn.turn) ?? []
-      bucket.push(...paths)
+      bucket.push(...details)
       byParentTurn.set(parentTurn.turn, bucket)
     }
   }

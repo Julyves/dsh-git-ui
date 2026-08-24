@@ -68,7 +68,7 @@ describe('collectSubagentWrites', () => {
     }
     const parentTurns = [{ turn: 2, startAt: 1400, endAt: 2000 }]
     const result = collectSubagentWrites('parent', parentTurns, sessions, '/repo', presenter)
-    expect(result.get(2)).toEqual(['sub/out.ts'])
+    expect(result.get(2)).toEqual([{ path: 'sub/out.ts', authoritative: true }])
   })
 
   it('rejects child calls outside any parent turn window', () => {
@@ -106,7 +106,7 @@ describe('collectSubagentWrites', () => {
       list: () => [{ id: 'c', header: { meta: { origin: 'subagent', parentSession: 'parent' } } }],
     }
     const result = collectSubagentWrites('parent', [{ turn: 1, startAt: 1200, endAt: 2000 }], sessions, '/repo', presenter)
-    const paths = result.get(1) ?? []
+    const paths = (result.get(1) ?? []).map((detail) => detail.path)
     expect(paths).toContain('child.ts')
     expect(paths).not.toContain('parent-seed.ts')
   })

@@ -14,6 +14,7 @@ function workTurn(turn: number, startAt: number, endAt: number | null, internal 
     state: 'dirty',
     firstSeenAt: startAt,
     commitHash: null,
+    attribution: 'authoritative',
   })
   return {
     turn,

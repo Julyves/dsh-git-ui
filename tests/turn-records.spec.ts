@@ -122,7 +122,7 @@ describe('runTurnRecords', () => {
     const mtimes: MtimeSource = { mtime: () => 1500 }
     const result = await runTurnRecords(pipeline, sources({
       mtimes: async () => mtimes,
-      subagentWrites: async () => new Map([[1, ['sub/x.ts']]]),
+      subagentWrites: async () => new Map([[1, [{ path: 'sub/x.ts', authoritative: true }]]]),
       snapshot: async () => ({ ok: true, value: snapshotOk({ changes: [
         { path: 'ext.txt', status: 'modified', staged: false, isDirectory: false },
         { path: 'sub/x.ts', status: 'added', staged: false, isDirectory: false },

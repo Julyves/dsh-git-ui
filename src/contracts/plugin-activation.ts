@@ -104,6 +104,15 @@ export async function activatePlugin(
           refresh: () => controller.refresh(),
           run: (action) => controller.run(action),
           query: (query) => controller.query(query),
+          storageRead: async (file) => {
+            const result = await gitInfoService.storageRead({ file })
+            // 双层信封:RPC ok + 业务 ok;文件不存在(null)与失败均归 null。
+            return result.ok && result.value.ok ? result.value.value : null
+          },
+          storageWrite: async (file, data) => {
+            const result = await gitInfoService.storageWrite({ file, data })
+            return result.ok && result.value.ok
+          },
         }
         faces.set(sessionId, face)
       }

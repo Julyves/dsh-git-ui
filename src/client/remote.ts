@@ -141,6 +141,8 @@ const workEntryObjectSchema = z.object({
   firstSeenAt: z.number(),
   // 已提交条目的提交哈希(提交跳转深链)。
   commitHash: z.string().nullable(),
+  // 归因置信度(平台自证 vs 推断)。
+  attribution: z.enum(['authoritative', 'inferred']),
 })
 
 export const turnWorkRecordSchema = z.object({

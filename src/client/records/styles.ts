@@ -308,6 +308,35 @@ export function entryStateStyle(state: string): CSSProperties {
   return workStateBadgeStyle(state)
 }
 
+/** 推断归因的状态徽章:虚线描边——「这条记录是推断的」一眼可辨,
+ * 与实心权威徽章形成视觉差(信任功能的显式不完美)。 */
+export function entryStateStyleInferred(state: string): CSSProperties {
+  const base = workStateBadgeStyle(state)
+  return { ...base, boxShadow: undefined, border: '1px dashed var(--dsw-alias-border-l2)' }
+}
+
+/** 条目行操作槽(hover 显隐由全局 __row-actions 规则接管)。 */
+export const entryActions: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 2,
+  flex: 'none',
+  width: 20,
+}
+
+/** 纠错按钮(⇄):弱化文字按钮,hover 行内显现。 */
+export const entryReclassifyButton: CSSProperties = {
+  border: 'none',
+  background: 'transparent',
+  padding: '0 3px',
+  borderRadius: 6,
+  fontFamily: 'var(--ds-font-family-mono, monospace)',
+  fontSize: 12,
+  lineHeight: '18px',
+  color: 'var(--dsw-alias-label-tertiary)',
+  cursor: 'pointer',
+}
+
 // ── 空态 / 加载态 ─────────────────────────────────────────────────────────
 
 /** 空态容器：垂直居中，图标 + 主文案。 */

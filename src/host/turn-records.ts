@@ -16,7 +16,7 @@ import type { CommitProbe } from './record-store.ts'
 import type { GitQueryResponse, GitSnapshot, GitSnapshotFailure, GitSnapshotResult } from './types.ts'
 import type { TurnEventSlice } from './turns.ts'
 import type { MtimeSource } from './record-assembly.ts'
-import type { ToolPresenter } from './write-paths.ts'
+import type { ToolPresenter, WritePathDetail } from './write-paths.ts'
 import type { PathStateProbe, PathStateTracker } from './path-state.ts'
 import type { TurnWorkRecord } from './types.ts'
 
@@ -30,8 +30,8 @@ export interface TurnRecordSources {
   presenter: ToolPresenter | undefined
   /** mtime 精修(可缺省)。 */
   mtimes(snapshot: GitSnapshot): Promise<MtimeSource | undefined>
-  /** 子会话写路径(父 turn → 路径;可缺省面)。 */
-  subagentWrites(sessionId: string, root: string): Promise<ReadonlyMap<number, readonly string[]>>
+  /** 子会话写路径明细(父 turn → {path, authoritative};可缺省面)。 */
+  subagentWrites(sessionId: string, root: string): Promise<ReadonlyMap<number, readonly WritePathDetail[]>>
   /** 其他 dsh 会话(同工作区)写过的路径全集(可缺省 = 空,全落 external)。 */
   siblingWrites(sessionId: string, root: string): Promise<ReadonlySet<string>>
   /** 恢复对账探针(按 sessionId 取)。 */

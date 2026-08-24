@@ -188,6 +188,11 @@ export interface GitFileStat {
 /** 记录条目状态:仍变更 / 已提交 / 已还原(权威判定)/ 已离开待定。 */
 export type WorkEntryState = 'dirty' | 'committed' | 'reverted' | 'gone'
 
+/** 归因置信度:authoritative = 平台自证写意图(diff 卡/写类卡/result meta);
+ * inferred = 启发式或观测推断(bash 静态目标/args 兜底/时间窗归因)。
+ * 信任类功能的戒律:宁可显式的不完美,不要隐式的不可靠——推断必须可见。 */
+export type WorkAttribution = 'authoritative' | 'inferred'
+
 /** 一条对外展示的工作记录条目。 */
 export interface WorkEntry {
   readonly path: string
@@ -197,6 +202,8 @@ export interface WorkEntry {
   readonly firstSeenAt: number
   /** 已提交条目的提交哈希(提交跳转深链);null = 无/未观测到。 */
   readonly commitHash: string | null
+  /** 归因置信度(UI 推断标记 + 人工纠错入口的依据)。 */
+  readonly attribution: WorkAttribution
 }
 
 /** 一个 turn 的对外工作记录。 */
