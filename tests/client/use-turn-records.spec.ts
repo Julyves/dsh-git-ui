@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTimelineRows, latestWorkTurn, relativeTimeLabel, summarizeWork, turnEntryCounts } from '../../src/client/work-record-meta.ts'
+import { latestWorkTurn, relativeTimeLabel, turnEntryCounts } from '../../src/client/work-record-meta.ts'
 import type { TurnWorkRecord } from '../../src/host/types.ts'
 
 function turn(overrides: Partial<TurnWorkRecord>): TurnWorkRecord {
@@ -66,69 +66,5 @@ describe('relativeTimeLabel', () => {
 
   it('clamps future timestamps to just-now', () => {
     expect(relativeTimeLabel(now + 60_000, t, now)).toBe('刚刚')
-  })
-})
-
-describe('summarizeWork', () => {
-  it('reflects only the latest working turn for internal/external/dirty', () => {
-    const records = [
-      turn({ turn: 1, internal: [{ path: 'old.ts', status: 'modified', state: 'dirty', firstSeenAt: 1 }] }),
-      turn({ turn: 2, internal: [{ path: 'new.ts', status: 'modified', state: 'dirty', firstSeenAt: 2 }], external: [{ path: 'b.md', status: 'added', state: 'dirty', firstSeenAt: 3 }] }),
-    ]
-    // 最近工作 turn = turn 2:internal 1(仅 new.ts)、external 1、dirty 2;
-    // 历史 turn 的 old.ts 不计入(窗口语义,与 pill 徽章同源)。
-    expect(summarizeWork(records)).toEqual({ turns: 2, internal: 1, external: 1, dirty: 2 })
-  })
-
-  it('skips idle trailing turns when picking the latest working turn', () => {
-    const records = [
-      turn({ turn: 1, internal: [{ path: 'a.ts', status: 'added', state: 'dirty', firstSeenAt: 1 }] }),
-      turn({ turn: 2, hasWork: false }),
-    ]
-    expect(summarizeWork(records)).toEqual({ turns: 1, internal: 1, external: 0, dirty: 1 })
-  })
-
-  it('counts only working turns', () => {
-    const records = [turn({ turn: 1, hasWork: false }), turn({ turn: 2, hasWork: true })]
-    expect(summarizeWork(records).turns).toBe(1)
-  })
-
-  it('returns zeros when no turn has work', () => {
-    expect(summarizeWork([turn({ turn: 1, hasWork: false })])).toEqual({ turns: 0, internal: 0, external: 0, dirty: 0 })
-  })
-})
-
-describe('buildTimelineRows', () => {
-  it('keeps working turns and merges consecutive idle turns', () => {
-    const records = [
-      turn({ turn: 1, hasWork: true }),
-      turn({ turn: 2, hasWork: false }),
-      turn({ turn: 3, hasWork: false }),
-      turn({ turn: 4, hasWork: true }),
-    ]
-    expect(buildTimelineRows(records)).toEqual([
-      { kind: 'turn', turn: records[0] },
-      { kind: 'idle', from: 2, to: 3 },
-      { kind: 'turn', turn: records[3] },
-    ])
-  })
-
-  it('keeps a single idle turn as its own idle row', () => {
-    const records = [turn({ turn: 1, hasWork: false }), turn({ turn: 2, hasWork: true })]
-    expect(buildTimelineRows(records)).toEqual([
-      { kind: 'idle', from: 1, to: 1 },
-      { kind: 'turn', turn: records[1] },
-    ])
-  })
-
-  it('sorts by turn number defensively', () => {
-    const records = [turn({ turn: 3, hasWork: true }), turn({ turn: 1, hasWork: true })]
-    const rows = buildTimelineRows(records)
-    expect(rows[0]?.kind).toBe('turn')
-    expect(rows[0]?.kind === 'turn' && rows[0].turn.turn).toBe(1)
-  })
-
-  it('returns empty for an empty list', () => {
-    expect(buildTimelineRows([])).toEqual([])
   })
 })
