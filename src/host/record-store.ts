@@ -106,6 +106,17 @@ export class RecordStore {
     this.scheduleFlush(sessionId, state)
   }
 
+  /** 作者标签固化(P1-2):当前判定为其他会话 AI 写入的路径一次性标记
+   * 到观测时间线并随去抖落盘——兄弟会话离场/宿主重启后归因不漂移。 */
+  markSiblingAuthors(sessionId: string, paths: readonly string[]): void {
+    const state = this.require(sessionId)
+    const marked = state.observations.markSibling(paths)
+    if (marked > 0) {
+      state.dirty = true
+      this.scheduleFlush(sessionId, state)
+    }
+  }
+
   /**
    * 记录 HEAD 并检测前移:前移时经 resolveCommits(old, new) 取提交路径映射
    * (调用方执行 git log --format=%H;失败返回 [] 即可,不抛)。未出生(null)

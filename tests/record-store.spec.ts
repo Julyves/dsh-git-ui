@@ -62,8 +62,8 @@ describe('RecordStore', () => {
   it('restores persisted observations with reconcile probe (committed paths)', async () => {
     const { persistenceFor } = memoryFactory()
     const persisted: PathObservation[] = [
-      { path: 'done.ts', status: 'modified', firstSeenAt: 1000, lastSeenAt: null, committedAt: null, commitHash: null },
-      { path: 'gone.ts', status: 'modified', firstSeenAt: 1100, lastSeenAt: null, committedAt: null, commitHash: null },
+      { path: 'done.ts', status: 'modified', firstSeenAt: 1000, lastSeenAt: null, committedAt: null, commitHash: null, author: null },
+      { path: 'gone.ts', status: 'modified', firstSeenAt: 1100, lastSeenAt: null, committedAt: null, commitHash: null, author: null },
     ]
     persistenceFor('s1').written = encodeObservations(persisted)
     const store = new RecordStore(persistenceFor, 0)
@@ -90,7 +90,7 @@ describe('RecordStore', () => {
   it('caps the reconcile probe at RECONCILE_PROBE_CAP', async () => {
     const { persistenceFor } = memoryFactory()
     const persisted: PathObservation[] = Array.from({ length: RECONCILE_PROBE_CAP + 10 }, (_, index) => ({
-      path: `f${index}.ts`, status: 'modified' as const, firstSeenAt: 100, lastSeenAt: 200, committedAt: null, commitHash: null,
+      path: `f${index}.ts`, status: 'modified' as const, firstSeenAt: 100, lastSeenAt: 200, committedAt: null, commitHash: null, author: null,
     }))
     persistenceFor('s1').written = encodeObservations(persisted)
     const store = new RecordStore(persistenceFor, 0)

@@ -27,6 +27,13 @@ export interface PathObservation {
   readonly committedAt: number | null
   /** 检测到提交时的提交哈希(提交跳转深链);null = 无/恢复探针无哈希。 */
   readonly commitHash: string | null
+  /**
+   * 作者标记(固化):'sibling' = 曾判定为其他 dsh 会话(同工作区)AI 写入。
+   * 由记录查询时经 live 兄弟写集一次性固化,随时间线持久化——兄弟会话
+   * 离场/宿主重启后归因不再漂移为 external(P1-2);null = 未标记。
+   * 一旦固化不撤销:「AI 写过」是既成事实(与提交是最终事实同理)。
+   */
+  readonly author: 'sibling' | null
 }
 
 /** 观测持久化通道(宿主实现为插件数据存储 obs-<key>.jsonl;测试用内存桩)。 */
@@ -77,6 +84,7 @@ export class ObservationLog {
           lastSeenAt: null,
           committedAt: null,
           commitHash: null,
+          author: null,
         })
         changed = true
       } else if (existing.status !== change.status) {
@@ -112,6 +120,21 @@ export class ObservationLog {
         this.map.set(path, { ...observation, committedAt: now, commitHash: hash })
       }
     }
+  }
+
+  /** 固化作者标记:把当前判定为其他会话 AI 写入的路径标 'sibling'
+   * (仅未标记的既有条目;返回本次新标记数,供调用方决定是否落盘)。
+   * 已标记条目幂等跳过——固化后不撤销(「AI 写过」是既成事实)。 */
+  markSibling(paths: readonly string[]): number {
+    let marked = 0
+    for (const path of paths) {
+      const observation = this.map.get(path)
+      if (observation !== undefined && observation.author === null) {
+        this.map.set(path, { ...observation, author: 'sibling' })
+        marked += 1
+      }
+    }
+    return marked
   }
 
   /**

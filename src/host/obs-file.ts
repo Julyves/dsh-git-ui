@@ -20,7 +20,7 @@ export const OBS_FILE_VERSION = 'v1'
 /** 观测条目容量上限(与 ObservationLog 一致;序列化前裁剪)。 */
 export const OBS_MAX_ENTRIES = 2000
 
-/** 单条序列化(紧凑键:path/status/firstSeen/lastSeen/committed/hash)。 */
+/** 单条序列化(紧凑键:path/status/firstSeen/lastSeen/committed/hash/author)。 */
 interface ObsRow {
   p: string
   s: PathObservation['status']
@@ -29,6 +29,8 @@ interface ObsRow {
   c: number | null
   /** 提交哈希(旧版文件缺省 → null)。 */
   h: string | null
+  /** 作者标记(旧版文件缺省 → null)。 */
+  a: 'sibling' | null
 }
 
 type ObsRowStatus = ObsRow['s']
@@ -65,6 +67,7 @@ export function encodeObservations(entries: readonly PathObservation[]): string 
     l: entry.lastSeenAt,
     c: entry.committedAt,
     h: entry.commitHash,
+    a: entry.author,
   }))
   return [OBS_FILE_VERSION, ...rows.map((row) => JSON.stringify(row))].join('\n')
 }
@@ -89,6 +92,7 @@ export function decodeObservations(raw: string): readonly PathObservation[] | nu
       lastSeenAt: row.l,
       committedAt: row.c,
       commitHash: row.h,
+      author: row.a,
     })
   }
   return entries
@@ -109,13 +113,15 @@ function parseRow(line: string): ObsRow | null {
   const l = record.l
   const c = record.c
   const h = record.h
+  const a = record.a
   if (typeof p !== 'string' || p === '' || p !== p.trim()) return null
   if (!isStatus(s)) return null
   if (typeof f !== 'number' || !Number.isFinite(f)) return null
   if (l !== null && (typeof l !== 'number' || !Number.isFinite(l))) return null
   if (c !== null && (typeof c !== 'number' || !Number.isFinite(c))) return null
   if (h !== undefined && h !== null && typeof h !== 'string') return null
-  return { p, s, f, l, c, h: typeof h === 'string' ? h : null }
+  if (a !== undefined && a !== null && a !== 'sibling') return null
+  return { p, s, f, l, c, h: typeof h === 'string' ? h : null, a: a === 'sibling' ? 'sibling' : null }
 }
 
 const STATUSES: readonly ObsRowStatus[] = [

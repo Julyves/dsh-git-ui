@@ -193,3 +193,36 @@ describe('runTurnRecords — L3 filesWritten 接口缝', () => {
     expect(result.value.turns[0]?.internal.map((e) => e.path)).toEqual(['only/this.ts'])
   })
 })
+
+describe('runTurnRecords — 作者标签固化 (P1-2 漂移防护)', () => {
+  it('persists sibling attribution: stays sibling after the sibling session leaves', async () => {
+    const pipeline = new RecordStore(memoryPersistenceFactory(), 0)
+    pipeline.ensure('s1', { isCommitted: async () => false })
+    pipeline.fold('s1', events)
+    pipeline.observe('s1', [
+      { path: 'ext.txt', status: 'modified', staged: false, isDirectory: false },
+      { path: 'sib.ts', status: 'modified', staged: false, isDirectory: false },
+    ], 1500)
+    // 第一轮:兄弟会话在场,live 写集判定 sibling 并固化到时间线。
+    const first = await runTurnRecords(pipeline, sources({
+      siblingWrites: async () => new Set(['sib.ts']),
+      snapshot: async () => ({ ok: true, value: snapshotOk({ changes: [
+        { path: 'ext.txt', status: 'modified', staged: false, isDirectory: false },
+        { path: 'sib.ts', status: 'modified', staged: false, isDirectory: false },
+      ] }) }),
+    }), 's1')
+    if (!first.ok || first.value.kind !== 'turn-records') throw new Error('first failed')
+    expect(first.value.turns[0]?.sibling.map((e) => e.path)).toEqual(['sib.ts'])
+    // 第二轮:兄弟会话已离场(live 写集空)——固化标签接管,不漂移为 external。
+    const second = await runTurnRecords(pipeline, sources({
+      siblingWrites: async () => new Set<string>(),
+      snapshot: async () => ({ ok: true, value: snapshotOk({ changes: [
+        { path: 'ext.txt', status: 'modified', staged: false, isDirectory: false },
+        { path: 'sib.ts', status: 'modified', staged: false, isDirectory: false },
+      ] }) }),
+    }), 's1')
+    if (!second.ok || second.value.kind !== 'turn-records') throw new Error('second failed')
+    expect(second.value.turns[0]?.sibling.map((e) => e.path)).toEqual(['sib.ts'])
+    expect(second.value.turns[0]?.external.map((e) => e.path)).toEqual(['ext.txt'])
+  })
+})

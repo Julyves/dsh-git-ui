@@ -79,6 +79,9 @@ export async function runTurnRecords(
   const mtimes = await sources.mtimes(snapshot.value)
   const subagentWrites = await sources.subagentWrites(sessionId, snapshot.value.root)
   const siblingWrites = await sources.siblingWrites(sessionId, snapshot.value.root)
+  // 作者标签固化(P1-2):live 兄弟写集一次性写入观测时间线(随去抖落盘)——
+  // 兄弟会话离场/宿主重启后,已固化的归因不漂移为 external。
+  pipeline.markSiblingAuthors(sessionId, [...siblingWrites])
   // 权威写意图(L3 接口缝):提供则旁路启发式(见 TurnRecordSources.filesWritten)。
   const filesWritten = sources.filesWritten === undefined
     ? undefined

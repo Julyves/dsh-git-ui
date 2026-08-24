@@ -169,7 +169,9 @@ function collectNonInternal(
       attribution: 'inferred',
     }
     // 本会话与兄弟会话共写 → internal 胜(全局互斥);仅兄弟写过 → sibling。
-    if (deps.siblingWrites?.has(observation.path) === true) sibling.push(entry)
+    // 判定源二合一:时间线上已固化的 author 标记(P1-2 持久化,兄弟离场/
+    // 重启后仍成立)∨ 当前 live 兄弟写集(固化发生在组装同轮,双保险)。
+    if (observation.author === 'sibling' || deps.siblingWrites?.has(observation.path) === true) sibling.push(entry)
     else external.push(entry)
   }
   const byPath = (a: WorkEntry, b: WorkEntry): number => a.path.localeCompare(b.path)
