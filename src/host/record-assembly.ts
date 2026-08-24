@@ -70,9 +70,9 @@ export function assembleAll(deps: AssembleDeps): readonly TurnWorkRecord[] {
   const internalPaths = new Set(allInternal.map((entry) => entry.path))
   const turns = deps.log.turns
   return turns.map((folded, index) => {
-    const nonInternal = collectNonInternal(folded, internalPaths, deps)
-    // L4 fresh:上一 turn 的边界指纹在场且不含该路径 → 本轮新增。
     const prev = index > 0 ? turns[index - 1] : undefined
+    const nonInternal = collectNonInternal(folded, internalPaths, deps, prev?.endAt ?? folded.startAt)
+    // L4 fresh:上一 turn 的边界指纹在场且不含该路径 → 本轮新增。
     const prevFp = deps.fingerprints !== undefined && prev !== undefined
       ? deps.fingerprints.get(prev.turn)
       : undefined
@@ -135,13 +135,16 @@ function internalOf(folded: FoldedTurn, deps: AssembleDeps): readonly WorkEntry[
 }
 
 /** 一个 turn 的非 internal 条目(窗口内出现 ∧ 全局未被本会话写过),
- * 按兄弟会话写路径全集再切分为 sibling(AI)与 external(人工)两组。 */
+ * 按兄弟会话写路径全集再切分为 sibling(AI)与 external(人工)两组。
+ * `windowStart` 由调用方传入——已回溯到上一 turn 的 endAt:turn 间隔里
+ * 出现/修改的条目归**下一 turn**(间隙归属,消灭真空;首 turn 保持自身
+ * startAt)。 */
 function collectNonInternal(
   folded: FoldedTurn,
   internalPaths: ReadonlySet<string>,
   deps: AssembleDeps,
+  windowStart: number,
 ): { sibling: readonly WorkEntry[]; external: readonly WorkEntry[] } {
-  const windowStart = folded.startAt
   const windowEnd = folded.endAt ?? deps.now
   const sibling: WorkEntry[] = []
   const external: WorkEntry[] = []

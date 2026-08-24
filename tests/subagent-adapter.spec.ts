@@ -67,11 +67,11 @@ describe('collectSubagentWrites', () => {
       list: () => [{ id: 'child-1', header: { meta: { origin: 'subagent', parentSession: 'parent' } } }],
     }
     const parentTurns = [{ turn: 2, startAt: 1400, endAt: 2000 }]
-    const result = collectSubagentWrites('parent', parentTurns, sessions, '/repo', presenter)
+    const result = collectSubagentWrites('parent', parentTurns, sessions, '/repo', latePresenter)
     expect(result.get(2)).toEqual([{ path: 'sub/out.ts', authoritative: true }])
   })
 
-  it('rejects child calls outside any parent turn window', () => {
+  it('attributes a late child call after the parent turn end to the closest preceding turn (P2-4)', () => {
     const child = session(4, [
       { type: 'session/end-seed', time: 1000 },
       { type: 'tool/call', time: 3000, data: { turn: 1, callId: 'c1', name: 'write', arguments: '{"file_path":"x.ts"}' } },
@@ -80,8 +80,9 @@ describe('collectSubagentWrites', () => {
       get: () => child,
       list: () => [{ id: 'c', header: { meta: { origin: 'subagent', parentSession: 'parent' } } }],
     }
-    const parentTurns = [{ turn: 1, startAt: 1000, endAt: 2000 }] // 子调用发生在窗口外
-    expect(collectSubagentWrites('parent', parentTurns, sessions, '/repo', presenter).size).toBe(0)
+    const parentTurns = [{ turn: 1, startAt: 1000, endAt: 2000 }] // 子调用 3000 在窗口外:晚到结算
+    const result = collectSubagentWrites('parent', parentTurns, sessions, '/repo', latePresenter)
+    expect(result.get(1)).toEqual([{ path: 'x.ts', authoritative: true }])
   })
 
   it('ignores cold children and missing subagents service', () => {
@@ -105,9 +106,49 @@ describe('collectSubagentWrites', () => {
       get: () => child,
       list: () => [{ id: 'c', header: { meta: { origin: 'subagent', parentSession: 'parent' } } }],
     }
-    const result = collectSubagentWrites('parent', [{ turn: 1, startAt: 1200, endAt: 2000 }], sessions, '/repo', presenter)
+    const result = collectSubagentWrites('parent', [{ turn: 1, startAt: 1200, endAt: 2000 }], sessions, '/repo', latePresenter)
     const paths = (result.get(1) ?? []).map((detail) => detail.path)
     expect(paths).toContain('child.ts')
     expect(paths).not.toContain('parent-seed.ts')
+  })
+})
+const latePresenter = { presentCall: (name: string, args: unknown) => {
+  const record = args as { file_path?: unknown }
+  return typeof record.file_path === 'string' ? { card: 'diff', diffs: [{ path: record.file_path }] } : undefined
+} }
+
+describe('collectSubagentWrites — 晚到结算归属(P2-4 回归)', () => {
+  it('a late write in the inter-turn gap goes to the closest preceding turn, not the next running turn', () => {
+    // 父 turn 1 [1000, 2000];turn 2 [4000, running];子代理写入 2500——
+    // 在间隙内:归最近前序 turn(turn 1),不误入 running turn 2。
+    const child = session(4, [
+      { type: 'session/end-seed', time: 1000 },
+      { type: 'tool/call', time: 2500, data: { turn: 1, callId: 'c1', name: 'write', arguments: '{"file_path":"late.ts"}' } },
+    ])
+    const sessions = {
+      get: () => child,
+      list: () => [{ id: 'c', header: { meta: { origin: 'subagent', parentSession: 'parent' } } }],
+    }
+    const result = collectSubagentWrites('parent', [
+      { turn: 1, startAt: 1000, endAt: 2000 },
+      { turn: 2, startAt: 4000, endAt: null },
+    ], sessions, '/repo', latePresenter)
+    expect(result.get(1)?.map((d) => d.path)).toEqual(['late.ts'])
+    expect(result.get(2)).toBeUndefined()
+  })
+
+  it('still drops child calls predating every parent turn', () => {
+    const child = session(3, [
+      { type: 'session/end-seed', time: 100 },
+      { type: 'tool/call', time: 500, data: { turn: 1, callId: 'c1', name: 'write', arguments: '{"file_path":"orphan.ts"}' } },
+    ])
+    const sessions = {
+      get: () => child,
+      list: () => [{ id: 'c', header: { meta: { origin: 'subagent', parentSession: 'parent' } } }],
+    }
+    const result = collectSubagentWrites('parent', [
+      { turn: 1, startAt: 1000, endAt: 2000 },
+    ], sessions, '/repo', latePresenter)
+    expect(result.size).toBe(0)
   })
 })

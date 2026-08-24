@@ -26,6 +26,12 @@ export interface SessionsLike {
 /**
  * 收集父会话全部子会话(含孙代,经 sessions.list 递归匹配)的写路径,
  * 按父 turn 归并。返回 Map<父 turn 号, 写路径明细(含归因置信度)>。
+ *
+ * 归并规则:tool/call 落在某父 turn 窗口 [startAt, endAt/∞] 内 → 归该
+ * turn;**窗口外的晚到结算**(异步子代理在父 turn 结束后才产出写入)→
+ * 归「时间上最近的前序 turn」——委托工作的结算延迟不改其归属,P2-4:
+ * 旧实现整条丢弃,该写入落入观测时间线被误标「外部(人工)」,反向污染
+ * 三分语义。早于一切 turn 的孤儿调用照旧丢弃。
  */
 export function collectSubagentWrites(
   parentSessionId: string,
@@ -56,7 +62,7 @@ export function collectSubagentWrites(
       const parentTurn = parentTurns.find((turn) => {
         const end = turn.endAt ?? Number.POSITIVE_INFINITY
         return event.time >= turn.startAt && event.time <= end
-      })
+      }) ?? latestTurnBefore(parentTurns, event.time)
       if (parentTurn === undefined) continue
       const bucket = byParentTurn.get(parentTurn.turn) ?? []
       bucket.push(...details)
@@ -64,4 +70,19 @@ export function collectSubagentWrites(
     }
   }
   return byParentTurn
+}
+
+/** 时间上最近的前序 turn(startAt <= time 的最后一个;turns 升序)。
+ * running turn 窗口为 [start, ∞),find 已覆盖——落到这里的一定晚于
+ * 某个已结束 turn 的 endAt(晚到结算的归属回填)。 */
+function latestTurnBefore(
+  turns: readonly { readonly turn: number; readonly startAt: number }[],
+  time: number,
+): { readonly turn: number; readonly startAt: number } | undefined {
+  let match: { readonly turn: number; readonly startAt: number } | undefined
+  for (const turn of turns) {
+    if (turn.startAt <= time) match = turn
+    else break
+  }
+  return match
 }

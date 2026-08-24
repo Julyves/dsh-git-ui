@@ -308,3 +308,41 @@ describe('assembleAll — L4 fresh 标记(指纹派生)', () => {
     expect(records2[1]?.internal.find((e) => e.path === 'docs/test.txt')?.fresh).toBe(true)
   })
 })
+
+describe('assembleAll — 间隙归属(P2-3 真空修复)', () => {
+  it('changes first seen in the inter-turn gap land on the NEXT turn', () => {
+    const log = new TurnLog()
+    log.append([
+      { type: 'turn/start', seq: 1, time: 1000, data: { turn: 1 } },
+      { type: 'tool/call', seq: 2, time: 1100, data: { turn: 1, callId: 'c1', name: 'write', arguments: '{"file_path":"a.txt"}' } },
+      { type: 'turn/end', seq: 3, time: 2000, data: { turn: 1 } },
+      { type: 'turn/start', seq: 4, time: 4000, data: { turn: 2 } },
+      { type: 'tool/call', seq: 5, time: 4100, data: { turn: 2, callId: 'c2', name: 'write', arguments: '{"file_path":"b.txt"}' } },
+    ])
+    const observations = new ObservationLog()
+    // gap.txt 首见于间隙 (2000, 4000) → 旧实现任何 turn 都不可见。
+    observations.update([change('gap.txt'), change('in2.txt')], 3000)
+    const records = assembleAll({
+      log, observations,
+      changes: [change('gap.txt'), change('in2.txt')], repoRoot: '/repo',
+      presenter: undefined, mtimes: undefined, now: 5000,
+    })
+    expect(records[0]?.external.map((e) => e.path)).toEqual([]) // turn 1 不含间隙条目
+    expect(records[1]?.external.map((e) => e.path)).toEqual(['gap.txt', 'in2.txt']) // 归下一 turn
+  })
+
+  it('first turn keeps its own startAt (no pre-history vacuum)', () => {
+    const log = new TurnLog()
+    log.append([
+      { type: 'turn/start', seq: 1, time: 1000, data: { turn: 1 } },
+      { type: 'tool/call', seq: 2, time: 1100, data: { turn: 1, callId: 'c1', name: 'write', arguments: '{}' } },
+    ])
+    const observations = new ObservationLog()
+    observations.update([change('early.txt')], 500) // 早于首个 turn:仍不可见(无归属)
+    const records = assembleAll({
+      log, observations,
+      changes: [], repoRoot: '/repo', presenter: undefined, mtimes: undefined, now: 5000,
+    })
+    expect(records[0]?.external).toEqual([])
+  })
+})
