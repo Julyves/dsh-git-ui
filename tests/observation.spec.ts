@@ -14,7 +14,7 @@ describe('ObservationLog', () => {
   it('records firstSeen on first sight and keeps lastSeen null while present', () => {
     const log = new ObservationLog()
     log.update([change('a.ts')], 1000)
-    expect(log.get('a.ts')).toEqual({ path: 'a.ts', status: 'modified', firstSeenAt: 1000, lastSeenAt: null, committedAt: null })
+    expect(log.get('a.ts')).toEqual({ path: 'a.ts', status: 'modified', firstSeenAt: 1000, lastSeenAt: null, committedAt: null, commitHash: null })
     log.update([change('a.ts')], 2000)
     expect(log.get('a.ts')?.lastSeenAt).toBeNull()
     expect(log.get('a.ts')?.firstSeenAt).toBe(1000)
@@ -62,12 +62,12 @@ describe('ObservationLog', () => {
     const log = new ObservationLog()
     log.update([change('a.ts')], 1000) // 读盘前已观测(更新鲜)
     log.restore([
-      { path: 'b.ts', status: 'modified', firstSeenAt: 500, lastSeenAt: null, committedAt: null },
-      { path: 'a.ts', status: 'added', firstSeenAt: 400, lastSeenAt: 900, committedAt: null },
-      { path: '../evil.ts', status: 'modified', firstSeenAt: 500, lastSeenAt: null, committedAt: null },
+      { path: 'b.ts', status: 'modified', firstSeenAt: 500, lastSeenAt: null, committedAt: null, commitHash: null },
+      { path: 'a.ts', status: 'added', firstSeenAt: 400, lastSeenAt: 900, committedAt: null, commitHash: null },
+      { path: '../evil.ts', status: 'modified', firstSeenAt: 500, lastSeenAt: null, committedAt: null, commitHash: null },
     ])
     // 内存条目胜出(更新鲜);磁盘条目补缺口;非法路径拒绝。
-    expect(log.get('a.ts')).toEqual({ path: 'a.ts', status: 'modified', firstSeenAt: 1000, lastSeenAt: null, committedAt: null })
+    expect(log.get('a.ts')).toEqual({ path: 'a.ts', status: 'modified', firstSeenAt: 1000, lastSeenAt: null, committedAt: null, commitHash: null })
     expect(log.get('b.ts')).toBeDefined()
     expect(log.get('../evil.ts')).toBeUndefined()
   })
@@ -76,5 +76,16 @@ describe('ObservationLog', () => {
     const log = new ObservationLog()
     log.update([change('a.ts')], 1000)
     expect(log.serialize()).toHaveLength(1)
+  })
+})
+describe('markCommitted with commit hashes (提交跳转深链)', () => {
+  it('stores the hash alongside committedAt; plain-path entries keep null', () => {
+    const log = new ObservationLog()
+    log.update([change('a.ts'), change('b.ts')], 1000)
+    const hash = 'c'.repeat(40)
+    log.markCommitted([{ path: 'a.ts', hash }], 2000)
+    log.markCommitted(['b.ts'], 2100)
+    expect(log.get('a.ts')).toMatchObject({ committedAt: 2000, commitHash: hash })
+    expect(log.get('b.ts')).toMatchObject({ committedAt: 2100, commitHash: null })
   })
 })

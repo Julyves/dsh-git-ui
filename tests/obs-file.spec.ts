@@ -3,8 +3,8 @@ import { decodeObservations, encodeObservations, sessionStorageKey } from '../sr
 import type { PathObservation } from '../src/host/observation.ts'
 
 const sample: readonly PathObservation[] = [
-  { path: 'src/a.ts', status: 'modified', firstSeenAt: 1000, lastSeenAt: null, committedAt: null },
-  { path: 'docs/new.md', status: 'untracked', firstSeenAt: 2000, lastSeenAt: 2500, committedAt: 2600 },
+  { path: 'src/a.ts', status: 'modified', firstSeenAt: 1000, lastSeenAt: null, committedAt: null, commitHash: null },
+  { path: 'docs/new.md', status: 'untracked', firstSeenAt: 2000, lastSeenAt: 2500, committedAt: 2600, commitHash: null },
 ]
 
 describe('encode/decode observations', () => {
@@ -30,13 +30,13 @@ describe('encode/decode observations', () => {
       '{"p":"b.ts","s":"bogus-status","f":1,"l":null,"c":null}',
     ].join('\n')
     expect(decodeObservations(raw)).toEqual([
-      { path: 'a.ts', status: 'modified', firstSeenAt: 1, lastSeenAt: null, committedAt: null },
+      { path: 'a.ts', status: 'modified', firstSeenAt: 1, lastSeenAt: null, committedAt: null, commitHash: null },
     ])
   })
 
   it('caps the encoded entry count', () => {
     const many = Array.from({ length: 5000 }, (_, index): PathObservation => ({
-      path: `f${index}.ts`, status: 'modified', firstSeenAt: index, lastSeenAt: null, committedAt: null,
+      path: `f${index}.ts`, status: 'modified', firstSeenAt: index, lastSeenAt: null, committedAt: null, commitHash: null,
     }))
     const raw = encodeObservations(many)
     expect(decodeObservations(raw)).toHaveLength(2000)

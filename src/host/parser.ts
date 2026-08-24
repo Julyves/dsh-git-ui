@@ -317,3 +317,39 @@ export function parseBranchOutput(output: string): string | null {
   return trimmed === '' ? null : trimmed
 }
 
+/** 一条「路径 → 提交」映射(HEAD 前移区间内最后触碰该路径的提交)。 */
+export interface CommitPath {
+  readonly path: string
+  readonly hash: string
+}
+
+const HASH_SEGMENT = /^[0-9a-f]{40,64}$/i
+
+/**
+ * Parse `git log --format=%H --name-status -z` output:段序为
+ * `hash\0X\0path\0…`(同一 hash 段后随其变更条目;R/C 双路径同既有规则)。
+ * 供提交跳转:路径归组提交哈希(同一路径多次变更取区间内最后一次)。
+ */
+export function parseCommitPathsOutput(output: string): readonly CommitPath[] {
+  const raw = output.split(NUL)
+  const segments = raw[raw.length - 1] === '' ? raw.slice(0, -1) : raw
+  const byPath = new Map<string, string>()
+  let hash: string | null = null
+  for (let i = 0; i < segments.length; i += 1) {
+    const entry = segments[i] ?? ''
+    if (entry === '') continue
+    if (HASH_SEGMENT.test(entry)) {
+      hash = entry
+      continue
+    }
+    if (hash === null) continue // 状态条目先于任何 hash(损坏输出)——忽略
+    const code = entry[0] ?? ' '
+    const path = code === 'R' || code === 'C'
+      ? (segments[i + 2] ?? '')
+      : (segments[i + 1] ?? '')
+    i += code === 'R' || code === 'C' ? 2 : 1
+    if (path !== '') byPath.set(path, hash) // 后见覆盖:区间内最后一次变更
+  }
+  return [...byPath].map(([path, commit]) => ({ path, hash: commit }))
+}
+

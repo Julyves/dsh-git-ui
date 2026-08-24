@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseBranchOutput, parseDecorations, parseGraphLogOutput, parseLogOutput, parseNameStatusOutput, parseShowMeta, parseStatusHeader, parseStatusOutput } from '../src/host/parser.ts'
+import { parseBranchOutput, parseCommitPathsOutput, parseDecorations, parseGraphLogOutput, parseLogOutput, parseNameStatusOutput, parseShowMeta, parseStatusHeader, parseStatusOutput } from '../src/host/parser.ts'
 
 describe('parseStatusHeader', () => {
   it('parses a bare branch line', () => {
@@ -252,5 +252,25 @@ describe('parseGraphLogOutput', () => {
   it('yields empty parents and refs for a root commit without decorations', () => {
     const commits = parseGraphLogOutput('h2\x1fs2\x1froot\x1fBob\x1f2026-01-01T00:00:00Z\x1f\x1f\n', [])
     expect(commits[0]).toMatchObject({ parents: [], refs: [] })
+  })
+})
+
+describe('parseCommitPathsOutput (提交跳转:路径→哈希)', () => {
+  const H1 = 'a'.repeat(40)
+  const H2 = 'b'.repeat(40)
+  it('maps each path to its commit; later commits win on repeat paths', () => {
+    const out = `${H1}\0M\0src/a.ts\0A\0new.txt\0${H2}\0M\0src/a.ts\0`
+    const rows = parseCommitPathsOutput(out)
+    expect(rows).toHaveLength(2)
+    expect(rows.find((row) => row.path === 'src/a.ts')).toEqual({ path: 'src/a.ts', hash: H2 })
+    expect(rows.find((row) => row.path === 'new.txt')).toEqual({ path: 'new.txt', hash: H1 })
+  })
+  it('handles rename double-path entries under a hash', () => {
+    const out = `${H1}\0R100\0old.md\0new.md\0`
+    expect(parseCommitPathsOutput(out)).toEqual([{ path: 'new.md', hash: H1 }])
+  })
+  it('ignores status entries before any hash (corrupt prefix) and empty output', () => {
+    expect(parseCommitPathsOutput('M\0orphan.ts\0')).toEqual([])
+    expect(parseCommitPathsOutput('')).toEqual([])
   })
 })

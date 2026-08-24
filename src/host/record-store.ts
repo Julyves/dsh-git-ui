@@ -102,21 +102,21 @@ export class RecordStore {
   }
 
   /**
-   * 记录 HEAD 并检测前移:前移时经 resolveCommits(old, new) 取提交路径
-   * (调用方执行 git log;失败返回 [] 即可,不抛)。未出生(null)与未变化
-   * 均不触发。幂等:重复调用同 head 无操作。
+   * 记录 HEAD 并检测前移:前移时经 resolveCommits(old, new) 取提交路径映射
+   * (调用方执行 git log --format=%H;失败返回 [] 即可,不抛)。未出生(null)
+   * 与未变化均不触发。幂等:重复调用同 head 无操作。
    */
   async noteHead(
     sessionId: string,
     head: string | null,
     now: number,
-    resolveCommits: (from: string, to: string) => Promise<readonly string[]> | readonly string[],
+    resolveCommits: (from: string, to: string) => Promise<readonly import('./parser.ts').CommitPath[]> | readonly import('./parser.ts').CommitPath[],
   ): Promise<void> {
     const state = this.require(sessionId)
     const previous = state.lastHead
     state.lastHead = head
     if (head === null || previous === undefined || previous === null || previous === head) return
-    let commits: readonly string[]
+    let commits: readonly import('./parser.ts').CommitPath[]
     try {
       commits = await resolveCommits(previous, head)
     } catch {

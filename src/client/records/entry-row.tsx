@@ -17,14 +17,20 @@ export interface EntryRowProps {
   readonly t: (key: GitKey) => string
   /** 打开 Git 中心并定位该文件 diff（仍变更条目）。 */
   readonly onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
+  /** 已提交条目 → 打开 Git 中心历史页定位该提交(缺省 = 纯展示)。 */
+  readonly onOpenCommit?: (hash: string) => void
 }
 
 /** 一条工作条目（状态 chip + 文件名 + 目录 + 状态徽章）。 */
-export function EntryRow({ entry, t, onOpenDiff }: EntryRowProps): JSX.Element {
+export function EntryRow({ entry, t, onOpenDiff, onOpenCommit }: EntryRowProps): JSX.Element {
   const { name, dir, isDir } = splitChangePath(entry.path, entry.path.endsWith('/'))
-  const clickable = entry.state === 'dirty'
+  const commitJump = entry.state === 'committed' && entry.commitHash !== null && onOpenCommit !== undefined
+  const clickable = entry.state === 'dirty' || commitJump
   const relative = relativeTimeLabel(entry.firstSeenAt, t)
   const hint = isDir ? entry.path : `${entry.path} · ${relative}`
+  const clickTitle = entry.state === 'dirty'
+    ? hint
+    : `${hint} · ${t('work.jumpCommit')}${entry.commitHash === null ? '' : ` (${entry.commitHash.slice(0, 7)})`}`
   return (
     <div className="dsh-git-ui__row" style={css.entryRow}>
       <span
@@ -39,8 +45,14 @@ export function EntryRow({ entry, t, onOpenDiff }: EntryRowProps): JSX.Element {
           type="button"
           className="dsh-git-ui__change-link"
           style={css.entryName}
-          title={hint}
-          onClick={() => onOpenDiff(entry.path, 'worktree')}
+          title={clickTitle}
+          onClick={() => {
+            if (entry.state === 'dirty') {
+              onOpenDiff(entry.path, 'worktree')
+              return
+            }
+            if (entry.commitHash !== null) onOpenCommit?.(entry.commitHash)
+          }}
         >
           {name}
         </button>

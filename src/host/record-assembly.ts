@@ -134,6 +134,7 @@ function collectNonInternal(
         : observation.status,
       state,
       firstSeenAt: observation.firstSeenAt,
+      commitHash: observation.commitHash,
     }
     // 本会话与兄弟会话共写 → internal 胜(全局互斥);仅兄弟写过 → sibling。
     if (deps.siblingWrites?.has(observation.path) === true) sibling.push(entry)
@@ -157,7 +158,7 @@ function finalStateFor(path: string, inChanges: boolean, observation: { readonly
   return 'gone'
 }
 
-/** 单条 entry:状态四态 + 当前/观测 status + 首见时刻。 */
+/** 单条 entry:状态四态 + 当前/观测 status + 首见时刻 + 提交哈希。 */
 function entryFor(path: string, deps: AssembleDeps, fallbackFirstSeenAt: number): WorkEntry {
   const observation = deps.observations.get(path)
   const inChanges = deps.changes.some((change) => change.path === path)
@@ -169,5 +170,6 @@ function entryFor(path: string, deps: AssembleDeps, fallbackFirstSeenAt: number)
       : (observation?.status ?? 'modified'),
     state,
     firstSeenAt: observation?.firstSeenAt ?? fallbackFirstSeenAt,
+    commitHash: observation?.commitHash ?? null,
   }
 }

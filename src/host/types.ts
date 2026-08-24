@@ -195,6 +195,8 @@ export interface WorkEntry {
   readonly state: WorkEntryState
   /** 首见/写入时刻(Unix ms;internal 取自日志,external 取自观测)。 */
   readonly firstSeenAt: number
+  /** 已提交条目的提交哈希(提交跳转深链);null = 无/未观测到。 */
+  readonly commitHash: string | null
 }
 
 /** 一个 turn 的对外工作记录。 */

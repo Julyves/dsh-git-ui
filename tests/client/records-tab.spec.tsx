@@ -24,7 +24,7 @@ function turn(overrides: Partial<TurnWorkRecord>): TurnWorkRecord {
 
 /** 一条工作条目。 */
 function entry(path: string, state: WorkEntry['state'] = 'dirty'): WorkEntry {
-  return { path, status: 'modified', state, firstSeenAt: 0 }
+  return { path, status: 'modified', state, firstSeenAt: 0, commitHash: null }
 }
 
 /** 渲染 RecordsTab 为静态 HTML 字符串。 */
@@ -144,5 +144,23 @@ describe('RecordsTab — 时段批量暂存（B1 行动闭环）', () => {
     )
     expect(html).not.toContain(t('work.stage.ai'))
     expect(html).not.toContain(t('work.stage.all'))
+  })
+})
+
+describe('RecordsTab — 提交跳转（B2 深链）', () => {
+  it('已提交且带哈希的条目渲染为可点击链接（查看提交）', () => {
+    const committed = { ...entry('src/a.ts', 'committed'), commitHash: 'd'.repeat(40) }
+    const records = [turn({ turn: 1, internal: [committed] })]
+    const html = renderToStaticMarkup(
+      <RecordsTab records={records} t={t} onOpenDiff={() => {}} onOpenCommit={() => {}} />,
+    )
+    expect(html).toContain('src/a.ts')
+    expect(html).toContain(t('work.jumpCommit'))
+  })
+
+  it('已提交但无哈希的条目保持纯展示(不可点击)', () => {
+    const records = [turn({ turn: 1, internal: [entry('src/a.ts', 'committed')] })]
+    const html = render(records)
+    expect(html).not.toContain(t('work.jumpCommit'))
   })
 })

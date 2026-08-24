@@ -101,6 +101,8 @@ export function GitCenter({
   const [toast, setToast] = useState<ToastState | null>(null)
   /** 记录 Tab 跳转 Changes 的打开请求(仍变更条目点击)。 */
   const [recordOpenRequest, setRecordOpenRequest] = useState<{ path: string; base: 'worktree' | 'staged' } | null>(null)
+  /** 记录 Tab 跳转 History 的定位请求(已提交条目点击 → 提交哈希)。 */
+  const [commitRequest, setCommitRequest] = useState<string | null>(null)
 
   // 打开即定位（pill 齿轮 / 常规打开 / 变更文件直达）：open 上升沿重设 tab，
   // 而非依赖 initialTab 引用变化——连续两次齿轮打开时引用不变，需以 open 为触发。
@@ -146,6 +148,7 @@ export function GitCenter({
   /** 关闭:清空记录跳转请求,避免再次打开时残留定位。 */
   const closeCenter = (): void => {
     setRecordOpenRequest(null)
+    setCommitRequest(null)
     onClose()
   }
 
@@ -222,7 +225,7 @@ export function GitCenter({
             aria-labelledby="dsh-git-ui-tab-history"
             style={tab === 'history' ? { display: 'contents' } : { display: 'none' }}
           >
-            <HistoryTab query={query} run={run} t={t} />
+            <HistoryTab query={query} run={run} t={t} focusRef={commitRequest} />
           </div>
           <div
             role="tabpanel"
@@ -236,6 +239,10 @@ export function GitCenter({
                 setTab('changes')
               }}
               execute={execute}
+              onOpenCommit={(hash) => {
+                setCommitRequest(hash)
+                setTab('history')
+              }}
             />
           </div>
           <div
@@ -994,11 +1001,13 @@ const GRAPH_NODE_MIN_R = 2
 // ── History tab ───────────────────────────────────────────────────────────
 
 function HistoryTab({
-  query, run, t,
+  query, run, t, focusRef = null,
 }: {
   query: GitCenterProps['query']
   run: GitCenterProps['run']
   t: (key: GitKey) => string
+  /** 提交定位请求(记录页「已提交」条目深链):哈希前缀搜索 + 自动选中。 */
+  focusRef?: string | null
 }): JSX.Element {
   const [commits, setCommits] = useState<readonly GraphCommit[]>([])
   /**
@@ -1207,6 +1216,24 @@ function HistoryTab({
     }, 300)
     return () => clearTimeout(timer)
   }, [searchInput])
+
+  // 提交定位(深链):哈希前缀直达搜索(绕过防抖),结果就位后自动选中首个匹配。
+  const pendingFocus = useRef<string | null>(null)
+  useEffect(() => {
+    if (focusRef === null) return
+    pendingFocus.current = focusRef
+    setSearchInput(focusRef)
+    setFilter((prev) => (prev.search === focusRef ? prev : { ...prev, ref: null, search: focusRef }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 深链请求一次一响应
+  }, [focusRef])
+  useEffect(() => {
+    const target = pendingFocus.current
+    if (target === null || loading || commits.length === 0) return
+    const match = commits.find((commit) => commit.hash.startsWith(target))
+    pendingFocus.current = null // 无论是否命中,一次定位请求只消费一次
+    if (match !== undefined) void select(match)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 结果批就位后消费挂起定位
+  }, [commits, loading])
 
   const select = useCallback(async (commit: GraphCommit): Promise<void> => {
     setSelected(commit)

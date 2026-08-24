@@ -25,6 +25,8 @@ export interface PathObservation {
   readonly lastSeenAt: number | null
   /** HEAD 移动检测到的提交时刻;null = 未观测到提交。 */
   readonly committedAt: number | null
+  /** 检测到提交时的提交哈希(提交跳转深链);null = 无/恢复探针无哈希。 */
+  readonly commitHash: string | null
 }
 
 /** 观测持久化通道(宿主实现为插件数据存储 obs-<key>.jsonl;测试用内存桩)。 */
@@ -74,6 +76,7 @@ export class ObservationLog {
           firstSeenAt: now,
           lastSeenAt: null,
           committedAt: null,
+          commitHash: null,
         })
         changed = true
       } else if (existing.status !== change.status) {
@@ -98,12 +101,15 @@ export class ObservationLog {
     return changed
   }
 
-  /** HEAD 前移检测到提交:对应路径标注 committedAt(未观测的路径忽略)。 */
-  markCommitted(paths: readonly string[], now: number): void {
-    for (const path of paths) {
+  /** HEAD 前移检测到提交:对应路径标注 committedAt(+ 提交哈希,供深链)。
+   * 条目接受 `hash`(路径→提交映射)或纯路径(恢复探针无哈希 → null)。 */
+  markCommitted(entries: readonly (string | { readonly path: string; readonly hash?: string })[], now: number): void {
+    for (const entry of entries) {
+      const path = typeof entry === 'string' ? entry : entry.path
+      const hash = typeof entry === 'string' ? null : (entry.hash ?? null)
       const observation = this.map.get(path)
       if (observation !== undefined && observation.committedAt === null) {
-        this.map.set(path, { ...observation, committedAt: now })
+        this.map.set(path, { ...observation, committedAt: now, commitHash: hash })
       }
     }
   }

@@ -139,6 +139,8 @@ const workEntryObjectSchema = z.object({
   status: z.enum(['added', 'modified', 'deleted', 'renamed', 'untracked', 'conflicted', 'typechange']),
   state: workEntryStateSchema,
   firstSeenAt: z.number(),
+  // 已提交条目的提交哈希(提交跳转深链)。
+  commitHash: z.string().nullable(),
 })
 
 export const turnWorkRecordSchema = z.object({

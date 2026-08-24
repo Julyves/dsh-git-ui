@@ -24,7 +24,7 @@ import { createHostEndpoints, type HostEndpoints } from '../contracts/host-endpo
 import { migrateSettings, DEFAULT_SETTINGS, type GitUISettings, type PopupSettings } from '../contracts/settings.ts'
 import { RecordStore, OBS_FLUSH_DEBOUNCE_MS, type CommitProbe } from './record-store.ts'
 import { runTurnRecords, type TurnRecordSources } from './turn-records.ts'
-import { parseNameStatusOutput } from './parser.ts'
+import { parseCommitPathsOutput, type CommitPath } from './parser.ts'
 import { PathStateTracker, type PathStateProbe } from './path-state.ts'
 import { sliceEvents, type SessionLike } from '../adapters/dsh/session-log.ts'
 import { createToolPresenter, type ToolRegistryLike } from '../adapters/dsh/tools-presenter.ts'
@@ -178,19 +178,20 @@ export class GitStatusService extends TypertRemoteService {
     return this.snapshotWithTrack({ sessionId }, signal)
   }
 
-  /** HEAD 前移 → 提交路径集(git log old..new --name-status -z;失败返回空)。 */
-  private async commitsBetween(sessionId: string, from: string, to: string): Promise<readonly string[]> {
+  /** HEAD 前移 → 路径→提交映射(git log --format=%H --name-status -z;失败返回空)。
+   * 同一条 git 命令既判 committed 又携带哈希——提交跳转零额外命令。 */
+  private async commitsBetween(sessionId: string, from: string, to: string): Promise<readonly CommitPath[]> {
     const workspace = await resolveWorkspace(this.deps, sessionId)
     if (!workspace.ok) return []
     const outcome = await runCommand(
       this.deps.run,
-      ['git', 'log', '--format=', '--name-status', '-z', `${from}..${to}`],
+      ['git', 'log', '--format=%H', '--name-status', '-z', `${from}..${to}`],
       workspace.root,
       'log commits',
     )
     if ('failure' in outcome) return []
     if (outcome.run.timedOut || outcome.run.exitCode !== 0) return []
-    return parseNameStatusOutput(outcome.run.stdout).map((row) => row.path)
+    return parseCommitPathsOutput(outcome.run.stdout)
   }
 
   /** mtime 精修源:对当前变更列表 stat(上限 MTIME_STAT_CAP;失败路径跳过)。 */

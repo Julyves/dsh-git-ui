@@ -13,6 +13,7 @@ function workTurn(turn: number, startAt: number, endAt: number | null, internal 
     status: 'modified',
     state: 'dirty',
     firstSeenAt: startAt,
+    commitHash: null,
   })
   return {
     turn,
