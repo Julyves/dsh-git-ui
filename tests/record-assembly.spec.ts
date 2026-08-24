@@ -346,3 +346,22 @@ describe('assembleAll — 间隙归属(P2-3 真空修复)', () => {
     expect(records[0]?.external).toEqual([])
   })
 })
+
+describe('assembleAll — 间隙归属端点不双归(半开区间)', () => {
+  it('a firstSeen exactly at prevEnd belongs ONLY to the previous turn', () => {
+    const log = new TurnLog()
+    log.append([
+      { type: 'turn/start', seq: 1, time: 1000, data: { turn: 1 } },
+      { type: 'turn/end', seq: 2, time: 2000, data: { turn: 1 } },
+      { type: 'turn/start', seq: 3, time: 4000, data: { turn: 2 } },
+    ])
+    const observations = new ObservationLog()
+    observations.update([change('edge.txt')], 2000) // === prevEnd 端点
+    const records = assembleAll({
+      log, observations,
+      changes: [change('edge.txt')], repoRoot: '/repo', presenter: undefined, mtimes: undefined, now: 5000,
+    })
+    expect(records[0]?.external.map((e) => e.path)).toEqual(['edge.txt'])
+    expect(records[1]?.external).toEqual([])
+  })
+})
