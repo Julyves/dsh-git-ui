@@ -173,6 +173,44 @@ export const sessionTitleMuted: CSSProperties = {
   color: 'var(--dsw-alias-label-secondary)',
 }
 
+/** 「无变更产出」徽章(无条目时段):由作者三分徽章派生,中性弱化——
+ * 与其他三分徽章同位,一眼读出「这轮没动文件」。 */
+export const sessionNoChange: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: '0 6px',
+  borderRadius: 8,
+  fontWeight: 400,
+  fontSize: 11,
+  lineHeight: '16px',
+  color: 'var(--dsw-alias-label-tertiary)',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+}
+
+/** 展开区「无文件变更产出」空态:小号水平居中,轻于列表级空态。 */
+export const sessionEmpty: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 6,
+  padding: '20px 12px',
+}
+
+/** 空态图标:弱化描边。 */
+export const sessionEmptyIcon: CSSProperties = {
+  display: 'inline-flex',
+  opacity: 0.5,
+}
+
+/** 空态文案:次级色。 */
+export const sessionEmptyText: CSSProperties = {
+  fontSize: 12,
+  lineHeight: '18px',
+  color: 'var(--dsw-alias-label-secondary)',
+}
+
 /** 聚合轮次弱化段（如「3 轮」）。 */
 export const sessionTurnCount: CSSProperties = {
   flex: 'none',

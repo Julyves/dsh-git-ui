@@ -164,3 +164,20 @@ describe('RecordsTab — 提交跳转（B2 深链）', () => {
     expect(html).not.toContain(t('work.jumpCommit'))
   })
 })
+
+describe('RecordsTab — 无变更产出时段(可展开 + 标注)', () => {
+  it('一个 hasWork 但无任何条目的时段:头部标注「无变更产出」,展开显示空态', () => {
+    const records = [turn({ turn: 1, internal: [], sibling: [], external: [] })]
+    const html = render(records)
+    // 头部徽章(基于时段真实条目数)。
+    expect(html).toContain(t('work.noChange'))
+    // 最近时段默认展开 → 展开区空态文案在场。
+    expect(html).toContain(t('work.noChangeEmpty'))
+  })
+
+  it('过滤下无该组条目但时段真实有条目:不误标「无变更产出」', () => {
+    const records = [turn({ turn: 1, internal: [entry('src/a.ts')] })]
+    const html = render(records, 'sibling')
+    expect(html).not.toContain(t('work.noChange'))
+  })
+})

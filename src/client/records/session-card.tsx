@@ -8,7 +8,7 @@ import type { CSSProperties, JSX } from 'react'
 import type { WorkEntry } from '../../host/types.ts'
 import type { GitKey } from '../locales.ts'
 import { workBadgeDotExternal, workBadgeDotInternal, workBadgeDotSibling, workBadgeExternal, workBadgeInternal, workBadgeSibling } from '../styles.ts'
-import { ChevronIcon, StageIcon } from '../icons.tsx'
+import { ChevronIcon, RecordIcon, StageIcon } from '../icons.tsx'
 import { EntryRow } from './entry-row.tsx'
 import type { WorkSession } from './derive.ts'
 import * as css from './styles.ts'
@@ -83,7 +83,9 @@ export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = fals
   const internalEntries = showInternal ? session.internal : []
   const siblingEntries = showSibling ? session.sibling : []
   const externalEntries = showExternal ? session.external : []
-  const hasEntries = internalEntries.length > 0 || siblingEntries.length > 0 || externalEntries.length > 0
+  // 「有变更产出」基于时段**真实**条目数(非过滤后)——过滤只影响展示,
+  // 不改变「这轮动没动文件」的事实(否则「仅看其它会话」过滤会误标无变更)。
+  const hasEntries = session.internal.length > 0 || session.sibling.length > 0 || session.external.length > 0
   /** 批量暂存目标:AI 组 = 本会话+其他会话的仍变更;全部 = 三组仍变更。 */
   const dirtyPaths = (groups: 'ai' | 'all'): readonly string[] => {
     const pick = (entries: readonly WorkEntry[]): readonly string[] =>
@@ -94,7 +96,8 @@ export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = fals
   const aiDirty = onStage !== undefined && dirtyPaths('ai').length > 0
   const allDirty = onStage !== undefined && dirtyPaths('all').length > 0
 
-  const toggle = (): void => { if (hasEntries) setOpen(!open) }
+  /** 任何时段(含无变更产出)都可展开:无条目的展开区显示空态而非不可点。 */
+  const toggle = (): void => setOpen(!open)
 
   return (
     <div style={css.sessionCard} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
@@ -109,10 +112,10 @@ export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = fals
           className="dsh-git-ui__work-session"
           style={hover ? { ...css.sessionHead, ...css.sessionHeadHover } : css.sessionHead}
           onClick={toggle}
-          aria-expanded={hasEntries ? open : undefined}
+          aria-expanded={open}
           aria-label={windowText(session, t)}
         >
-          <ChevronIcon open={hasEntries && open} />
+          <ChevronIcon open={open} />
           {session.narrative !== null && (
             <span style={css.sessionNarrative} title={session.narrative}>{session.narrative}</span>
           )}
@@ -121,6 +124,9 @@ export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = fals
             <span style={css.sessionTurnCount}>{t('work.sessionTurnCount').replace('{n}', String(session.turnCount))}</span>
           )}
           <span style={css.sessionBadges}>
+            {!hasEntries && (
+              <span style={css.sessionNoChange} title={t('work.noChangeHint')}>{t('work.noChange')}</span>
+            )}
             {internalEntries.length > 0 && (
               <span style={workBadgeInternal} title={t('work.group.internal')}>
                 <span style={workBadgeDotInternal} aria-hidden="true" />
@@ -141,8 +147,14 @@ export function SessionCard({ session, filter, t, onOpenDiff, defaultOpen = fals
             )}
           </span>
         </button>
-        {hasEntries && open && (
+        {open && (
           <div style={css.sessionBody}>
+            {!hasEntries && (
+              <div style={css.sessionEmpty}>
+                <span style={css.sessionEmptyIcon} aria-hidden="true"><RecordIcon /></span>
+                <span style={css.sessionEmptyText}>{t('work.noChangeEmpty')}</span>
+              </div>
+            )}
             <EntryGroup
               group="internal"
               title={t('work.group.internal')}

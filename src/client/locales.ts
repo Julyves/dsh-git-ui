@@ -30,6 +30,9 @@ export const zh = {
   // 时段视图（records v2）——单位从 turn 转为工作时段
   'work.summary': '{sessions} 个时段 · {files} 个文件 · {dirty} 个仍待提交',
   'work.filter.all': '全部',
+  'work.noChange': '无变更产出',
+  'work.noChangeHint': '该时段 agent 未产出任何文件变更',
+  'work.noChangeEmpty': '无文件变更产出',
   'work.sessionTurnCount': '{n} 轮',
   'work.emptySessions': '还没有工作时段。agent 产生 Git 变更后，这里会按时段展示最近的工作。',
   'work.emptyFiltered': '当前过滤下没有条目，切换其他筛选查看全部时段。',
@@ -230,6 +233,9 @@ export const en: Record<GitKey, string> = {
   // Session view (records v2) — the unit shifts from turn to working session
   'work.summary': '{sessions} sessions · {files} files · {dirty} dirty',
   'work.filter.all': 'All',
+  'work.noChange': 'No changes',
+  'work.noChangeHint': 'The agent produced no file changes in this period',
+  'work.noChangeEmpty': 'No file changes produced',
   'work.sessionTurnCount': '{n} turns',
   'work.emptySessions': 'No working sessions yet. Once the agent makes Git changes, they appear here grouped by session.',
   'work.emptyFiltered': 'No entries under this filter — switch to another view to see all sessions.',
