@@ -34,7 +34,7 @@ describe('setOverride (不可变更新)', () => {
 
 describe('applyAuthorOverrides (展示层搬移)', () => {
   it('moves overridden paths between groups per turn', () => {
-    const overrides = { '/repo': { 'mine.ts': 'internal', 'ai.ts': 'external' } }
+    const overrides = { '/repo': { 'mine.ts': 'internal' as const, 'ai.ts': 'external' as const } }
     const out = applyAuthorOverrides([turn], '/repo', overrides)[0]!
     expect(out.internal.map((e) => e.path)).toEqual(['mine.ts'])
     expect(out.sibling.map((e) => e.path)).toEqual(['sib.ts'])
@@ -42,7 +42,7 @@ describe('applyAuthorOverrides (展示层搬移)', () => {
   })
 
   it('sibling entries obey the external direction', () => {
-    const overrides = { '/repo': { 'sib.ts': 'external' } }
+    const overrides = { '/repo': { 'sib.ts': 'external' as const } }
     const out = applyAuthorOverrides([turn], '/repo', overrides)[0]!
     expect(out.sibling).toHaveLength(0)
     expect(out.external.map((e) => e.path)).toContain('sib.ts')

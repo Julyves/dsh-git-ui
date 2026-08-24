@@ -34,6 +34,13 @@ export interface TurnRecordSources {
   subagentWrites(sessionId: string, root: string): Promise<ReadonlyMap<number, readonly WritePathDetail[]>>
   /** 其他 dsh 会话(同工作区)写过的路径全集(可缺省 = 空,全落 external)。 */
   siblingWrites(sessionId: string, root: string): Promise<ReadonlySet<string>>
+  /**
+   * 权威写意图通道(接口缝,L3):上游沙箱若提供 per-turn filesWritten,
+   * 该 turn 的 internal 完全以其为准(旁路 presentCall/bash 启发式/args 兜底,
+   * attribution 恒 authoritative)。未提供(缺省)→ 现行启发式管线。
+   * 上游就绪之日即启发式机器退役为 fallback 之时。
+   */
+  filesWritten?: (sessionId: string) => Promise<ReadonlyMap<number, readonly string[]> | undefined>
   /** 恢复对账探针(按 sessionId 取)。 */
   probe(sessionId: string): CommitProbe
   /** 去向判定缓存(每会话一份;可缺省 = 不升级,全部保持 gone)。 */
@@ -72,6 +79,10 @@ export async function runTurnRecords(
   const mtimes = await sources.mtimes(snapshot.value)
   const subagentWrites = await sources.subagentWrites(sessionId, snapshot.value.root)
   const siblingWrites = await sources.siblingWrites(sessionId, snapshot.value.root)
+  // 权威写意图(L3 接口缝):提供则旁路启发式(见 TurnRecordSources.filesWritten)。
+  const filesWritten = sources.filesWritten === undefined
+    ? undefined
+    : await sources.filesWritten(sessionId)
   const pathStates = sources.pathStates(sessionId)
   const assembleTurns = (): readonly TurnWorkRecord[] => pipeline.assemble(sessionId, {
     changes: snapshot.value.changes,
@@ -81,6 +92,7 @@ export async function runTurnRecords(
     now: sources.now(),
     subagentWrites,
     siblingWrites,
+    ...(filesWritten === undefined ? {} : { filesWrittenByTurn: filesWritten }),
     pathStates,
   })
   const records = assembleTurns()

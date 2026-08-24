@@ -269,3 +269,20 @@ describe('assembleAll — 归因置信度(B3)', () => {
     expect(records[0]?.internal.find((e) => e.path === 'src/meta.ts')?.attribution).toBe('authoritative')
   })
 })
+
+describe('assembleAll — L3 filesWritten 权威旁路', () => {
+  it('a turn with filesWritten bypasses heuristics entirely and is authoritative', () => {
+    const { log, observations, deps } = fixture()
+    // turn 1 命中权威通道(声明集与启发式提取结果不同,验证旁路生效)。
+    const records = assembleAll({
+      log, observations, ...deps,
+      filesWrittenByTurn: new Map([[1, ['sandbox/authoritative.ts']]]),
+    })
+    const turn1 = records[0]
+    expect(turn1?.internal.map((e) => e.path)).toEqual(['sandbox/authoritative.ts'])
+    expect(turn1?.internal[0]?.attribution).toBe('authoritative')
+    // 未命中的 turn 2 走现行管线(fixture 的 write/diff 提取照常)。
+    const turn2 = records[1]
+    expect(turn2?.internal.map((e) => e.path)).toEqual(['docs/test.txt'])
+  })
+})

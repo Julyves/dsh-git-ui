@@ -46,6 +46,12 @@ export interface AssembleDeps {
   readonly subagentWrites?: ReadonlyMap<number, readonly WritePathDetail[]>
   /** 其他 dsh 会话(同工作区)写过的路径全集(适配层注入;缺省 = 全落 external)。 */
   readonly siblingWrites?: ReadonlySet<string>
+  /**
+   * 权威写意图(L3 接口缝):turn → 该 turn 实际写入的路径集(上游沙箱
+   * filesWritten)。命中的 turn 完全以此为准——旁路全部启发式提取,
+   * attribution 恒 authoritative;未命中的 turn 走现行管线。
+   */
+  readonly filesWrittenByTurn?: ReadonlyMap<number, readonly string[]>
   /** 去向判定缓存(权威探测结果;缺省 = 全部待定 → gone)。 */
   readonly pathStates?: PathStateLookup
 }
@@ -83,6 +89,13 @@ function collectAllInternal(deps: AssembleDeps): readonly WorkEntry[] {
 
 /** 一个 turn 的 internal 条目(含归因置信度:平台自证 vs 启发式推断)。 */
 function internalOf(folded: FoldedTurn, deps: AssembleDeps): readonly WorkEntry[] {
+  // L3 权威通道:上游 filesWritten 命中该 turn → 完全以其为准(旁路启发式)。
+  const authoritativeSet = deps.filesWrittenByTurn?.get(folded.turn)
+  if (authoritativeSet !== undefined) {
+    const entries = [...new Set(authoritativeSet)]
+      .map((path) => ({ ...entryFor(path, deps, folded.startAt), attribution: 'authoritative' as const }))
+    return entries.sort((a, b) => a.path.localeCompare(b.path))
+  }
   // path → 权威?同一路径权威源与启发式并存时权威胜(写意图自证优先)。
   const authority = new Map<string, boolean>()
   const mark = (path: string, authoritative: boolean): void => {

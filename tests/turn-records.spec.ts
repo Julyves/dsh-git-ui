@@ -183,3 +183,13 @@ describe('runTurnRecords', () => {
     expect(persisted).toBe(1) // 探测到新判定 → 查询后落盘一次
   })
 })
+describe('runTurnRecords — L3 filesWritten 接口缝', () => {
+  it('threads the authoritative channel into assembly when provided', async () => {
+    const pipeline = new RecordStore(memoryPersistenceFactory(), 0)
+    const result = await runTurnRecords(pipeline, sources({
+      filesWritten: async () => new Map([[1, ['only/this.ts']]]),
+    }), 's1')
+    if (!result.ok || result.value.kind !== 'turn-records') throw new Error('failed')
+    expect(result.value.turns[0]?.internal.map((e) => e.path)).toEqual(['only/this.ts'])
+  })
+})
