@@ -132,7 +132,7 @@ dsh plugin --profile web remove dsh-git-ui
 - 轮询式刷新（默认 30s）；基于文件监听的事件推送为规划中的扩展。
 - 变更文件列表有上限（`maxChanges`）；未跟踪目录内部文件逐个枚举。status 输出超过内存上限（默认 4 MiB）时会从私有 spill 文件恢复完整输出，**计数保持精确**——仅当 spill 上限（64 MiB）也被突破时才回退为近似（`truncated: true`）。
 - 浏览器只传 `sessionId`，不传路径；主机解析权威 cwd 并执行 git 命令（写操作用 `--` 路径分隔、拒绝绝对路径与 `..` 逃逸）。
-- **Turn 工作记录**：bash 动态构造写目标（`$(...)`、glob、`find -exec`、`eval`）不可静态提取，落入「外部」且带 `≈` 推断标记（根治路径 = L3 `filesWritten` 接口缝，待上游沙箱）；冷 subagent / 冷兄弟会话（未加载）跳过对应归因；兄弟会话识别按 cwd 精确匹配（符号链接差异保守漏配，文档化）；观测时间线每会话上限 2000 条（裁剪最旧），且在一个轮询间隔内出现又消失的外部变更在宿主重启后无法重建；turn 边界指纹为首次观测点近似（轮询粒度内的先写后还原不可分）；人工改判为仓库级（跨会话生效），不随会话回收。
+- **Turn 工作记录**：bash 动态构造写目标（`$(...)`、glob、`find -exec`、`eval`）不可静态提取，落入「外部」且带 `≈` 推断标记（根治路径 = L3 `filesWritten` 接口缝，待上游沙箱）；冷 subagent / 冷兄弟会话（未加载）跳过对应归因——兄弟归因已在观测时间线固化（会话离场/宿主重启后已判定的不漂移），但**从未被查询时判定过**的兄弟写入（兄弟会话在两次查询之间写入并离场）仍会落「外部」；兄弟会话识别经 realpath 归一 + 仓库子目录纳入（realpath 失败保守回退精确匹配）；观测时间线每会话上限 2000 条（裁剪最旧），且在一个轮询间隔内出现又消失的外部变更在宿主重启后无法重建；turn 边界指纹为首次观测点近似（轮询粒度内的先写后还原不可分）；早于首个 turn 的变更无归属窗口；人工改判为仓库级（跨会话生效），不随会话回收。
 - 语法高亮为 bundle 预算裁剪的语言子集（TypeScript/JS 族、JSON/YAML/TOML/INI、Markdown、XML/HTML、CSS/SCSS/LESS、Python、Shell、Java、Go、Rust、C、C#、Kotlin、SQL、Makefile）。C++ 以 C grammar 近似、HTML 以 XML grammar 近似、SCSS/LESS 以 CSS grammar 近似（基础 token 正确，语言特有结构回落纯文本）；PHP、Swift、Ruby、Lua 等未注册语言**整体回落纯文本**（仍为等宽字体、不报错）。
 - 设置存储（v2）迁移到宿主磁盘后不再写入 localStorage；若 host RPC 不可达（降级），设置仅停留在内存态（本次会话有效）。
 
