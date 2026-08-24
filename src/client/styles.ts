@@ -110,6 +110,20 @@ export const workBadgeDot: CSSProperties = {
   flex: 'none',
 }
 
+/** 未读徽章(增量信号):警示琥珀淡晕底——「要不要关心」优先于总量计数;
+ * 查看后(弹窗/记录页)清零回到常规三分徽章。 */
+export const workBadgeUnread: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: '0 6px',
+  borderRadius: 8,
+  fontWeight: 600,
+  color: 'var(--dsw-alias-state-warn-primary, var(--dsw-alias-label-primary))',
+  background: 'color-mix(in srgb, var(--dsw-alias-state-warn-primary) 16%, transparent)',
+  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-warn-primary) 40%, transparent)',
+}
+
 export const workBadgeDotInternal: CSSProperties = {
   ...workBadgeDot,
   background: 'var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary))',

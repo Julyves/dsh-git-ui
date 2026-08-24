@@ -32,6 +32,7 @@ import { renderPill, chipLetter, popupBadgeTexts } from './pill-segments.tsx'
 import { useTurnRecords } from './use-turn-records.ts'
 import { latestWorkTurn, turnEntryCounts } from './work-record-meta.ts'
 import { EntryRow } from './records/entry-row.tsx'
+import { countUnseen, markSeen, readSeenAt } from './records/unread.ts'
 import type { GitUISettings } from '../contracts/settings.ts'
 import type { GitCenterTab } from './GitCenter.tsx'
 import type { TurnWorkRecord } from '../host/types.ts'
@@ -534,7 +535,7 @@ const VIEW_GUTTER = 8
  * The header utility entry: a branch pill that opens a portaled detail popup
  * and the Git center management panel.
  */
-export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillProps): JSX.Element | null {
+export function GitPill({ sessionId, useGit, useSession, refresh, run, query, t }: GitPillProps): JSX.Element | null {
   // The selector hook requires a selector function (with-selector calls it
   // unconditionally); identity selection reads the whole view snapshot.
   const view = useGit((view) => view)
@@ -582,6 +583,19 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
   const [centerRequest, setCenterRequest] = useState<{ path: string; base: 'worktree' | 'staged' } | null>(null)
   /** Git 中心初始 Tab：常规打开 = 变更；齿轮打开 = 设置；记录入口 = 记录。 */
   const [centerTab, setCenterTab] = useState<GitCenterTab>('changes')
+  /** 工作记录已读时刻(未读徽章的增量基准;查看即刷新)。 */
+  const [seenAt, setSeenAt] = useState(() => readSeenAt(sessionId))
+
+  /** 查看即已读:弹窗打开或 Git 中心停驻记录页时标记,未读徽章清零。 */
+  const markWorkSeen = (): void => setSeenAt(markSeen(sessionId))
+  useEffect(() => {
+    if (open) markWorkSeen()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open 上升沿标记一次
+  }, [open])
+  useEffect(() => {
+    if (centerOpen && centerTab === 'records') markWorkSeen()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 记录页停驻上升沿标记
+  }, [centerOpen, centerTab])
 
   /** 打开 Git 中心并定位到「记录」Tab（弹窗工作记录「全部 turn 记录」入口）。 */
   const openRecordsInCenter = (): void => {
@@ -699,9 +713,13 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
 
   const workWindow = latestWorkTurn(records)
   const { internal: internalCount, sibling: siblingCount, external: externalCount } = turnEntryCounts(workWindow)
-  const showWorkBadge = uiSettings.pill.workRecord && (internalCount > 0 || siblingCount > 0 || externalCount > 0)
+  const unseenCount = uiSettings.pill.workRecord ? countUnseen(records, seenAt) : 0
+  const showWorkBadge = uiSettings.pill.workRecord
+    && (internalCount > 0 || siblingCount > 0 || externalCount > 0 || unseenCount > 0)
   const workBadgeTitle = () => {
-    const lines = [t('work.badge').replace('{internal}', String(internalCount)).replace('{external}', String(externalCount))]
+    const lines: string[] = []
+    if (unseenCount > 0) lines.push(t('work.unreadBadge').replace('{n}', String(unseenCount)))
+    lines.push(t('work.badge').replace('{internal}', String(internalCount)).replace('{external}', String(externalCount)))
     if (workWindow !== undefined) {
       if (workWindow.internal.length > 0) lines.push(`${t('work.group.turnInternal')}: ${workWindow.internal.map((e) => e.path).join(', ')}`)
       if (workWindow.sibling.length > 0) lines.push(`${t('work.group.sibling')}: ${workWindow.sibling.map((e) => e.path).join(', ')}`)
@@ -724,19 +742,24 @@ export function GitPill({ useGit, useSession, refresh, run, query, t }: GitPillP
         {render.nodes}
         {showWorkBadge && (
           <span style={css.workBadges}>
-            {internalCount > 0 && (
+            {unseenCount > 0 && (
+              <span style={css.workBadgeUnread} title={t('work.unreadBadge').replace('{n}', String(unseenCount))}>
+                {t('work.unreadShort').replace('{n}', String(unseenCount))}
+              </span>
+            )}
+            {unseenCount === 0 && internalCount > 0 && (
               <span style={css.workBadgeInternal} title={t('work.group.turnInternal')}>
                 <span style={css.workBadgeDotInternal} aria-hidden="true" />
                 {t('work.badgeInternalShort').replace('{n}', String(internalCount))}
               </span>
             )}
-            {siblingCount > 0 && (
+            {unseenCount === 0 && siblingCount > 0 && (
               <span style={css.workBadgeSibling} title={t('work.group.sibling')}>
                 <span style={css.workBadgeDotSibling} aria-hidden="true" />
                 {t('work.badgeSiblingShort').replace('{n}', String(siblingCount))}
               </span>
             )}
-            {externalCount > 0 && (
+            {unseenCount === 0 && externalCount > 0 && (
               <span style={css.workBadgeExternal} title={t('work.group.external')}>
                 <span style={css.workBadgeDotExternal} aria-hidden="true" />
                 {t('work.badgeExternalShort').replace('{n}', String(externalCount))}
