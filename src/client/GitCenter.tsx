@@ -1593,7 +1593,7 @@ function HistoryFilterTree({
         title={name}
       >
         <span style={face.color === undefined ? css.treeIcon : { ...css.treeIcon, color: face.color }} aria-hidden="true">{face.icon}</span>
-        <span style={mark ? { ...css.treeName, ...css.treeNameCurrent } : css.treeName}>{highlight(name)}</span>
+        <span style={mark ? { ...css.treeName, ...css.treeNameCurrent } : css.treeName}>{highlight(bare)}</span>
         {hasSync && (
           <span style={css.treeSyncBadge}>
             {(branch!.ahead ?? 0) > 0 && `↑${branch!.ahead}`}
@@ -1636,6 +1636,24 @@ function HistoryFilterTree({
       else list.push(b)
     }
     remoteGroups.push(...map.entries())
+  }
+  // 本地分支：无斜杠直接平铺；带斜杠按第一段前缀聚合为可折叠文件夹（IDEA 式）。
+  const localRoots: GitBranch[] = []
+  const localFolders: Array<[string, readonly GitBranch[]]> = []
+  if (tree !== null) {
+    const map = new Map<string, GitBranch[]>()
+    for (const b of tree.local) {
+      const slash = b.name.indexOf('/')
+      if (slash === -1) {
+        localRoots.push(b)
+        continue
+      }
+      const group = b.name.slice(0, slash)
+      const list = map.get(group)
+      if (list === undefined) map.set(group, [b])
+      else list.push(b)
+    }
+    localFolders.push(...map.entries())
   }
   const bareOf = (name: string): string => name.slice(name.indexOf('/') + 1)
   return (
@@ -1681,8 +1699,24 @@ function HistoryFilterTree({
           </>
         ) : (
           <>
-            {sectionHead('local', t('center.localBranches'))}
-            {!closed.has('local') && tree.local.map((b) => row(b.name, b.name, filter.kind === 'ref' && filter.name === b.name, b.name === tree.current, 24, b))}
+            {tree.local.length > 0 && sectionHead('local', t('center.localBranches'))}
+            {!closed.has('local') && localRoots.map((b) => row(b.name, b.name, filter.kind === 'ref' && filter.name === b.name, b.name === tree.current, 24, b))}
+            {!closed.has('local') && localFolders.map(([group, branches]) => (
+              <div key={`g-${group}`}>
+                <button
+                  type="button"
+                  className="dsh-git-ui__row"
+                  style={{ ...css.treeRow, paddingLeft: 24 }}
+                  onClick={() => onToggleSection(`local:${group}`)}
+                  aria-expanded={!closed.has(`local:${group}`)}
+                >
+                  <span style={css.treeCaret}><ChevronIcon open={!closed.has(`local:${group}`)} /></span>
+                  <span style={css.treeFolderIcon}><FolderIcon /></span>
+                  <span style={css.treeName}>{group}</span>
+                </button>
+                {!closed.has(`local:${group}`) && branches.map((b) => row(b.name, bareOf(b.name), filter.kind === 'ref' && filter.name === b.name, b.name === tree.current, 44, b))}
+              </div>
+            ))}
             {tree.remote.length > 0 && sectionHead('remote', t('center.remoteBranches'))}
             {!closed.has('remote') && remoteGroups.map(([remoteName, branches]) => (
               <div key={`g-${remoteName}`}>
