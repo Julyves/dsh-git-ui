@@ -30,6 +30,8 @@ export interface RecordsTabProps {
   readonly t: (key: GitKey) => string
   /** 打开的变更文件（仍变更条目）→ 交给 GitCenter 定位 Changes 标签。 */
   readonly onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
+  /** 初始过滤（默认全部；测试与未来深度链接可注入）。 */
+  readonly initialFilter?: RecordFilter
 }
 
 /** 空白占位（无记录 / 加载失败）：图标 + 文案。 */
@@ -50,18 +52,21 @@ const FILTERS: readonly { readonly key: RecordFilter; readonly label: GitKey }[]
   { key: 'external', label: 'work.group.external' },
 ]
 
-/** Records 面板主体（数据受控：由 GitPill 下发）。 */
-export function RecordsTab({ records, t, onOpenDiff }: RecordsTabProps): JSX.Element {
-  const [filter, setFilter] = useState<RecordFilter>('all')
+/** Records 面板主体（数据受控：由 GitPill 下发）。
+ *
+ * 修复（2026-08-24）：过滤到无结果时**不得提前 return 空态**——那样会把
+ * 含过滤按钮的工具栏一并丢弃，用户被卡死在空态页（无法切回其他过滤）。
+ * 工具栏（摘要 + 过滤）恒渲染；空态只在内容区呈现，并按原因区分文案：
+ *   - 无任何时段 → 「还没有工作时段」；
+ *   - 有时段但当前过滤下无条目 → 「当前过滤下没有条目，切换其他筛选」。
+ */
+export function RecordsTab({ records, t, onOpenDiff, initialFilter = 'all' }: RecordsTabProps): JSX.Element {
+  const [filter, setFilter] = useState<RecordFilter>(initialFilter)
 
   if (records === null) {
     return <EmptyNote text={t('work.loadFailed')} t={t} />
   }
   const sessions = buildSessions(records)
-  if (sessions.length === 0) {
-    return <EmptyNote text={t('work.emptySessions')} t={t} />
-  }
-
   // 过滤为纯客户端派生（不复用任何额外查询）。
   const visible = sessions.filter((session) => {
     if (filter === 'internal') return session.internal.length > 0
@@ -70,14 +75,13 @@ export function RecordsTab({ records, t, onOpenDiff }: RecordsTabProps): JSX.Ele
   })
   const summary = summarizeSessions(sessions)
   const latestTurn = sessions[sessions.length - 1]?.turn
-
-  if (visible.length === 0) {
-    return <EmptyNote text={t('work.emptySessions')} t={t} />
-  }
+  const emptyText = sessions.length === 0
+    ? t('work.emptySessions')
+    : t('work.emptyFiltered')
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {/* 工具栏：摘要 + 过滤（废弃旧四格概览卡 + 图例条）。 */}
+      {/* 工具栏：摘要 + 过滤（恒渲染——过滤切换是任何状态下的退出通道）。 */}
       <div style={css.recordsToolbar}>
         <span style={css.recordsSummaryText}>
           {t('work.summary')
@@ -100,19 +104,23 @@ export function RecordsTab({ records, t, onOpenDiff }: RecordsTabProps): JSX.Ele
         </span>
       </div>
 
-      {/* 时段卡片流（时间轴内嵌卡片左缘）。 */}
-      <div style={css.sessionList}>
-        {visible.map((session) => (
-          <SessionCard
-            key={session.turn}
-            session={session}
-            filter={filter}
-            t={t}
-            onOpenDiff={onOpenDiff}
-            defaultOpen={session.turn === latestTurn}
-          />
-        ))}
-      </div>
+      {/* 内容区：时段卡片流，或按原因区分的空态（工具栏保持可操作）。 */}
+      {visible.length === 0 ? (
+        <EmptyNote text={emptyText} t={t} />
+      ) : (
+        <div style={css.sessionList}>
+          {visible.map((session) => (
+            <SessionCard
+              key={session.turn}
+              session={session}
+              filter={filter}
+              t={t}
+              onOpenDiff={onOpenDiff}
+              defaultOpen={session.turn === latestTurn}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
