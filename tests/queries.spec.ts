@@ -348,3 +348,21 @@ describe('runQuery — tags', () => {
   })
 })
 
+
+describe('runQuery — 注入面加固(H5:ref 选项注入拒绝)', () => {
+  it('rejects history refs that start with "-" (would be read as git options)', async () => {
+    const dir = await repoWithCommits()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s', { kind: 'history', limit: 10, skip: 0, ref: '--grep=x' }))
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('invalid-name')
+  })
+
+  it('rejects show refs that start with "-" (arg-injection surface)', async () => {
+    const dir = await repoWithCommits()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s', { kind: 'show', ref: '--output=/tmp/x' }))
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('invalid-name')
+  })
+})

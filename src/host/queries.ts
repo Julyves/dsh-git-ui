@@ -19,9 +19,11 @@ const GRAPH_FORMAT = '%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%P%x1f%D'
 /** History page size cap (and default). 千条级 + 无限滚动。 */
 const MAX_HISTORY_LIMIT = 1000
 
-/** A ref is acceptable when non-empty and free of whitespace. */
+/** A ref is acceptable when non-empty, free of whitespace, and not an option.
+ * 拒绝以 `-` 开头:会被 git 当**参数**解释——`--output=<file>` 是写文件原语,
+ * `--grep` 等可改写查询语义(H5 host 端点契约注入面加固)。 */
 function isValidRef(ref: string): boolean {
-  return ref !== '' && !/\s/.test(ref)
+  return ref !== '' && !/\s/.test(ref) && !ref.startsWith('-')
 }
 
 /**
@@ -108,8 +110,10 @@ async function historyQuery(
     return gitError('log', log.run.stderr, log.run.stdout)
   }
 
-  // 过滤范围内的提交总数（best-effort）。
-  let total = 0
+  // 过滤范围内的提交总数（best-effort）。rev-list 失败(超时等)→ total = -1
+  // 「未知」:client 据此走「尚未到终点」的续载语义,而非冻结无限滚动(H4——
+  // 旧实现失败保持 0,commits.length < 0 恒 false,哨兵消失永不续载)。
+  let total = -1
   const count = await runCommand(deps.run, ['git', 'rev-list', '--count', ...noWalk, ...scope, ...filters], root, 'rev-list', deps.signal)
   if ('run' in count && count.run.exitCode === 0) {
     const parsed = Number(count.run.stdout.trim())

@@ -308,3 +308,27 @@ describe('分支起点行的来线色（IDEA 分叉视觉）', () => {
     expect(rows[0]!.lineColors?.[0]).toBe(colorOf('dev'))
   })
 })
+
+describe('markFilterEnds — openLanes(H6:merge 副父悬垂端标)', () => {
+  it('marks a vertical lane persisting to the graph tail (parent filtered out)', () => {
+    // 过滤后提交集不含 b(c 的第二父):merge c 首父 a、副父 b——b 的车道
+    // 自 c 开出后无人消费,贯到图尾 → 末行以 openLanes 端标标示。
+    const seq = [
+      commit('c', ['a', 'b']),
+      commit('a', []),
+    ]
+    const rows = buildGraph(seq)
+    const marked = markFilterEnds(rows, new Set(['c', 'a']), true)
+    const tail = marked[1]! // a 行为末行,含 b 车道(openLanes)
+    expect(tail.openLanes).toBeDefined()
+    expect(tail.openLanes?.length).toBeGreaterThan(0)
+    // c 行(车道新开,自带 opened 豁免)不标。
+    expect(marked[0]!.openLanes).toBeUndefined()
+  })
+
+  it('no openLanes when every lane resolves within the loaded set', () => {
+    const seq = [commit('c', ['a', 'b']), commit('b', []), commit('a', [])]
+    const marked = markFilterEnds(buildGraph(seq), new Set(['a', 'b', 'c']), true)
+    expect(marked.every((row) => row.openLanes === undefined)).toBe(true)
+  })
+})

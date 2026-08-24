@@ -238,6 +238,10 @@ export function parseDecorations(decorations: string, remotes: readonly string[]
   for (const token of trimmed.split(', ')) {
     if (token.startsWith('HEAD -> ')) {
       refs.push({ kind: 'branch', name: token.slice(8), head: true })
+    } else if (token === 'HEAD') {
+      // 裸 HEAD = 分离 HEAD 锚点:按当前分支高亮(head:true),不再误归普通本地分支
+      // (H7——旧实现落 else,RefPills 以普通分支色渲染、链色锚定 colorOf('HEAD') 失真)。
+      refs.push({ kind: 'branch', name: 'HEAD', head: true })
     } else if (token.startsWith('tag: ')) {
       refs.push({ kind: 'tag', name: token.slice(5), head: false })
     } else if (remotes.some((remote) => token === remote || token.startsWith(`${remote}/`))) {

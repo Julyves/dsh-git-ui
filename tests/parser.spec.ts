@@ -274,3 +274,11 @@ describe('parseCommitPathsOutput (提交跳转:路径→哈希)', () => {
     expect(parseCommitPathsOutput('')).toEqual([])
   })
 })
+
+describe('parseDecorations — 分离 HEAD(H7)', () => {
+  it('a bare HEAD token is classified as the head (detached) branch, not a plain branch', () => {
+    const refs = parseDecorations('HEAD, origin/main', ['origin'])
+    expect(refs[0]).toEqual({ kind: 'branch', name: 'HEAD', head: true })
+    expect(refs[1]).toEqual({ kind: 'remote', name: 'origin/main', head: false })
+  })
+})

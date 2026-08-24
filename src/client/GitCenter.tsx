@@ -103,8 +103,9 @@ export function GitCenter({
   const [toast, setToast] = useState<ToastState | null>(null)
   /** 记录 Tab 跳转 Changes 的打开请求(仍变更条目点击)。 */
   const [recordOpenRequest, setRecordOpenRequest] = useState<{ path: string; base: 'worktree' | 'staged' } | null>(null)
-  /** 记录 Tab 跳转 History 的定位请求(已提交条目点击 → 提交哈希)。 */
-  const [commitRequest, setCommitRequest] = useState<string | null>(null)
+  /** 记录 Tab 跳转 History 的定位请求(已提交条目点击 → 提交哈希)。
+   * 对象态含 nonce:重复点击同一提交也产生新引用,重触发 HistoryTab 定位(H8)。 */
+  const [commitRequest, setCommitRequest] = useState<{ hash: string; nonce: number } | null>(null)
 
   // 打开即定位（pill 齿轮 / 常规打开 / 变更文件直达）：open 上升沿重设 tab，
   // 而非依赖 initialTab 引用变化——连续两次齿轮打开时引用不变，需以 open 为触发。
@@ -242,7 +243,8 @@ export function GitCenter({
               }}
               execute={execute}
               onOpenCommit={(hash) => {
-                setCommitRequest(hash)
+                // nonce 保证重复点击同一提交也重触发定位(H8)。
+                setCommitRequest({ hash, nonce: Date.now() })
                 setTab('history')
               }}
               onReclassify={onReclassify}
@@ -1009,8 +1011,9 @@ function HistoryTab({
   query: GitCenterProps['query']
   run: GitCenterProps['run']
   t: (key: GitKey) => string
-  /** 提交定位请求(记录页「已提交」条目深链):哈希前缀搜索 + 自动选中。 */
-  focusRef?: string | null
+  /** 提交定位请求(记录页「已提交」条目深链):哈希前缀搜索 + 自动选中。
+   * 对象态含 nonce——重复点击同一提交也产生新引用,重触发定位(H8)。 */
+  focusRef?: { readonly hash: string; readonly nonce: number } | null
 }): JSX.Element {
   const [commits, setCommits] = useState<readonly GraphCommit[]>([])
   /**
@@ -1024,6 +1027,10 @@ function HistoryTab({
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<GraphCommit | null>(null)
   const [detail, setDetail] = useState<{ commit: GraphCommit; body: string; stats: readonly GitFileStat[] } | null>(null)
+  /** 详情加载失败态(H3):show 查询失败/超时 — 不再永久「加载中」。 */
+  const [detailError, setDetailError] = useState(false)
+  /** 是否已到列表尽头(某页返回空/少于整页);未知 total 下的续载兜底(H4)。 */
+  const [reachedEnd, setReachedEnd] = useState(false)
   /** 组合过滤条件（左树 ref + 工具栏搜索/用户/日期）；任一变化重载。 */
   const [filter, setFilter] = useState<{ ref: string | null; search: string; author: string; since: string }>({ ref: null, search: '', author: '', since: '' })
   /** 工具栏搜索输入（防抖 300ms 落地到 filter）。 */
@@ -1047,9 +1054,19 @@ function HistoryTab({
   const rightBodyRef = useRef<HTMLDivElement>(null)
   /** now 随提交批次稳定，避免行 memo 因时间戳失效。 */
   const now = useMemo(() => Date.now(), [commits])
-  /** 列表滚动容器与单航守卫（无限滚动）。 */
+  /** 列表滚动容器与无限滚动状态。 */
   const listRef = useRef<HTMLDivElement>(null)
-  const inflightSkip = useRef<number | null>(null)
+  /**
+   * 过滤代(H1):每次过滤/搜索/深链变更 +1。在途响应对不上代即丢弃——
+   * 旧数据不再冒充新过滤、不写脏缓存;新代请求直接接管(允许重叠,旧响应按代丢弃)。
+   */
+  const seqRef = useRef(0)
+  /** 在途请求(代 + skip):同代单航防重复加载;新代接管时不阻塞。 */
+  const inflight = useRef<{ seq: number; skip: number } | null>(null)
+  /** 已展示列表所属代:skip>0 的滚动续载仅对当前代有效(防新旧过滤混合追加)。 */
+  const loadedSeq = useRef(0)
+  /** 选中哈希实时镜像(select 响应守卫,H2):晚到 show 响应不覆盖新选中。 */
+  const selectedHash = useRef<string | null>(null)
   /** 按过滤组合的历史首页缓存（上限 10，切回瞬显，减缓“闪烁”与加载延迟）。 */
   const historyCache = useRef(new Map<string, { commits: readonly GraphCommit[]; total: number }>())
   const cacheKey = (f: { ref: string | null; search: string; author: string; since: string }): string =>
@@ -1127,9 +1144,19 @@ function HistoryTab({
   /** 右栏文件目录树（随选中提交的 stats 重算）。 */
   const fileTree = useMemo(() => (detail === null ? [] : buildFileTree(detail.stats)), [detail])
 
+  /** 是否还有更多:total 已知按长度比较;未知(-1)按「未达尽头」续载(H4——
+   * 旧实现 rev-list 失败 total 恒 0,commits.length < 0 恒 false,哨兵消失冻结
+   * 无限滚动)。reachedEnd 兜底:某页返回空/少于整页即停,即使 total 未知。 */
+  const hasMore = total < 0 ? !reachedEnd : commits.length < total
+
   const loadPage = async (skip: number, f: { ref: string | null; search: string; author: string; since: string }): Promise<void> => {
-    if (inflightSkip.current !== null) return
-    inflightSkip.current = skip
+    const seq = seqRef.current
+    // 滚动续载仅对当前代有效(防新旧过滤按 skip 混合追加,剧本 A 第 4 步)。
+    if (skip > 0 && seq !== loadedSeq.current) return
+    // 同代单航防重复;新代请求直接接管(旧响应按代在下游丢弃)。
+    const active = inflight.current
+    if (active !== null && active.seq === seq) return
+    inflight.current = { seq, skip }
     setLoading(true)
     const outcome = await query({
       kind: 'history',
@@ -1140,14 +1167,21 @@ function HistoryTab({
       ...(f.author !== '' ? { author: f.author } : {}),
       ...(f.since !== '' ? { since: f.since } : {}),
     })
+    // 陈旧代响应:丢弃——不更新 state、不写缓存(剧本 A 第 3/5 步)。
+    if (seq !== seqRef.current) {
+      if (inflight.current?.seq === seq) inflight.current = null
+      return
+    }
     setLoading(false)
-    inflightSkip.current = null
+    if (inflight.current?.seq === seq) inflight.current = null
     if (!outcome.ok) return
     if (outcome.value.kind !== 'history') return
     const page = outcome.value.commits
+    if (page.length < HISTORY_PAGE) setReachedEnd(true)
     const next = skip === 0 ? page : [...commits, ...page]
     setCommits(next)
     setTotal(outcome.value.total)
+    if (skip === 0) loadedSeq.current = seq
     writeHistoryCache(f, next, outcome.value.total)
   }
 
@@ -1159,7 +1193,7 @@ function HistoryTab({
     const start = Math.max(0, Math.floor(el.scrollTop / css.HISTORY_ROW_H) - ROW_OVERSCAN)
     const end = Math.min(listRows.length, Math.ceil((el.scrollTop + el.clientHeight) / css.HISTORY_ROW_H) + ROW_OVERSCAN)
     setWindowSlice((w) => (w.start === start && w.end === end ? w : { start, end }))
-    if (loading || commits.length >= total) return
+    if (loading || !hasMore) return
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 240) void loadPage(commits.length, filter)
   }
 
@@ -1196,10 +1230,15 @@ function HistoryTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- first activation only
   }, [])
 
-  // 过滤变化：缓存命中瞬显；不清空旧数据，新数据就位后整体替换旧行，避免空白“闪烁”。
+  // 过滤变化：换代 + 缓存命中瞬显；不清空旧数据，新数据就位后整体替换旧行，避免空白“闪烁”。
   useEffect(() => {
+    seqRef.current += 1
+    const seq = seqRef.current
     setSelected(null)
     setDetail(null)
+    setDetailError(false)
+    selectedHash.current = null
+    setReachedEnd(false)
     // 过滤切换：列表内容整体替换，滚动与窗口化切片归零。
     setWindowSlice({ start: 0, end: 60 })
     if (listRef.current !== null) listRef.current.scrollTop = 0
@@ -1207,6 +1246,8 @@ function HistoryTab({
     if (cached !== undefined) {
       setCommits(cached.commits)
       setTotal(cached.total)
+      loadedSeq.current = seq
+      setReachedEnd(cached.total >= 0 && cached.commits.length >= cached.total)
     }
     void loadPage(0, filter)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filter-driven reload
@@ -1222,11 +1263,14 @@ function HistoryTab({
 
   // 提交定位(深链):哈希前缀直达搜索(绕过防抖),结果就位后自动选中首个匹配。
   const pendingFocus = useRef<string | null>(null)
+  /** 深链消费触发(H8):同哈希重复点击时 filter 未变,靠 nonce 驱动消费 effect。 */
+  const [focusNonce, setFocusNonce] = useState(0)
   useEffect(() => {
     if (focusRef === null) return
-    pendingFocus.current = focusRef
-    setSearchInput(focusRef)
-    setFilter((prev) => (prev.search === focusRef ? prev : { ...prev, ref: null, search: focusRef }))
+    pendingFocus.current = focusRef.hash
+    setSearchInput(focusRef.hash)
+    setFocusNonce((n) => n + 1)
+    setFilter((prev) => (prev.search === focusRef.hash ? prev : { ...prev, ref: null, search: focusRef.hash }))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 深链请求一次一响应
   }, [focusRef])
   useEffect(() => {
@@ -1236,16 +1280,32 @@ function HistoryTab({
     pendingFocus.current = null // 无论是否命中,一次定位请求只消费一次
     if (match !== undefined) void select(match)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 结果批就位后消费挂起定位
-  }, [commits, loading])
+  }, [commits, loading, focusNonce])
 
   const select = useCallback(async (commit: GraphCommit): Promise<void> => {
+    selectedHash.current = commit.hash
     setSelected(commit)
     setDetail(null)
+    setDetailError(false)
     const outcome = await query({ kind: 'show', ref: commit.hash })
+    // 响应守卫(H2):仅当本次点击仍是当前选中时落地——晚到响应不乱序覆盖(A→B 点选)。
+    if (selectedHash.current !== commit.hash) return
     if (outcome.ok && outcome.value.kind === 'show' && outcome.value.commit !== null) {
       setDetail({ commit: outcome.value.commit as GraphCommit, body: outcome.value.body, stats: outcome.value.stats })
+    } else {
+      // 查询失败/超时:进入失败态,不再永久「加载中」(H3)。
+      setDetailError(true)
     }
   }, [query])
+
+  // 底部静置自动续载(H9):滚动条停在底部时不再依赖 onScroll,随批次/加载态
+  // 自查补载;用户上滚后自然停止。
+  useEffect(() => {
+    const el = listRef.current
+    if (el === null || loading || !hasMore) return
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 320) void loadPage(commits.length, filter)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 底部静置自动续载
+  }, [commits, loading, hasMore])
 
   const toggleDir = (path: string): void => {
     setCollapsed((prev) => {
@@ -1383,7 +1443,7 @@ function HistoryTab({
                 <div style={{ height: Math.max(0, listRows.length - windowSlice.end) * css.HISTORY_ROW_H, flexShrink: 0 }} aria-hidden="true" />
               </>
             )}
-            {commits.length < total && (
+            {hasMore && (
               <div style={css.loadSentinel}>{loading ? t('center.loading') : ''}</div>
             )}
           </div>
@@ -1432,7 +1492,9 @@ function HistoryTab({
                 <>
                   <div style={{ ...css.rightFiles, flex: 'none', height: `${rightTopPct}%` }}>
                 {detail === null
-                  ? <div style={css.centeredEmpty}>{t('center.loading')}</div>
+                  ? detailError
+                    ? <div style={css.centeredEmpty}>{t('history.detailFailed')}</div>
+                    : <div style={css.centeredEmpty}>{t('center.loading')}</div>
                   : detail.stats.length === 0
                     ? <div style={css.centeredEmpty}>{t('center.diffEmpty')}</div>
                     : (
@@ -1831,7 +1893,7 @@ function RefPills({ refs }: { refs: readonly GitRef[] }): JSX.Element | null {
 function GraphStrip({
   row, cols, laneW, endOpen, selected,
 }: {
-  row: GraphRow
+  row: GraphRowMarker
   cols: number
   laneW: number
   endOpen?: boolean
@@ -1851,7 +1913,18 @@ function GraphStrip({
     // SVG 边界——放行视觉溢出（display:block 不影响布局，仅选中行绘环）。
     <svg width={w} height={h} style={{ display: 'block', flexShrink: 0, overflow: 'visible' }} aria-hidden="true">
       {row.verticals.map((col) => (
-        <line key={`v-${col}`} x1={x(col)} y1={0} x2={x(col)} y2={h} stroke={colorOfLane(col)} strokeWidth={1.5} strokeLinecap="round" />
+        // openLanes(H6):merge 副父等非节点延续线在过滤下贯到图尾未解析——
+        // 末行以虚线 + 端止横杠标示(与 endOpen 诚实提示一致)。
+        row.openLanes?.includes(col) === true
+          ? (
+            <g key={`v-${col}`}>
+              <line x1={x(col)} y1={0} x2={x(col)} y2={h - 5} stroke={colorOfLane(col)} strokeWidth={1.5} strokeDasharray="3 3" strokeLinecap="round" />
+              <line x1={x(col) - 4} y1={h - 5} x2={x(col) + 4} y2={h - 5} stroke={colorOfLane(col)} strokeWidth={1.5} strokeLinecap="round" />
+            </g>
+          )
+          : (
+            <line key={`v-${col}`} x1={x(col)} y1={0} x2={x(col)} y2={h} stroke={colorOfLane(col)} strokeWidth={1.5} strokeLinecap="round" />
+          )
       ))}
       {row.nodeFromTop && (
         // 来线段：上游链色（分支起点行的来线保持上游色，与上行延续线连续）。

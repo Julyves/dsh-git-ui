@@ -241,6 +241,8 @@ export interface GitBranch {
 }
 
 export type GitQueryResult =
+  // total = -1 表示「未知」(rev-list 探测失败):client 按尚未到终点的
+  // 续载语义处理,不得冻结无限滚动。
   | { readonly kind: 'history'; readonly commits: readonly GraphCommit[]; readonly total: number }
   | { readonly kind: 'diff'; readonly path: string; readonly text: string }
   | {

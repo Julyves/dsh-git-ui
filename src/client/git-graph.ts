@@ -259,17 +259,23 @@ export function graphWidth(rows: readonly GraphRow[]): number {
   return width
 }
 
-/** 带悬垂标记的行：`endOpen` 表示延续线指向的父提交不在已加载集合（图上会悬垂）。 */
+/** 带悬垂标记的行：`endOpen` 表示延续线指向的父提交不在已加载集合（图上会悬垂）；
+ * `openLanes` 表示 merge 副父等**非节点延续线**中延续到图尾仍未被解析的车道列
+ * ——被过滤排除的父提交对应的等待车道,以虚线+端止横杠标示(H6)。 */
 export interface GraphRowMarker extends GraphRow {
   readonly endOpen?: boolean
+  readonly openLanes?: readonly number[]
 }
 
 /**
  * 标记「延续线指向的父提交不在已加载集合」的行——图上的悬垂竖线。
  *
  * 过滤（搜索/作者/日期）下结果集不含某些提交的父节点，`buildGraph` 的车道
- * 永远等不到父，`nodeContinues` 的延续线会永久悬垂；分页边界同理但随下页
- * 加载消散。`filtered` 为 false 时不标记，让边界悬垂随下页自愈。
+ * 永远等不到父：`nodeContinues` 的延续线永久悬垂（endOpen）；merge 第二父等
+ * 副父车道同理——若「最后的加载行」仍在等待该车道,则该车道从首次出现贯到
+ * 图尾未解析 → 标记 openLanes(虚线+横杠)。判据:车道出现在**最后一行**的
+ * verticals 中(父若已载入,车道必然在其节点行被消费,早于图尾消失)。
+ * 分页边界同理但随下页加载消散;`filtered` 为 false 时不标记,让边界悬垂自愈。
  * 纯函数，可单测。
  */
 export function markFilterEnds(
@@ -278,12 +284,22 @@ export function markFilterEnds(
   filtered: boolean,
 ): readonly GraphRowMarker[] {
   if (!filtered) return rows as readonly GraphRowMarker[]
-  return rows.map((row): GraphRowMarker => {
-    if (!row.nodeContinues) return row
-    const parent = row.commit.parents[0]
-    if (parent !== undefined && !loadedHashes.has(parent)) {
-      return { ...row, endOpen: true }
+  if (rows.length === 0) return []
+  const lastIndex = rows.length - 1
+  return rows.map((row, index): GraphRowMarker => {
+    let marker: GraphRowMarker = row
+    if (row.nodeContinues) {
+      const parent = row.commit.parents[0]
+      if (parent !== undefined && !loadedHashes.has(parent)) {
+        marker = { ...marker, endOpen: true }
+      }
     }
-    return row
+    // 末行(图尾)的 verticals = 等待的父提交不在已加载集合的车道(若父在更后
+    // 行载入,该行必以 column/join 消费而非 verticals 延续)——全部标为悬垂。
+    // 非末行的延续线保持实线,视觉上「贯到图尾再收端」(H6:merge 副父一致提示)。
+    if (index === lastIndex && row.verticals.length > 0) {
+      marker = { ...marker, openLanes: row.verticals }
+    }
+    return marker
   })
 }
