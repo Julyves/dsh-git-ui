@@ -33,7 +33,7 @@ import { useTurnRecords } from './use-turn-records.ts'
 import { latestWorkTurn, turnEntryCounts } from './work-record-meta.ts'
 import { EntryRow } from './records/entry-row.tsx'
 import { countUnseen, markSeen, readSeenAt } from './records/unread.ts'
-import { applyAuthorOverrides, OVERRIDES_FILE, parseOverrides, serializeOverrides, setOverride, type AuthorOverrideMap } from './records/overrides.ts'
+import { applyAuthorOverrides, mergeOverrides, OVERRIDES_FILE, parseOverrides, serializeOverrides, setOverride, type AuthorOverrideMap } from './records/overrides.ts'
 import type { GitUISettings } from '../contracts/settings.ts'
 import type { GitCenterTab } from './GitCenter.tsx'
 import type { TurnWorkRecord } from '../host/types.ts'
@@ -106,7 +106,7 @@ function DegradedPill({ label, title, t }: { label: string; title?: string; t: (
  * 各区块按 `settings.popup` 设置驱动显隐；头部徽章沿 `settings.pill`。
  */
 function GitPopupBody({
-  view, settings, refresh, openCenter, openRecords, openSettings, onOpenDiff, run, query, records, t,
+  view, settings, refresh, openCenter, openRecords, openSettings, onOpenDiff, run, query, records, onReclassify, t,
 }: {
   view: GitView & { state: 'ready' }
   settings: GitUISettings
@@ -122,6 +122,8 @@ function GitPopupBody({
   query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
   /** turn 工作记录(最近窗口用于徽章与分组);null = 未就绪。 */
   records: readonly TurnWorkRecord[] | null
+  /** 人工改判归因(与记录页一致的三段 ⇄ 入口)。 */
+  onReclassify: (path: string, to: 'internal' | 'external') => void
   t: (key: GitKey) => string
 }): JSX.Element {
   const { Button } = useUI()
@@ -345,9 +347,10 @@ function GitPopupBody({
             {hasAny ? (
               <>
                 {/* 本 Turn 变更不设分组标题——区块头「最近 turn 工作时段」已说明归属。
-                    条目行与记录页共用 EntryRow（4 元素排版）；仍变更条目可点击跳 Git 中心 diff。 */}
+                    条目行与记录页共用 EntryRow（4 元素排版）；仍变更条目可点击跳 Git 中心 diff；
+                    三段均带 ⇄ 纠错入口（与记录页一致，P3-7 弹窗入口补齐）。 */}
                 {windowTurn !== undefined && windowTurn.internal.map((entry) => (
-                  <EntryRow key={`pi-${entry.path}`} entry={entry} t={t} onOpenDiff={onOpenDiff} />
+                  <EntryRow key={`pi-${entry.path}`} entry={entry} t={t} onOpenDiff={onOpenDiff} group="internal" onReclassify={onReclassify} />
                 ))}
                 {sibling > 0 && (
                   <div style={css.workGroupTitle}>
@@ -356,7 +359,7 @@ function GitPopupBody({
                   </div>
                 )}
                 {windowTurn !== undefined && windowTurn.sibling.map((entry) => (
-                  <EntryRow key={`ps-${entry.path}`} entry={entry} t={t} onOpenDiff={onOpenDiff} />
+                  <EntryRow key={`ps-${entry.path}`} entry={entry} t={t} onOpenDiff={onOpenDiff} group="sibling" onReclassify={onReclassify} />
                 ))}
                 {external > 0 && (
                   <div style={css.workGroupTitle}>
@@ -365,7 +368,7 @@ function GitPopupBody({
                   </div>
                 )}
                 {windowTurn !== undefined && windowTurn.external.map((entry) => (
-                  <EntryRow key={`pe-${entry.path}`} entry={entry} t={t} onOpenDiff={onOpenDiff} />
+                  <EntryRow key={`pe-${entry.path}`} entry={entry} t={t} onOpenDiff={onOpenDiff} group="external" onReclassify={onReclassify} />
                 ))}
               </>
             ) : (
@@ -588,6 +591,9 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
   const [seenAt, setSeenAt] = useState(() => readSeenAt(sessionId))
   /** 人工改判归因(仓库级,overrides.json;一次加载,改动即持久化)。 */
   const [overrides, setOverrides] = useState<AuthorOverrideMap>({})
+  /** 内存态 ref 镜像:reclassify 的异步写前合并要读「尚未落盘的最新意图」。 */
+  const overridesRef = useRef(overrides)
+  overridesRef.current = overrides
   const overridesLoaded = useRef(false)
   useEffect(() => {
     if (overridesLoaded.current || display.state !== 'ready') return
@@ -596,13 +602,17 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 首个就绪快照后加载一次
   }, [display.state])
 
-  /** 改判一条归因:不可变更新 + fire-and-forget 持久化(失败静默,内存态仍生效)。 */
+  /** 改判一条归因:**写前合并**——磁盘(他实例的并发改判)∪ 本实例内存
+ * (尚未落盘的连续快速改判)后再写,盲写会静默抹掉他人状态(P2-5);
+ * 副作用独立于 setState updater(StrictMode 安全)。失败静默,内存态仍生效。 */
   const reclassify = (path: string, to: 'internal' | 'external'): void => {
-    setOverrides((prev) => {
-      const next = setOverride(prev, display.state === 'ready' ? display.snapshot.root : '', path, to)
-      void storageWrite(OVERRIDES_FILE, serializeOverrides(next)).catch(() => {})
-      return next
-    })
+    const root = display.state === 'ready' ? display.snapshot.root : ''
+    void (async () => {
+      const raw = await storageRead(OVERRIDES_FILE).catch(() => null)
+      const next = setOverride(mergeOverrides(overridesRef.current, parseOverrides(raw)), root, path, to)
+      setOverrides(next)
+      await storageWrite(OVERRIDES_FILE, serializeOverrides(next)).catch(() => {})
+    })()
   }
 
   /** 展示层记录 = host 记录 ∪ 人工改判(弹窗/记录页/未读计数统一走此视图)。 */
@@ -810,6 +820,7 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
             run={run}
             query={query}
             records={viewRecords}
+            onReclassify={reclassify}
             t={t}
           />
         </div>,
