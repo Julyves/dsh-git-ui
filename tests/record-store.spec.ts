@@ -226,3 +226,51 @@ describe('RecordStore narrative persistence (任务叙事落盘)', () => {
     expect(store.turns('s1')[0]?.narrative).toBe('内存态叙事')
   })
 })
+
+describe('RecordStore fingerprint (L4 turn 边界指纹)', () => {
+  it('captures the boundary path-set on the latest turn once (idempotent)', () => {
+    const store = new RecordStore((id) => memoryPersistence(), 0)
+    store.ensure('s1', { isCommitted: async () => false })
+    store.fold('s1', [
+      { type: 'turn/start', seq: 1, time: 1000, data: { turn: 1 } },
+      { type: 'tool/call', seq: 2, time: 1100, data: { turn: 1, callId: 'c1', name: 'write', arguments: '{}' } },
+    ])
+    store.captureFingerprint('s1', [change('a.ts'), change('b.ts')], 1500)
+    store.captureFingerprint('s1', [change('a.ts')], 1600) // 幂等:不覆盖
+    expect([...store.fingerprints('s1').get(1) ?? []]).toEqual(['a.ts', 'b.ts'])
+  })
+
+  it('shifts to the new latest turn as it appears; persists and restores', async () => {
+    const files = new Map<string, MemoryPersistence>()
+    const factory = (sessionId: string): MemoryPersistence => {
+      let file = files.get(`fp:${sessionId}`)
+      if (file === undefined) {
+        file = memoryPersistence()
+        files.set(`fp:${sessionId}`, file)
+      }
+      return file
+    }
+    const events = (turn: number, seq: number) => [
+      { type: 'turn/start', seq, time: 1000 + turn * 1000, data: { turn } },
+      { type: 'tool/call', seq: seq + 1, time: 1100 + turn * 1000, data: { turn, callId: `c${turn}`, name: 'write', arguments: '{}' } },
+    ] as const
+    const first = new RecordStore((id) => memoryPersistence(), 0, undefined, (id) => factory(id))
+    first.ensure('s1', { isCommitted: async () => false })
+    // 边界捕获与折叠交错:turn 1 边界 → turn 2 出现 → turn 2 边界。
+    first.fold('s1', [...events(1, 1)])
+    first.captureFingerprint('s1', [change('a.ts')], 1500)
+    first.fold('s1', [...events(2, 3)])
+    first.captureFingerprint('s1', [change('a.ts'), change('c.ts')], 2600)
+    first.flush('s1')
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(files.get('fp:s1')?.written).toContain('c.ts')
+
+    // 重启:指纹从磁盘恢复(fresh 派生跨重启成立)。
+    const second = new RecordStore((id) => memoryPersistence(), 0, undefined, (id) => factory(id))
+    second.ensure('s1', { isCommitted: async () => false })
+    second.fold('s1', [...events(1, 1), ...events(2, 3)])
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+    expect([...second.fingerprints('s1').get(1) ?? []]).toEqual(['a.ts'])
+  })
+})

@@ -17,7 +17,7 @@
  */
 
 import { ObservationLog, type ObservationPersistence } from './observation.ts'
-import { decodeNarratives, decodeObservations, encodeNarratives, encodeObservations } from './obs-file.ts'
+import { decodeFingerprints, decodeNarratives, decodeObservations, encodeFingerprints, encodeNarratives, encodeObservations } from './obs-file.ts'
 import { TurnLog, type FoldedTurn } from './turns.ts'
 import { assembleAll, type AssembleDeps, type TurnWorkRecord } from './record-assembly.ts'
 
@@ -39,6 +39,9 @@ interface SessionState {
   dirty: boolean
   /** 叙事有新捕获未落盘(与观测 dirty 独立,各自按需写盘)。 */
   narrDirty: boolean
+  /** turn 边界指纹:turn → 边界时刻的变更路径集(检查点基础)。 */
+  readonly fingerprints: Map<number, ReadonlySet<string>>
+  fpDirty: boolean
   lastHead: string | null | undefined
 }
 
@@ -54,6 +57,8 @@ export class RecordStore {
     private readonly flushDebounceMs: number = OBS_FLUSH_DEBOUNCE_MS,
     /** 叙事持久化通道(缺省 = 叙事仅内存态,重启后依赖事件日志重折)。 */
     private readonly narrativeFor?: PersistenceFactory,
+    /** 指纹持久化通道(缺省 = 指纹仅内存态,重启后从最新 turn 重新积累)。 */
+    private readonly fingerprintFor?: PersistenceFactory,
   ) {}
 
   /** 会话状态是否存在(会话列表/测试用)。 */
@@ -136,7 +141,36 @@ export class RecordStore {
   /** 组装对外记录。 */
   assemble(sessionId: string, deps: Omit<AssembleDeps, 'log' | 'observations'>): readonly TurnWorkRecord[] {
     const state = this.require(sessionId)
-    return assembleAll({ log: state.log, observations: state.observations, ...deps })
+    return assembleAll({
+      log: state.log,
+      observations: state.observations,
+      ...deps,
+      // 指纹随组装注入(fresh 标记派生;缺省无指纹 → fresh 恒缺省)。
+      ...(deps.fingerprints !== undefined ? {} : { fingerprints: state.fingerprints }),
+    })
+  }
+
+  /**
+   * turn 边界指纹捕获(检查点基础,L4):每次 snapshot 后调用——把当前
+   * 变更路径集记到**最新 turn**(该 turn 首次被观测到的边界态)。幂等:
+   * 已有指纹的 turn 不覆盖;新 turn 出现自然转移。边界时刻为首个观测点
+   * (近似,文档化:轮询粒度内的先写后还原不可分)。
+   */
+  captureFingerprint(sessionId: string, changes: readonly import('./types.ts').GitChange[], _now: number): void {
+    const state = this.require(sessionId)
+    const turns = state.log.turns
+    const latest = turns[turns.length - 1]
+    if (latest === undefined || state.fingerprints.has(latest.turn)) return
+    state.fingerprints.set(latest.turn, new Set(changes.map((change) => change.path)))
+    if (this.fingerprintFor !== undefined) {
+      state.fpDirty = true
+      this.scheduleFlush(sessionId, state)
+    }
+  }
+
+  /** 指纹只读视图(诊断/测试)。 */
+  fingerprints(sessionId: string): ReadonlyMap<number, ReadonlySet<string>> {
+    return this.require(sessionId).fingerprints
   }
 
   /** 立即冲刷一个会话的观测落盘。 */
@@ -170,6 +204,8 @@ export class RecordStore {
       observations: new ObservationLog(),
       dirty: false,
       narrDirty: false,
+      fingerprints: new Map<number, ReadonlySet<string>>(),
+      fpDirty: false,
       lastHead: undefined,
     }
   }
@@ -213,6 +249,21 @@ export class RecordStore {
         // 叙事读取失败:不阻断观测恢复,叙事退化为内存态。
       }
     }
+    // 指纹恢复:宿主重启后历史 turn 边界态不丢(fresh 标记跨重启成立)。
+    if (this.fingerprintFor !== undefined) {
+      try {
+        const fpRaw = await this.fingerprintFor(sessionId).read()
+        if (fpRaw !== null) {
+          for (const entry of decodeFingerprints(fpRaw) ?? []) {
+            if (!state.fingerprints.has(entry.turn)) {
+              state.fingerprints.set(entry.turn, new Set(entry.paths))
+            }
+          }
+        }
+      } catch {
+        // 指纹读取失败:不阻断恢复,最新 turn 起重新积累。
+      }
+    }
   }
 
   private scheduleFlush(sessionId: string, state: SessionState): void {
@@ -250,6 +301,17 @@ export class RecordStore {
         await this.narrativeFor(sessionId).write(encodedNarr)
       } catch {
         state.narrDirty = true
+      }
+    }
+    if (state.fpDirty && this.fingerprintFor !== undefined) {
+      const encodedFp = encodeFingerprints(
+        [...state.fingerprints].map(([turn, paths]) => ({ turn, paths: [...paths] })),
+      )
+      state.fpDirty = false
+      try {
+        await this.fingerprintFor(sessionId).write(encodedFp)
+      } catch {
+        state.fpDirty = true
       }
     }
   }

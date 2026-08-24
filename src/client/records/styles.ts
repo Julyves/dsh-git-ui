@@ -337,6 +337,18 @@ export const entryReclassifyButton: CSSProperties = {
   cursor: 'pointer',
 }
 
+/** 「新」徽标(L4 指纹派生:不在上一轮边界指纹中):信息蓝小胶囊。 */
+export const entryFreshChip: CSSProperties = {
+  flex: 'none',
+  padding: '0 5px',
+  borderRadius: 6,
+  fontSize: 10,
+  lineHeight: '16px',
+  fontWeight: 600,
+  color: 'var(--dsw-alias-brand-blue-strong, var(--dsw-alias-label-primary))',
+  background: 'color-mix(in srgb, var(--dsw-alias-brand-blue-strong, var(--dsw-alias-state-info-primary)) 12%, transparent)',
+}
+
 // ── 空态 / 加载态 ─────────────────────────────────────────────────────────
 
 /** 空态容器：垂直居中，图标 + 主文案。 */

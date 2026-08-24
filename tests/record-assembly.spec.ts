@@ -286,3 +286,25 @@ describe('assembleAll — L3 filesWritten 权威旁路', () => {
     expect(turn2?.internal.map((e) => e.path)).toEqual(['docs/test.txt'])
   })
 })
+
+describe('assembleAll — L4 fresh 标记(指纹派生)', () => {
+  it('marks entries absent from the previous turn boundary fingerprint as fresh', () => {
+    const { log, observations, deps } = fixture()
+    const records = assembleAll({
+      log, observations, ...deps,
+      fingerprints: new Map([[1, new Set(['docs/test.txt'])]]),
+    })
+    // turn 2(上一个是 turn 1):docs/test.txt 在边界指纹中 → 非 fresh;
+    // turn 1 是首个 turn(无前边界)→ 恒非 fresh。
+    const turn2Internal = records[1]?.internal.find((e) => e.path === 'docs/test.txt')
+    expect(turn2Internal?.fresh).toBeUndefined()
+    const turn1Internal = records[0]?.internal.find((e) => e.path === 'docs/test.txt')
+    expect(turn1Internal?.fresh).toBeUndefined()
+    // 反例:边界指纹不含该路径 → fresh。
+    const records2 = assembleAll({
+      log, observations, ...deps,
+      fingerprints: new Map([[1, new Set<string>()]]),
+    })
+    expect(records2[1]?.internal.find((e) => e.path === 'docs/test.txt')?.fresh).toBe(true)
+  })
+})

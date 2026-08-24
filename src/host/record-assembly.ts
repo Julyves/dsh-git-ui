@@ -54,6 +54,11 @@ export interface AssembleDeps {
   readonly filesWrittenByTurn?: ReadonlyMap<number, readonly string[]>
   /** 去向判定缓存(权威探测结果;缺省 = 全部待定 → gone)。 */
   readonly pathStates?: PathStateLookup
+  /**
+   * turn 边界指纹(L4):turn → 边界时刻变更路径集。条目 fresh 标记 =
+   * 路径不在**上一 turn 边界指纹**中(本轮新增)。缺省 → fresh 恒缺省。
+   */
+  readonly fingerprints?: ReadonlyMap<number, ReadonlySet<string>>
 }
 
 /**
@@ -63,17 +68,25 @@ export interface AssembleDeps {
 export function assembleAll(deps: AssembleDeps): readonly TurnWorkRecord[] {
   const allInternal = collectAllInternal(deps)
   const internalPaths = new Set(allInternal.map((entry) => entry.path))
-  return deps.log.turns.map((folded) => {
+  const turns = deps.log.turns
+  return turns.map((folded, index) => {
     const nonInternal = collectNonInternal(folded, internalPaths, deps)
+    // L4 fresh:上一 turn 的边界指纹在场且不含该路径 → 本轮新增。
+    const prev = index > 0 ? turns[index - 1] : undefined
+    const prevFp = deps.fingerprints !== undefined && prev !== undefined
+      ? deps.fingerprints.get(prev.turn)
+      : undefined
+    const withFresh = (entry: WorkEntry): WorkEntry =>
+      prevFp !== undefined && !prevFp.has(entry.path) ? { ...entry, fresh: true } : entry
     return {
       turn: folded.turn,
       startAt: folded.startAt,
       endAt: folded.endAt,
       hasWork: folded.toolCalls.length > 0,
       narrative: folded.narrative,
-      internal: internalOf(folded, deps),
-      sibling: nonInternal.sibling,
-      external: nonInternal.external,
+      internal: internalOf(folded, deps).map(withFresh),
+      sibling: nonInternal.sibling.map(withFresh),
+      external: nonInternal.external.map(withFresh),
     }
   })
 }

@@ -101,6 +101,7 @@ export class GitStatusService extends TypertRemoteService {
       (sessionId) => this.observationPersistence(sessionId),
       OBS_FLUSH_DEBOUNCE_MS,
       (sessionId) => this.narrativePersistence(sessionId),
+      (sessionId) => this.fingerprintPersistence(sessionId),
     )
     this.endpoints = createHostEndpoints(this.deps, this.normalizedConfig, {
       run: (sessionId, signal) => this.runTurnRecords(sessionId, signal),
@@ -159,6 +160,8 @@ export class GitStatusService extends TypertRemoteService {
 
   private async track(sessionId: string, snapshot: GitSnapshot): Promise<void> {
     this.records.observe(sessionId, snapshot.changes, snapshot.checkedAt, snapshot.truncated)
+    // L4:turn 边界指纹随每次快照幂等捕获(最新 turn 首次观测到的边界态)。
+    this.records.captureFingerprint(sessionId, snapshot.changes, snapshot.checkedAt)
     await this.records.noteHead(sessionId, snapshot.head, snapshot.checkedAt, (from, to) =>
       this.commitsBetween(sessionId, from, to))
   }
@@ -324,6 +327,22 @@ export class GitStatusService extends TypertRemoteService {
       write: async (raw) => {
         const result = await this.storage.write({ file, data: raw } satisfies GitStorageWriteRequest)
         if (!result.ok) throw new Error(`narr write failed: ${result.error.message}`)
+      },
+    }
+  }
+
+  /** 指纹持久化通道:fp-<sessionKey>.jsonl(turn 边界变更路径集,检查点基础)。 */
+  private fingerprintPersistence(sessionId: string): { read(): Promise<string | null>; write(raw: string): Promise<void> } {
+    const file = `fp-${sessionStorageKey(sessionId)}.jsonl`
+    return {
+      read: async () => {
+        const result = await this.storage.read({ file } satisfies GitStorageReadRequest)
+        if (!result.ok) return null
+        return result.value
+      },
+      write: async (raw) => {
+        const result = await this.storage.write({ file, data: raw } satisfies GitStorageWriteRequest)
+        if (!result.ok) throw new Error(`fp write failed: ${result.error.message}`)
       },
     }
   }

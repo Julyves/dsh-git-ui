@@ -159,3 +159,40 @@ export function decodeNarratives(raw: string): ReadonlyArray<readonly [number, s
   }
   return entries
 }
+
+// ── turn 边界指纹持久化(fp-<key>.jsonl:turn → 边界时刻的变更路径集) ──────
+
+/** 指纹文件格式版本(首行)。 */
+export const FP_FILE_VERSION = 'v1'
+
+/** 一条指纹:turn 号 + 边界时刻工作区变更路径集(检查点基础,非内容快照)。 */
+export interface FingerprintEntry {
+  readonly turn: number
+  readonly paths: readonly string[]
+}
+
+/** 序列化指纹为 JSONL(首行版本)。 */
+export function encodeFingerprints(entries: readonly FingerprintEntry[]): string {
+  const rows = entries.map((entry) => JSON.stringify({ t: entry.turn, p: entry.paths }))
+  return [FP_FILE_VERSION, ...rows].join('\n')
+}
+
+/** 解析指纹 JSONL;坏行跳过,首行非版本号 → null。 */
+export function decodeFingerprints(raw: string): readonly FingerprintEntry[] | null {
+  const lines = raw.split('\n')
+  if (lines[0] !== FP_FILE_VERSION) return null
+  const entries: FingerprintEntry[] = []
+  for (const line of lines.slice(1)) {
+    if (line === '') continue
+    try {
+      const parsed = JSON.parse(line) as { t?: unknown; p?: unknown }
+      if (typeof parsed.t === 'number' && Number.isFinite(parsed.t)
+        && Array.isArray(parsed.p) && parsed.p.every((path) => typeof path === 'string')) {
+        entries.push({ turn: parsed.t, paths: parsed.p as readonly string[] })
+      }
+    } catch {
+      // 坏行跳过
+    }
+  }
+  return entries
+}

@@ -143,6 +143,8 @@ const workEntryObjectSchema = z.object({
   commitHash: z.string().nullable(),
   // 归因置信度(平台自证 vs 推断)。
   attribution: z.enum(['authoritative', 'inferred']),
+  // 本轮新增(L4 指纹派生;缺省 = 未知)。
+  fresh: z.boolean().optional(),
 })
 
 export const turnWorkRecordSchema = z.object({

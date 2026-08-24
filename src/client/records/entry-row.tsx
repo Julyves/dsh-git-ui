@@ -64,6 +64,9 @@ export function EntryRow({ entry, t, onOpenDiff, onOpenCommit, group, onReclassi
         <span style={css.entryName} title={hint}>{name}</span>
       )}
       {dir !== '' && <span style={css.entryDir} title={dir}>{dir}</span>}
+      {entry.fresh === true && (
+        <span style={css.entryFreshChip} title={t('work.freshChip')}>{t('work.freshChip')}</span>
+      )}
       <span className="dsh-git-ui__row-actions" style={css.entryActions}>
         {onReclassify !== undefined && group !== undefined && (
           <button

@@ -204,6 +204,8 @@ export interface WorkEntry {
   readonly commitHash: string | null
   /** 归因置信度(UI 推断标记 + 人工纠错入口的依据)。 */
   readonly attribution: WorkAttribution
+  /** 本轮新增(L4 指纹派生:不在上一 turn 边界指纹中;缺省 = 未知)。 */
+  readonly fresh?: boolean
 }
 
 /** 一个 turn 的对外工作记录。 */
