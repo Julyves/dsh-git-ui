@@ -31,6 +31,7 @@ import { createToolPresenter, type ToolRegistryLike } from '../adapters/dsh/tool
 import { collectSubagentWrites, type SessionsLike as SubagentSessionsLike } from '../adapters/dsh/subagent-adapter.ts'
 import { collectSiblingWrites } from '../adapters/dsh/sibling-adapter.ts'
 import { sessionStorageKey } from './obs-file.ts'
+import { persistenceChannel } from './persistence-channels.ts'
 import type { GitActionRequest, GitActionResult, GitQueryRequest, GitQueryResponse, GitSnapshot, GitSnapshotRequest, GitSnapshotResult, GitStorageReadRequest, GitStorageReadResult, GitStorageWriteRequest, GitStorageWriteResult, GitPresetRequest, GitPresetResult } from './types.ts'
 import type { MtimeSource } from './record-assembly.ts'
 
@@ -299,70 +300,26 @@ export class GitStatusService extends TypertRemoteService {
   }
 
   /** 观测持久化通道:插件数据存储 obs-<sessionKey>.jsonl(原子写/白名单/上限复用)。 */
-  private observationPersistence(sessionId: string): { read(): Promise<string | null>; write(raw: string): Promise<void> } {
-    const file = `obs-${sessionStorageKey(sessionId)}.jsonl`
-    return {
-      read: async () => {
-        const result = await this.storage.read({ file } satisfies GitStorageReadRequest)
-        if (!result.ok) return null // 不存在(null)与 IO 失败均按空处理
-        return result.value
-      },
-      write: async (raw) => {
-        const result = await this.storage.write({ file, data: raw } satisfies GitStorageWriteRequest)
-        if (!result.ok) throw new Error(`obs write failed: ${result.error.message}`)
-      },
-    }
+  private observationPersistence(sessionId: string) {
+    return persistenceChannel(this.storage, 'obs', 'obs', sessionId)
   }
 
   /** 叙事持久化通道:narr-<sessionKey>.jsonl(compaction 折叠旧 user/message
    * 事件后,任务叙事仍可从磁盘恢复;新捕获值优先,磁盘只补 null 槽位)。 */
-  private narrativePersistence(sessionId: string): { read(): Promise<string | null>; write(raw: string): Promise<void> } {
-    const file = `narr-${sessionStorageKey(sessionId)}.jsonl`
-    return {
-      read: async () => {
-        const result = await this.storage.read({ file } satisfies GitStorageReadRequest)
-        if (!result.ok) return null
-        return result.value
-      },
-      write: async (raw) => {
-        const result = await this.storage.write({ file, data: raw } satisfies GitStorageWriteRequest)
-        if (!result.ok) throw new Error(`narr write failed: ${result.error.message}`)
-      },
-    }
+  private narrativePersistence(sessionId: string) {
+    return persistenceChannel(this.storage, 'narr', 'narr', sessionId)
   }
 
   /** 指纹持久化通道:fp-<sessionKey>.jsonl(turn 边界变更路径集,检查点基础)。 */
-  private fingerprintPersistence(sessionId: string): { read(): Promise<string | null>; write(raw: string): Promise<void> } {
-    const file = `fp-${sessionStorageKey(sessionId)}.jsonl`
-    return {
-      read: async () => {
-        const result = await this.storage.read({ file } satisfies GitStorageReadRequest)
-        if (!result.ok) return null
-        return result.value
-      },
-      write: async (raw) => {
-        const result = await this.storage.write({ file, data: raw } satisfies GitStorageWriteRequest)
-        if (!result.ok) throw new Error(`fp write failed: ${result.error.message}`)
-      },
-    }
+  private fingerprintPersistence(sessionId: string) {
+    return persistenceChannel(this.storage, 'fp', 'fp', sessionId)
   }
 
   /** 去向判定持久化通道:ps-<sessionKey>.jsonl(与 obs 同目录同构)。
    * 判定(git 历史可达性)跨宿主重启依然成立——持久化让"插件更新/宿主
    * 重启"不再触发全量重新收敛(事故复盘 incident-load-hang 的复发根因)。 */
-  private pathStatesPersistence(sessionId: string): { read(): Promise<string | null>; write(raw: string): Promise<void> } {
-    const file = `ps-${sessionStorageKey(sessionId)}.jsonl`
-    return {
-      read: async () => {
-        const result = await this.storage.read({ file } satisfies GitStorageReadRequest)
-        if (!result.ok) return null
-        return result.value
-      },
-      write: async (raw) => {
-        const result = await this.storage.write({ file, data: raw } satisfies GitStorageWriteRequest)
-        if (!result.ok) throw new Error(`ps write failed: ${result.error.message}`)
-      },
-    }
+  private pathStatesPersistence(sessionId: string) {
+    return persistenceChannel(this.storage, 'ps', 'ps', sessionId)
   }
 
   /** turn-records 编排(hook 进 query 端点路由)。 */
