@@ -1,9 +1,12 @@
 /**
- * GitCenter 跨 tab 共享：分组键/类型、排序工具、状态字母表、数值钳制。
- * 由 changes/ 与 history/ 子模块共享，避免重复定义。
+ * GitCenter 跨 tab 共享：分组键/类型、排序工具、状态字母表、数值钳制、
+ * 时间格式化、壳 props 类型、历史分页与分支图常量。
+ * 由 changes/ 与 history/ 子模块及 GitCenter 壳共享，避免重复定义。
  */
-import type { GitChange } from '../../host/types.ts'
+import type { GitAction, GitActionResult, GitChange, GitQueryRequest, GitSnapshot, TurnWorkRecord } from '../../host/types.ts'
 import type { GitKey } from '../locales.ts'
+import type { GitQueryOutcome } from '../controller.ts'
+import { formatWhen } from '../time-format.ts'
 
 /** Changes 分组键（IDEA 式三段：已暂存更改 / 更改 / 未版本控制的文件）。 */
 export type ChangeGroupKey = 'staged' | 'unstaged' | 'untracked'
@@ -28,7 +31,7 @@ export function groupKeyOfChange(c: GitChange): ChangeGroupKey {
 
 /** 数值钳制（Splitter 拖拽边界用）。 */
 export function clampNum(v: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, v))
+  return Math.min(hi, Math.max(lo, v))
 }
 
 export const CHIP_LETTERS: Record<string, string> = {
@@ -36,3 +39,57 @@ export const CHIP_LETTERS: Record<string, string> = {
   untracked: '?', conflicted: '!', typechange: 'T',
 }
 
+/** 历史列表分页大小。 */
+export const HISTORY_PAGE = 300
+
+/** IDEA 式时间：不足 60 分钟「x 分钟前」、今天/昨天 HH:mm，其余 Y/M/D HH:mm。 */
+export function timeAgo(iso: string, now: number, t: (key: GitKey) => string): string {
+  return formatWhen(iso, now, {
+    minutesAgo: (n) => t('time.minutesAgo').replace('{n}', String(n)),
+    today: t('time.today'),
+    yesterday: t('time.yesterday'),
+  })
+}
+
+/** Tab 键：设置 Tab 与功能 Tab 并列（信息架构：工作区 + 偏好区）。 */
+export type TabKey = 'changes' | 'history' | 'records' | 'settings'
+
+/** GitCenter 的 Tab 键(供 GitPill 等调用方定位初始标签)。 */
+export type GitCenterTab = TabKey
+
+export interface GitCenterProps {
+  readonly open: boolean
+  readonly onClose: () => void
+  /** 打开时定位的 Tab（默认 changes）；pill 齿轮入口传 settings。 */
+  readonly initialTab?: TabKey
+  readonly snapshot: GitSnapshot
+  readonly run: (action: GitAction) => Promise<GitActionResult>
+  readonly query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
+  readonly t: (key: GitKey) => string
+  /** 打开定位：从 pill 点击变更文件而来——切到 changes 标签并打开该文件对照。 */
+  readonly openRequest?: { readonly path: string; readonly base: 'worktree' | 'staged' } | null
+  /** turn 工作记录(由 GitPill 统一拉取并下发;null = 未就绪/未开启)。 */
+  readonly records?: readonly TurnWorkRecord[] | null
+  /** 人工改判归因(仓库级持久化;缺省 = 记录页无纠错入口)。 */
+  readonly onReclassify?: (path: string, to: 'internal' | 'external') => void
+}
+
+/** 反馈条：text 为展示文案（业务错误经 i18n 友好化）；detail 保留原始信息供 title。 */
+export type Feedback = { readonly text: string; readonly detail?: string } | null
+
+export interface ToastState {
+  readonly text: string
+  readonly seq: number
+}
+
+// ── 分支图常量（history/CommitRow 共用） ──────────────────────────────────
+/** 每车道理想像素宽。 */
+export const GRAPH_COL_W = 16
+/** 图轨道最大像素宽：超宽分支图压缩车道宽以适配。 */
+export const GRAPH_MAX_TRACK_W = 192
+/** 车道宽下限。 */
+export const GRAPH_LANE_MIN_W = 8
+/** 节点圆半径。 */
+export const GRAPH_NODE_R = 4
+/** 节点圆半径下限（车道压缩时同步缩小）。 */
+export const GRAPH_NODE_MIN_R = 2
