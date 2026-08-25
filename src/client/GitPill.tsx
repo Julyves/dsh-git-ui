@@ -427,6 +427,8 @@ function GitPopupBody({
                 {s.changes.map((change) => {
                   const { name, dir, isDir } = splitChangePath(change.path, change.isDirectory)
                   const untracked = change.status === 'untracked'
+                  // 按变更类型给文件名/目录名着色（与 Git 中心 IDEA 式一致：增/未跟踪绿、改/重命名蓝、删/冲突红、类型变更橙）。
+                  const statusColor = css.statusTextColor[change.status] ?? 'var(--dsw-alias-label-primary)'
                   return (
                     <div key={change.path} className="dsh-git-ui__row" style={css.changeRow}>
                       <span
@@ -443,7 +445,7 @@ function GitPopupBody({
                         <button
                           type="button"
                           className="dsh-git-ui__change-link"
-                          style={css.changeNamePopBtn}
+                          style={{ ...css.changeNamePopBtn, color: statusColor }}
                           title={change.path}
                           aria-label={`${name} — ${t('center.open')}`}
                           onClick={openCenter}
@@ -455,7 +457,7 @@ function GitPopupBody({
                         <button
                           type="button"
                           className="dsh-git-ui__change-link"
-                          style={css.changeNamePopBtn}
+                          style={{ ...css.changeNamePopBtn, color: statusColor }}
                           title={change.path}
                           aria-label={`${name} — ${t('changes.actionDiff')}`}
                           onClick={() => onOpenDiff(change.path, diffBaseOf(change))}
