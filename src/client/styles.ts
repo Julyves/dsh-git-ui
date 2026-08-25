@@ -1399,7 +1399,9 @@ export const newFileColInner: CSSProperties = {
   width: 'max-content',
 }
 
-/** 文件内容行：行号槽 + 代码段（整行铺满，无行间分隔）。 */
+/** 文件内容行：行号槽 + 代码段（整行铺满，无行间分隔）。
+ * minHeight 与容器 lineHeight 恒等（18px）：空行内容为空时高度不得塌缩——
+ * 每行恒 18px 是窗口化顶垫/底垫按行高定位的前提（与 sbsCell 同族约束）。 */
 export const newFileCell: CSSProperties = {
   boxSizing: 'border-box',
   display: 'flex',
@@ -1407,6 +1409,7 @@ export const newFileCell: CSSProperties = {
   padding: '0 8px',
   whiteSpace: 'pre',
   width: '100%',
+  minHeight: 18,
 }
 
 /** 行号槽：与 sbsNum 同族（定宽右对齐 + 右侧发丝线）。 */

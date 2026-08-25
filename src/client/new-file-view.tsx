@@ -7,18 +7,28 @@
  *
  * `content` 为纯文件内容文本（由 side-by-side.extractAddedContent
  * 从 unified diff 提取），`path` 仅用于语言推断。
+ *
+ * 性能：窗口化渲染——只渲染可视窗 ±overscan 行，上下以占位 div 撑出真实
+ * 滚动高度，DOM 规模与文件行数解耦（与并排差异视图同构，几千行也流畅）。
  */
 import { useMemo } from 'react'
 import type { JSX, CSSProperties } from 'react'
 import { highlightLines } from './syntax/highlighter.ts'
 import { useHighlightReady } from './syntax/use-highlight-ready.ts'
 import { langOfPath } from './syntax/lang-map.ts'
+import { useWindowSlice } from './use-window-slice.ts'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
 
 /** 新增文件内容行数上限（与并排差异视图的 MAX_DIFF_ROWS 同量级：
  * 万行级新文件全量 DOM + 整文件 tokenize 会卡死渲染，截断兜底）。 */
 const MAX_NEW_FILE_ROWS = 2000
+
+/** 行高（px）：与 newFileContainer.lineHeight 一致——窗口化顶垫/底垫按此撑高。 */
+const NEW_FILE_ROW_H = 18
+
+/** 窗口化 overscan：可视窗上下额外渲染的行数（防快速滚动露出空白）。 */
+const NEW_FILE_OVERSCAN = 10
 
 export function NewFileView({
   content, path, fontSize, highlight, t,
@@ -39,6 +49,7 @@ export function NewFileView({
     () => (highlight && ready > 0 && lang !== undefined ? highlightLines(capped.join('\n'), lang) : undefined),
     [capped, lang, highlight, ready],
   )
+  const { ref, slice, onScroll } = useWindowSlice(capped.length, NEW_FILE_ROW_H, NEW_FILE_OVERSCAN)
   const containerStyle: CSSProperties = { ...css.newFileContainer, fontSize }
 
   const renderLine = (line: string, index: number): JSX.Element => {
@@ -55,12 +66,23 @@ export function NewFileView({
     )
   }
 
+  const topPad = slice.start * NEW_FILE_ROW_H
+  const bottomPad = Math.max(0, capped.length - slice.end) * NEW_FILE_ROW_H
+  const padStyle: CSSProperties = { height: topPad, width: '100%', flexShrink: 0 }
+  const bottomPadStyle: CSSProperties = { height: bottomPad, width: '100%', flexShrink: 0 }
+
   return (
-    <div style={{ ...css.newFileContainer, ...containerStyle }}>
+    <div ref={ref} onScroll={onScroll} style={{ ...css.newFileContainer, ...containerStyle }}>
       <div style={css.newFileColInner}>
         {content === ''
           ? <div style={css.emptyNote}>{t('diff.newFileEmpty')}</div>
-          : capped.map(renderLine)}
+          : (
+            <>
+              <div style={padStyle} aria-hidden="true" />
+              {capped.slice(slice.start, slice.end).map((line, i) => renderLine(line, slice.start + i))}
+              <div style={bottomPadStyle} aria-hidden="true" />
+            </>
+          )}
       </div>
       {lines.length > MAX_NEW_FILE_ROWS && (
         <div style={css.emptyNote}>{t('diff.truncated').replace('{count}', String(MAX_NEW_FILE_ROWS))}</div>

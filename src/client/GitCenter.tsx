@@ -26,11 +26,12 @@ import type { GitQueryOutcome } from './controller.ts'
 import { colorOf, createGraphBuilder, graphWidth, markFilterEnds, GRAPH_COLORS, type GraphRow, type GraphRowMarker } from './git-graph.ts'
 import { buildFileTree, splitChangePath, type FileTreeNode } from './file-tree.ts'
 import { formatWhen } from './time-format.ts'
-import { buildSideBySide, capSideBySideRows, extractAddedContent, foldContext, foldMarkerLines, isAddOnlyDiff, isBinaryDiff, summarizeChanges, type SideCell } from './side-by-side.ts'
+import { buildSideBySide, capSideBySideRows, extractAddedContent, foldContext, foldMarkerLines, isAddOnlyDiff, isBinaryDiff, summarizeChanges, type SideBySideRow, type SideCell } from './side-by-side.ts'
 import { diffBaseOf, reconcileDiffSelection, stepDiffSelection, type DiffSelection } from './changes-diff.ts'
-import { highlightLines } from './syntax/highlighter.ts'
+import { highlightLines, type HighlightSpan } from './syntax/highlighter.ts'
 import { useHighlightReady } from './syntax/use-highlight-ready.ts'
 import { langOfPath } from './syntax/lang-map.ts'
+import { useWindowSlice } from './use-window-slice.ts'
 import { BranchIcon, CheckIcon, ChevronIcon, CloseIcon, CollapseAllIcon, CommitIcon, DiffIcon, ExpandAllIcon, FileIcon, fileIconForPath, FolderIcon, GearIcon, NextIcon, PrevIcon, RecordIcon, RollbackIcon, StageIcon, StarIcon, TagIcon, UnstageIcon } from './icons.tsx'
 import type { GitKey } from './locales.ts'
 import { errorText } from './error-text.ts'
@@ -641,6 +642,7 @@ function ChangesTab({
                   : isNewFile
                     ? (
                       <NewFileView
+                        key={diffSel.path}
                         content={diffText === '' ? '' : extractAddedContent(diffText)}
                         path={diffSel.path}
                         fontSize={settings.diff.fontSize}
@@ -650,6 +652,7 @@ function ChangesTab({
                     )
                     : (
                       <DiffSideBySide
+                        key={diffSel.path}
                         text={diffText}
                         path={diffSel.path}
                         diff={settings.diff}
@@ -834,6 +837,58 @@ const MAX_DIFF_ROWS = 2000
  * 「已渲染行数 × 行高」绝对定位，展开/收起不产生布局抖动。 */
 const FOLD_ROW_H = 18
 
+/** 窗口化 overscan：可视窗上下额外渲染的行数（防快速滚动露出空白）。 */
+const DIFF_OVERSCAN = 10
+
+/** 行 → 高亮 token 行索引对齐条目（跳过 empty 位；与整块 tokenize 的行序一致）。 */
+interface IndexedEntry {
+  readonly row: SideBySideRow
+  readonly left: { readonly cell: SideCell; readonly ti: number } | null
+  readonly right: { readonly cell: SideCell; readonly ti: number } | null
+}
+
+/** 单元格背景色：删除红 / 新增绿 / 空位灰 / 上下文无（模块级纯函数）。 */
+const sbsCellColor = (kind: SideCell['kind']): CSSProperties =>
+  kind === 'del' ? css.sbsDel : kind === 'add' ? css.sbsAdd : kind === 'empty' ? css.sbsEmpty : {}
+
+/** 代码段渲染：纯文本或高亮 span 序列（模块级纯函数）。 */
+const renderCode = (text: string, tokens: readonly HighlightSpan[] | undefined): JSX.Element => (
+  <>
+    {tokens === undefined || tokens.length === 0 ? text : tokens.map((span, i) => (
+      <span key={i} style={span.style}>{span.text}</span>
+    ))}
+  </>
+)
+
+/**
+ * 差异单元格（memo 化）：窗口化后仅可见 cell 入树，props 稳定（entry/tokenRows
+ * 引用随 useMemo 稳定）时跳过 reconciliation——窗口化 + memo 双重削减压。
+ */
+const DiffCell = memo(function DiffCell({
+  entry, side, tokens,
+}: {
+  entry: IndexedEntry
+  side: 'left' | 'right'
+  tokens: readonly HighlightSpan[] | undefined
+}): JSX.Element {
+  const meta = side === 'left' ? entry.left : entry.right
+  if (meta === null) {
+    return (
+      <div style={{ ...css.sbsCell, ...css.sbsEmpty }}>
+        <span style={css.sbsNum} />
+        <span style={css.sbsCode} />
+      </div>
+    )
+  }
+  const { cell } = meta
+  return (
+    <div style={{ ...css.sbsCell, ...sbsCellColor(cell.kind) }}>
+      <span style={css.sbsNum}>{cell.num ?? ''}</span>
+      <span style={css.sbsCode}>{renderCode(cell.text, tokens)}</span>
+    </div>
+  )
+})
+
 function DiffSideBySide({
   text, path, diff, t,
 }: {
@@ -921,65 +976,65 @@ function DiffSideBySide({
     })
   }
 
+  /** 窗口化：只渲染可视窗 ±overscan 行（顶垫/底垫撑出真实滚动高度，DOM 与行数解耦）。 */
+  const { ref: scrollRef, slice, onScroll } = useWindowSlice(rendered.length, FOLD_ROW_H, DIFF_OVERSCAN)
+
   if (isBinaryDiff(text)) return <div style={css.emptyNote}>{t('diff.binary')}</div>
   if (rows.length === 0) return <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
 
-  const colorOf = (kind: SideCell['kind']): CSSProperties =>
-    kind === 'del' ? css.sbsDel : kind === 'add' ? css.sbsAdd : kind === 'empty' ? css.sbsEmpty : {}
+  /** 折叠标记（覆盖层）：absolute 横跨双列，top 按全局可见流坐标 × 行高定位。
+   *  窗口化后顶垫+底垫保持了「全局坐标×行高」的物理位置映射，故 top 无需平移；
+   *  仅渲染落入当前窗口的标记，避免视口外标记堆叠。 */
+  const foldMarkers: readonly JSX.Element[] = foldBlocks
+    .filter(({ top }) => {
+      const line = top / FOLD_ROW_H
+      return line >= slice.start && line < slice.end
+    })
+    .map(({ index, top, count }) => (
+      <button
+        key={index}
+        type="button"
+        className="dsh-git-ui__fold-overlay"
+        style={{ ...css.diffFoldOverlay, top }}
+        onClick={() => toggleFold(index)}
+      >
+        {t('diff.foldCollapsed').replace('{n}', String(count))}
+      </button>
+    ))
 
-  const renderCode = (text: string, tokens: readonly { text: string; style: { readonly color?: string } }[] | undefined): JSX.Element => (
-    <>
-      {tokens === undefined || tokens.length === 0 ? text : tokens.map((span, i) => (
-        <span key={i} style={span.style}>{span.text}</span>
-      ))}
-    </>
-  )
-
-  const renderCell = (entry: (typeof allIndexed)[number], side: 'left' | 'right', key: string): JSX.Element => {
-    const meta = side === 'left' ? entry.left : entry.right
-    if (meta === null) {
-      return (
-        <div key={key} style={{ ...css.sbsCell, ...css.sbsEmpty }}>
-          <span style={css.sbsNum} />
-          <span style={css.sbsCode} />
-        </div>
-      )
-    }
-    const { cell, ti } = meta
-    const tokens = (side === 'left' ? leftTokens : rightTokens)?.[ti]
-    return (
-      <div key={key} style={{ ...css.sbsCell, ...colorOf(cell.kind) }}>
-        <span style={css.sbsNum}>{cell.num ?? ''}</span>
-        <span style={css.sbsCode}>{renderCode(cell.text, tokens)}</span>
-      </div>
-    )
+  // 每列只渲染窗口切片（顶垫撑出窗口前高度 + 可见 cell + 底垫撑出剩余高度）；
+  // 双列共享同一切片，左右行一一对应。tokens 按 ti 预取传入 memo cell。
+  const tokenRowsOf = (side: 'left' | 'right'): readonly HighlightSpan[][] | undefined =>
+    side === 'left' ? leftTokens : rightTokens
+  const renderColumn = (side: 'left' | 'right'): readonly JSX.Element[] => {
+    const tokenRows = tokenRowsOf(side)
+    return rendered.slice(slice.start, slice.end).map((entry, i) => {
+      const meta = side === 'left' ? entry.left : entry.right
+      const tokens = meta === null ? undefined : tokenRows?.[meta.ti]
+      return <DiffCell key={slice.start + i} entry={entry} side={side} tokens={tokens} />
+    })
   }
-
-  /** 折叠标记（覆盖层）：absolute 横跨双列，top 按已渲染行数 × 固定行高对齐。 */
-  const foldMarkers: readonly JSX.Element[] = foldBlocks.map(({ index, top, count }) => (
-    <button
-      key={index}
-      type="button"
-      className="dsh-git-ui__fold-overlay"
-      style={{ ...css.diffFoldOverlay, top }}
-      onClick={() => toggleFold(index)}
-    >
-      {t('diff.foldCollapsed').replace('{n}', String(count))}
-    </button>
-  ))
-
-  // 每列各渲染一份完整行序列；双列独立横向滚动 + 容器统一纵向滚动。
-  const renderColumn = (side: 'left' | 'right'): readonly JSX.Element[] =>
-    rendered.map((entry, i) => renderCell(entry, side, String(i)))
+  const topPad = slice.start * FOLD_ROW_H
+  const bottomPad = Math.max(0, rendered.length - slice.end) * FOLD_ROW_H
+  const padStyle: CSSProperties = { height: topPad, width: '100%', flexShrink: 0 }
+  const bottomPadStyle: CSSProperties = { height: bottomPad, width: '100%', flexShrink: 0 }
 
   return (
     <>
-      <div style={{ ...css.sbsContainer, position: 'relative', fontSize: diff.fontSize }}>
+      <div ref={scrollRef} onScroll={onScroll} style={{ ...css.sbsContainer, position: 'relative', fontSize: diff.fontSize }}>
         <div style={css.sbsCol}>
-          <div style={css.sbsColInner}>{renderColumn('left')}</div>
+          <div style={css.sbsColInner}>
+            <div style={padStyle} aria-hidden="true" />
+            {renderColumn('left')}
+            <div style={bottomPadStyle} aria-hidden="true" />
+          </div>
         </div>
         <div style={{ ...css.sbsCol, ...css.sbsColRight }}>
-          <div style={css.sbsColInner}>{renderColumn('right')}</div>
+          <div style={css.sbsColInner}>
+            <div style={padStyle} aria-hidden="true" />
+            {renderColumn('right')}
+            <div style={bottomPadStyle} aria-hidden="true" />
+          </div>
         </div>
         {foldMarkers}
       </div>
