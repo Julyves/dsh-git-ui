@@ -15,15 +15,8 @@ import { EntryRow } from '../../records/entry-row.tsx'
 import type { GitUISettings } from '../../../contracts/settings.ts'
 import type { TurnWorkRecord } from '../../../host/types.ts'
 import * as css from '../../styles.ts'
-import { timeAgo } from '../../center/shared.ts'
+import { timeAgo, shortTime } from '../../center/shared.ts'
 import { PopRefresher } from './PopRefresher.tsx'
-
-function shortTime(epochMs: number): string {
-  const date = new Date(epochMs)
-  const hh = String(date.getHours()).padStart(2, '0')
-  const mm = String(date.getMinutes()).padStart(2, '0')
-  return `${hh}:${mm}`
-}
 
 /** Dimmed pill for degraded states（弱化图标锚点 + 说明文字）。 */
 

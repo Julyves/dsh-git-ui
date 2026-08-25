@@ -51,6 +51,14 @@ export function timeAgo(iso: string, now: number, t: (key: GitKey) => string): s
   })
 }
 
+/** 短时间（HH:mm，turn 记录时段窗用）。 */
+export function shortTime(epochMs: number): string {
+  const date = new Date(epochMs)
+  const hh = String(date.getHours()).padStart(2, '0')
+  const mm = String(date.getMinutes()).padStart(2, '0')
+  return `${hh}:${mm}`
+}
+
 /** Tab 键：设置 Tab 与功能 Tab 并列（信息架构：工作区 + 偏好区）。 */
 export type TabKey = 'changes' | 'history' | 'records' | 'settings'
 

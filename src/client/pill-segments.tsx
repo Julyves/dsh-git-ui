@@ -12,6 +12,7 @@
  * `PillSettings` 中增加开关 + 设置 UI 一行；本管道与 GitPill 零改动。
  */
 import type { ReactNode } from 'react'
+import { CHIP_LETTERS } from './center/shared.ts'
 import type { GitView } from './controller.ts'
 import type { GitSnapshot, GitChangeStatus } from '../host/types.ts'
 import type { CountsSettings, PillSettings } from '../contracts/settings.ts'
@@ -41,12 +42,6 @@ export interface PillSegment {
 }
 
 // ── 共享文本派生（pill 与弹窗复用） ──────────────────────────────────────
-
-/** 状态字母映射（变更状态 → 单字符记号）。 */
-export const CHIP_LETTERS: Record<string, string> = {
-  added: 'A', modified: 'M', deleted: 'D', renamed: 'R',
-  untracked: '?', conflicted: '!', typechange: 'T',
-}
 
 /** 变更计数徽章文本（按设置过滤子项，如 `+2 −1 ?3`）。 */
 export function dirtyBadgeText(snapshot: GitSnapshot, counts: CountsSettings): string {

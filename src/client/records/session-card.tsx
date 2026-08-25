@@ -4,6 +4,7 @@
  * 聚合轮次与变更计数为徽章；展开区分「本会话 / 外部」两组条目。
  */
 import { useState } from 'react'
+import { shortTime } from '../center/shared.ts'
 import type { CSSProperties, JSX } from 'react'
 import type { WorkEntry } from '../../host/types.ts'
 import type { GitKey } from '../locales.ts'
@@ -32,13 +33,6 @@ export interface SessionCardProps {
 }
 
 /** HH:mm 钟面。 */
-function shortTime(epochMs: number): string {
-  const date = new Date(epochMs)
-  const hh = String(date.getHours()).padStart(2, '0')
-  const mm = String(date.getMinutes()).padStart(2, '0')
-  return `${hh}:${mm}`
-}
-
 /** 时段时间窗文本：HH:mm–HH:mm（进行中补「进行中」）。 */
 function windowText(session: WorkSession, t: (key: GitKey) => string): string {
   const from = shortTime(session.startAt)
