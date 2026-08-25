@@ -1588,7 +1588,7 @@ function HistoryFilterTree({
       <button
         type="button"
         className="dsh-git-ui__row"
-        style={{ ...(active ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow), paddingLeft: indent }}
+        style={{ ...(active ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow), paddingLeft: indent, paddingTop: 3, paddingBottom: 3 }}
         onClick={() => onFilter({ kind: 'ref', name })}
         title={name}
       >
