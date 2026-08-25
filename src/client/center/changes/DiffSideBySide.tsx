@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import type { CSSProperties, JSX } from 'react'
 import { buildSideBySide, capSideBySideRows, foldContext, foldMarkerLines, isBinaryDiff, type SideBySideRow, type SideCell } from '../../side-by-side.ts'
 import { highlightLines, type HighlightSpan } from '../../syntax/highlighter.ts'

@@ -11,7 +11,6 @@
  * GitPill.tsx) — it must never participate in header layout, otherwise it
  * grows the header and distorts it.
  */
-import type { CSSProperties } from 'react'
 
 /** 样式按域拆分到 styles/ 子目录；此处为聚合 barrel，调用方零改动。 */
 

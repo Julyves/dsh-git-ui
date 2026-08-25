@@ -1,11 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
-import type { GitBranch, GitFileStat, GitQueryRequest, GraphCommit, GitRef } from '../../../host/types.ts'
-import type { GitQueryOutcome } from '../../controller.ts'
-import { colorOf, createGraphBuilder, graphWidth, markFilterEnds, GRAPH_COLORS, type GraphRow, type GraphRowMarker } from '../../git-graph.ts'
+import type { GitBranch, GitFileStat, GraphCommit } from '../../../host/types.ts'
+import { createGraphBuilder, graphWidth, markFilterEnds, type GraphRow, type GraphRowMarker } from '../../git-graph.ts'
 import { buildFileTree, type FileTreeNode } from '../../file-tree.ts'
-import { useWindowSlice } from '../../use-window-slice.ts'
-import { CollapseAllIcon, CommitIcon, ExpandAllIcon, ChevronIcon, FolderIcon } from '../../icons.tsx'
+import { CollapseAllIcon, CommitIcon, ExpandAllIcon } from '../../icons.tsx'
 import type { GitKey } from '../../locales.ts'
 import { SelectMenu } from '../../select-menu.tsx'
 import * as css from '../../styles.ts'
@@ -14,7 +12,7 @@ import { clampNum, timeAgo, HISTORY_PAGE, GRAPH_COL_W, GRAPH_MAX_TRACK_W, GRAPH_
 import type { GitCenterProps } from '../shared.ts'
 import { HistoryFilterTree } from './HistoryFilterTree.tsx'
 import { FileTreeNodes } from './FileTreeNodes.tsx'
-import { CommitRow, dotColorOf } from './CommitRow.tsx'
+import { CommitRow } from './CommitRow.tsx'
 
 export function HistoryTab({
   query, run, t, focusRef = null,

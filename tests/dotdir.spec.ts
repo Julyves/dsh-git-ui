@@ -11,8 +11,8 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { createGitRunner } from '../src/host/git.ts'
-import { gitInit, makeTempDir, realSubprocess, type ChildSpawnSpec } from './helpers.ts'
-import { normalizeConfig, snapshotForSession, type GitStatusConfig, type SessionLookup, type SnapshotDeps } from '../src/host/core.ts'
+import { gitInit, makeTempDir, realSubprocess } from './helpers.ts'
+import { snapshotForSession, type GitStatusConfig, type SessionLookup, type SnapshotDeps } from '../src/host/core.ts'
 import { parseStatusOutput } from '../src/host/parser.ts'
 import { splitChangePath } from '../src/client/file-tree.ts'
 import { mkdir, rm, writeFile } from 'node:fs/promises'

@@ -10,8 +10,7 @@
  *   - `onEvent` / `effect`：直接映射 Cordis 同名方法
  */
 import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
-import type { ReactNode } from 'react'
-import type { ClientPlatform, LocaleDicts, RemoteContribution, SlotEntryDescriptor, GitInjected, GitRemoteLike } from '../../contracts/client-platform.ts'
+import type { ClientPlatform, LocaleDicts, RemoteContribution, GitInjected, GitRemoteLike } from '../../contracts/client-platform.ts'
 
 /**
  * Cordis Context 的结构化切片。

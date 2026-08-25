@@ -4,8 +4,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  DEFAULT_DIFF_SETTINGS, DEFAULT_SETTINGS, MAX_RECENT_COMMITS, PRESETS, applyPreset, clampFontSize, clampRecents,
-  migrateSettings, patchDiff, patchPill, patchPopup, presetOf, settingsEqual, settingsEqualAll,
+  DEFAULT_DIFF_SETTINGS, DEFAULT_SETTINGS, MAX_RECENT_COMMITS, PRESETS, applyPreset, clampRecents,
+  migrateSettings, patchPill, patchPopup, presetOf, settingsEqual, 
   type GitUISettings, type SettingsPersistence, type SettingsStorageLike,
 } from '../../src/contracts/settings.ts'
 import { settingsEnvelopeSchema } from '../../src/client/settings/schema.ts'

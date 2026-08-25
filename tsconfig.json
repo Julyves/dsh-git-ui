@@ -6,6 +6,7 @@
     "jsx": "react-jsx",
     "lib": ["es2024", "dom"],
     "strict": true,
+    "noUnusedLocals": true,
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,

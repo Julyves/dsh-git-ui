@@ -21,7 +21,7 @@
 
 import type { ToolPresenter } from '../../host/write-paths.ts'
 import { extractWritePaths } from '../../host/write-paths.ts'
-import { sliceEvents, type SessionLike } from './session-log.ts'
+import { sliceEvents } from './session-log.ts'
 import type { SessionsLike } from './subagent-adapter.ts'
 
 /** 路径解析注入面:realpath 归一(适配层注入 node:fs/promises.realpath;

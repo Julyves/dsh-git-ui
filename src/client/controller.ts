@@ -5,8 +5,8 @@
  * connection reset, `dispose()` on slot teardown (clears the timer and
  * rejects nothing — in-flight work settles into a withdrawn view).
  */
-import type { GitActionResult, GitActionRequest, GitQueryRequest, GitQueryResponse, GitSnapshot, GitSnapshotRequest, GitSnapshotResult } from '../host/types.ts'
-import type { GitObservable, GitView, GitRemoteLike, GitQueryOutcome, RemoteEnvelope } from '../contracts/client-platform.ts'
+import type { GitActionResult, GitActionRequest, GitQueryRequest } from '../host/types.ts'
+import type { GitObservable, GitView, GitRemoteLike, GitQueryOutcome } from '../contracts/client-platform.ts'
 
 // Re-export for backward compatibility — 其他模块仍可从 controller 导入这些类型
 export type { GitObservable, GitView, GitRemoteLike, GitQueryOutcome } from '../contracts/client-platform.ts'

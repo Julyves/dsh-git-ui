@@ -20,7 +20,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import type { JSX } from 'react'
 import { useUI } from '../contracts/ui-context.tsx'
-import type { GitAction, GitActionResult } from '../host/types.ts'
+import type { GitAction } from '../host/types.ts'
 import { errorText } from './error-text.ts'
 import { CloseIcon, GearIcon, RecordIcon } from './icons.tsx'
 import { RecordsTab } from './records/index.tsx'

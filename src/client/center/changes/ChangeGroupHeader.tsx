@@ -1,9 +1,7 @@
 import type { JSX } from 'react'
-import type { GitChange } from '../../../host/types.ts'
-import { ChevronIcon, CollapseAllIcon, ExpandAllIcon } from '../../icons.tsx'
+import { ChevronIcon } from '../../icons.tsx'
 import type { GitKey } from '../../locales.ts'
 import * as css from '../../styles.ts'
-import type { ChangeGroup, ChangeGroupKey } from '../shared.ts'
 
 
 /**

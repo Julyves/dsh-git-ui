@@ -21,7 +21,7 @@
 import type { FoldedTurn, TurnLog } from './turns.ts'
 import { extractWritePathDetails, metaWritePaths, type ToolPresenter, type WritePathDetail } from './write-paths.ts'
 import type { ObservationLog } from './observation.ts'
-import type { GitChange, GitChangeStatus, TurnWorkRecord, WorkEntry, WorkEntryState } from './types.ts'
+import type { GitChange, TurnWorkRecord, WorkEntry, WorkEntryState } from './types.ts'
 import type { PathStateLookup } from './path-state.ts'
 
 // 记录契约单一来源:TurnWorkRecord / WorkEntry / WorkEntryState 以 types.ts
