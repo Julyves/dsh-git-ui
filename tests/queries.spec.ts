@@ -314,6 +314,10 @@ describe('runQuery — branches', () => {
     expect(after.ok).toBe(true)
     if (!after.ok || after.value.kind !== 'branches') return
     expect(after.value.defaultBranch).toBe('main')
+    // `%(refname:short)` 把 origin/HEAD 折叠成裸 `origin`：远程列表不得混入该
+    // 折叠物（否则左栏远程文件夹出现语义模糊的裸 origin「分支」）。
+    expect(after.value.remote.some((b) => b.name === 'origin')).toBe(false)
+    expect(after.value.remote.some((b) => b.name === 'origin/HEAD')).toBe(false)
   })
 })
 

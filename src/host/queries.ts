@@ -253,7 +253,12 @@ async function branchesQuery(deps: SnapshotDeps, root: string): Promise<GitQuery
       current: currentName,
       defaultBranch,
       local: parseBranchList(local.run.stdout),
-      remote: parseBranchList(remote.run.stdout).filter((branch) => !branch.name.endsWith('/HEAD')),
+      // 远程分支名恒为 `<remote>/<branch>`（含 `/`）。`%(refname:short)` 会把
+      // `refs/remotes/<remote>/HEAD` 符号引用折叠成裸 `<remote>`（如 `origin`），
+      // 而非 `origin/HEAD`——若仅按 `endsWith('/HEAD')` 过滤会漏掉它，导致左栏
+      // 远程文件夹里出现一个语义模糊的裸 `origin`「分支」。故剔除不含 `/` 的
+      // 条目（HEAD 折叠物）与显式 `/HEAD` 结尾（兼容性兜底）。
+      remote: parseBranchList(remote.run.stdout).filter((branch) => branch.name.includes('/') && !branch.name.endsWith('/HEAD')),
     },
   }
 }
