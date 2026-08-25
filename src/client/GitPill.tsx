@@ -57,11 +57,6 @@ export interface GitPillProps extends GitInjected {
   readonly t: (key: GitKey) => string
 }
 
-/** 状态字符映射（配色见 styles.chipStyles，全语义 token）。
- * 统一由 pill-segments.chipLetter 派生（协议单一来源）。 */
-
-/** Short relative time from an ISO date, localized through dictionary templates. */
-
 // Popup geometry (matches the host Menu/HoverCard portal pattern).
 const POPUP_WIDTH = 340
 const POPUP_MAX_HEIGHT = 420

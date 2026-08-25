@@ -430,4 +430,3 @@ export function GitPopupBody({
   )
 }
 
-/** The popup refresh verb (kept as its own component so it may own state). */
