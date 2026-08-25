@@ -129,7 +129,7 @@ export function GraphStrip({
   return (
     // overflow visible：选中环（r+3）在极窄车道（laneW=8 的 24+ 列图）下会超出
     // SVG 边界——放行视觉溢出（display:block 不影响布局，仅选中行绘环）。
-    <svg width={w} height={h} style={{ display: 'block', flexShrink: 0, overflow: 'visible' }} aria-hidden="true">
+    <svg width={w} height={h} className="dsh-git-ui__graph" style={{ display: 'block', flexShrink: 0, overflow: 'visible' }} aria-hidden="true">
       {row.verticals.map((col) => (
         // openLanes(H6):merge 副父等非节点延续线在过滤下贯到图尾未解析——
         // 末行以虚线 + 端止横杠标示(与 endOpen 诚实提示一致)。

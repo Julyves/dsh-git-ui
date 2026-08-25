@@ -8,6 +8,16 @@
 const GLOBAL_CSS_ID = 'dsh-git-ui/styles'
 
 const globalCss = [
+  // ── 分支图调色板（24 色 HSL 均匀色相分布，亮暗两套） ──────────────────────
+  // 色相 15° 步进覆盖全环；亮态 S55/L50（浅底鲜明），暗态 S45/L62（暗底提亮不刺眼）。
+  // SVG stroke attribute 直接 var()，主题切换零 JS 重渲染。
+  '.dsh-git-ui__graph { '
+    + Array.from({ length: 24 }, (_, i) => `--dsg-graph-${i}: hsl(${i * 15}, 55%, 50%)`).join('; ')
+    + ' }',
+  '@media (prefers-color-scheme: dark) { .dsh-git-ui__graph { '
+    + Array.from({ length: 24 }, (_, i) => `--dsg-graph-${i}: hsl(${i * 15}, 45%, 62%)`).join('; ')
+    + ' } }',
+
   // Elevated 面滚动条重绑（宿主 scrollbar.css 契约：浮起表面须用 l2 滑块对，
   // 否则滑块底色与 layer-3 面同色而隐形）——popup / Git 中心 Modal / 自绘下拉。
   '.dsh-git-ui__pop, .dsh-git-ui__center, .dsh-git-ui__select-menu { --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2); --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2); }',

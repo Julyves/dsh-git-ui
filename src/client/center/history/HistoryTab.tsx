@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
 import type { GitBranch, GitFileStat, GraphCommit } from '../../../host/types.ts'
-import { createGraphBuilder, graphWidth, markFilterEnds, type GraphRow, type GraphRowMarker } from '../../git-graph.ts'
+import { createColorAllocator, createGraphBuilder, graphWidth, markFilterEnds, type GraphRow, type GraphRowMarker } from '../../git-graph.ts'
 import { buildFileTree, type FileTreeNode } from '../../file-tree.ts'
 import { CollapseAllIcon, CommitIcon, ExpandAllIcon } from '../../icons.tsx'
 import type { GitKey } from '../../locales.ts'
@@ -100,12 +100,17 @@ export function HistoryTab({
    * 图几何清空，只平铺条目。
    */
   const searching = filter.search !== ''
-  const builderRef = useRef(createGraphBuilder())
+  /** 分支名避撞分配器：tree 加载后用全量分支名做确定性避撞，减少同色碰撞（IDEA 式可读性）。 */
+  const graphColorOf = useMemo(
+    () => createColorAllocator(tree ? [...tree.local, ...tree.remote, ...tree.tags].map((b) => b.name) : []),
+    [tree],
+  )
+  const builderRef = useRef(createGraphBuilder(graphColorOf))
   const prevCommitsRef = useRef<readonly GraphCommit[]>([])
   const [graphRows, setGraphRows] = useState<readonly GraphRow[]>([])
   useEffect(() => {
     if (searching) {
-      builderRef.current = createGraphBuilder()
+      builderRef.current = createGraphBuilder(graphColorOf)
       prevCommitsRef.current = commits
       setGraphRows([])
       return
@@ -113,15 +118,15 @@ export function HistoryTab({
     const prev = prevCommitsRef.current
     const isExtension = prev.length <= commits.length && prev.every((c, i) => c.hash === commits[i]?.hash)
     if (!isExtension) {
-      builderRef.current = createGraphBuilder()
+      builderRef.current = createGraphBuilder(graphColorOf)
       setGraphRows(builderRef.current.append(commits))
     } else if (commits.length > prev.length) {
       const newRows = builderRef.current.append(commits.slice(prev.length))
       if (newRows.length > 0) setGraphRows((existing) => [...existing, ...newRows])
     }
     prevCommitsRef.current = commits
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅随提交集合/搜索态变化喂入 builder
-  }, [commits, searching])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 随提交集合/搜索态/避撞分配器变化喂入 builder
+  }, [commits, searching, graphColorOf])
 
   const graphCols = useMemo(() => graphWidth(graphRows), [graphRows])
   /** 自适应车道宽：图宽超过 GRAPH_MAX_TRACK_W 时压缩车道，保全部车道可见、轨道有界、不挤压主题列。 */

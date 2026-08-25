@@ -238,10 +238,11 @@ describe('colorOf / laneHashes / 链色（IDEA 语义）', () => {
     expect(rows[0]!.laneHashes).toMatchObject({ 0: 'a' })
   })
 
-  it('keeps merge edge lanes keyed by the merge commit (their color source)', () => {
+  it('keys merge edge lanes by the second parent (merged branch keeps its source color)', () => {
     const rows = buildGraph(MERGE_SEQUENCE)
-    // merge 行：节点列 0 与分裂目标 1 的 owner 均为 merge。
-    expect(rows[0]!.laneHashes).toMatchObject({ 0: 'merge', 1: 'merge' })
+    // merge 行：节点列 0 owner=merge（首父延续）；分裂目标 1 owner=第二父 feat-1
+    // （被合并分支染源色而非 merge 色——IDEA 语义：侧链保持源色）。
+    expect(rows[0]!.laneHashes).toMatchObject({ 0: 'merge', 1: 'feat-1' })
     // feat 行：贯穿竖线车道 0 属 main-1（其首父线）；节点列 1 属 feat-1。
     expect(rows[2]!).toMatchObject({ column: 1, verticals: [0] })
     expect(rows[2]!.laneHashes).toMatchObject({ 0: 'main-1', 1: 'feat-1' })
@@ -265,12 +266,13 @@ describe('colorOf / laneHashes / 链色（IDEA 语义）', () => {
     expect(rows.every((r) => r.nodeColor === colorOf('dev'))).toBe(true)
   })
 
-  it('preserves child chain colors on joins and merge curves', () => {
+  it('keeps the merged branch lane at its source color (IDEA: side chain keeps source color)', () => {
     const rows = buildGraph(MERGE_SEQUENCE)
-    // merge 分裂曲线 = merge 链色。
-    expect(rows[0]!.lineColors?.[1]).toBe(colorOf('merge'))
-    // main-1 行贯穿的 feat 车道线保持 feat 链色（= 自 merge 下传）。
-    expect(rows[1]!.lineColors?.[1]).toBe(colorOf('merge'))
+    // merge 分裂曲线（edges）= nodeColor = merge 链色；但第二父车道线（lineColors[1]）
+    // = 被合并分支源色 colorOf('feat-1')——侧链不染 merge 色（IDEA 语义修正）。
+    expect(rows[0]!.lineColors?.[1]).toBe(colorOf('feat-1'))
+    // main-1 行贯穿的 feat 车道线保持 feat-1 源色（owner=feat-1，未到达→hash 兜底色）。
+    expect(rows[1]!.lineColors?.[1]).toBe(colorOf('feat-1'))
   })
 
   it('keeps joins lanes at their own child chain colors (distinct branches)', () => {

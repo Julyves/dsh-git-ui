@@ -52,8 +52,15 @@ export interface GraphRow {
   readonly laneHashes?: Readonly<Record<number, string>>
   /** 每车道最终色（可选）：随行交付的解析色，渲染零上下文。 */
   readonly lineColors?: Readonly<Record<number, string>>
+  /**
+   * 每车道的链身份锚点（可选）：该线归属链的起始 hash——悬停高亮/折叠定位
+   * 链的稳定身份（owner 是段级、每行重写，anchor 跨行恒定标识一条链）。
+   */
+  readonly laneAnchors?: Readonly<Record<number, string>>
   /** 节点最终色（可选）：所在链色。 */
   readonly nodeColor?: string
+  /** 节点链锚点（可选）：悬停高亮定位节点所在链。 */
+  readonly nodeAnchor?: string
   /**
    * 上方来线段最终色（可选）：分支起点行的「来线」保持上游链色（IDEA 分叉
    * 视觉）——与 nodeContinues 延续线的当前链色并存。无来线时缺省。
@@ -68,20 +75,65 @@ export interface GraphEdge {
 }
 
 /**
- * 车道语义调色板（IDEA 式）：Material 500 系——中等饱和、亮暗主题对比度
- * 双满足（暗底不刺眼、浅底不飘淡）；色相分布均匀，16 色循环。
+ * 车道语义调色板（IDEA 式）：24 色 CSS 变量——色相均匀分布（红→橙→黄→绿→
+ * 青→蓝→紫轮转）、饱和 50-60%、明度 45-55%，亮暗主题双满足。变量值由
+ * styles/globals.ts 注入亮/暗两套 `--dsg-graph-*`；SVG stroke attribute
+ * 直接用 var()（现代引擎解析），主题切换零 JS 重渲染。
  */
 export const GRAPH_COLORS: readonly string[] = [
-  '#4CAF50', '#FF9800', '#2196F3', '#9C27B0', '#00BCD4', '#E91E63',
-  '#3F51B5', '#009688', '#FF5722', '#8BC34A', '#607D8B', '#795548',
-  '#F44336', '#03A9F4', '#CDDC39', '#673AB7',
+  'var(--dsg-graph-0)', 'var(--dsg-graph-1)', 'var(--dsg-graph-2)',
+  'var(--dsg-graph-3)', 'var(--dsg-graph-4)', 'var(--dsg-graph-5)',
+  'var(--dsg-graph-6)', 'var(--dsg-graph-7)', 'var(--dsg-graph-8)',
+  'var(--dsg-graph-9)', 'var(--dsg-graph-10)', 'var(--dsg-graph-11)',
+  'var(--dsg-graph-12)', 'var(--dsg-graph-13)', 'var(--dsg-graph-14)',
+  'var(--dsg-graph-15)', 'var(--dsg-graph-16)', 'var(--dsg-graph-17)',
+  'var(--dsg-graph-18)', 'var(--dsg-graph-19)', 'var(--dsg-graph-20)',
+  'var(--dsg-graph-21)', 'var(--dsg-graph-22)', 'var(--dsg-graph-23)',
 ]
+
+/** 调色板大小（供避撞分配判断耗尽）。 */
+export const GRAPH_PALETTE_SIZE = GRAPH_COLORS.length
 
 /** 稳定的散列色：字符串字符累加取模色板（同一分支名/提交永远同色）。 */
 export function colorOf(key: string): string {
+  return GRAPH_COLORS[hashKey(key) % GRAPH_PALETTE_SIZE]!
+}
+
+/** 字符串散列（charCode 累加），供 colorOf 与避撞分配器共用。 */
+function hashKey(key: string): number {
   let sum = 0
   for (let i = 0; i < key.length; i += 1) sum += key.charCodeAt(i)
-  return GRAPH_COLORS[sum % GRAPH_COLORS.length]!
+  return sum
+}
+
+/**
+ * 贪心避撞分配器：对已知分支名做确定性避撞（按名排序后，每个分配首个未占用色，
+ * 优先尝试 hash 色、被占则顺延），调色板耗尽后回落 hash（允许碰撞）。
+ * 未知 key 回落 colorOf（hash）——提交 hash 等无避撞需求的兜底。
+ *
+ * 用途：HistoryTab 用 branches/tags 查询喂全量分支名，构造分配器传给
+ * createGraphBuilder，使同图内的分支名尽量不撞色（IDEA 式可读性）。
+ */
+export function createColorAllocator(knownNames: readonly string[]): (key: string) => string {
+  const used = new Set<number>()
+  const assignment = new Map<string, number>()
+  for (const name of [...new Set(knownNames)].sort()) {
+    const hashIdx = ((hashKey(name) % GRAPH_PALETTE_SIZE) + GRAPH_PALETTE_SIZE) % GRAPH_PALETTE_SIZE
+    let idx = hashIdx
+    while (used.has(idx)) {
+      idx = (idx + 1) % GRAPH_PALETTE_SIZE
+      if (idx === hashIdx) break // 一轮无空色，耗尽
+    }
+    if (used.size < GRAPH_PALETTE_SIZE) {
+      assignment.set(name, idx)
+      used.add(idx)
+    }
+    // 耗尽：不记入 assignment，回落 colorOf（hash）
+  }
+  return (key: string): string => {
+    const idx = assignment.get(key)
+    return idx !== undefined ? GRAPH_COLORS[idx]! : colorOf(key)
+  }
 }
 
 /** 车道条目的身份：等待的目标 + 归属来源（线色判定键）。 */
@@ -100,27 +152,35 @@ function openLane(lanes: (LaneEntry | null)[], opened: Set<number>): number {
   return lane
 }
 
+/** 链色解析结果：颜色 + 链身份锚点（随继承传播，供悬停高亮/折叠定位链）。 */
+interface ChainColor {
+  readonly color: string
+  /** 链身份锚点：链起始处带 ref 的提交 hash（或自身兜底）。随继承传播。 */
+  readonly anchor: string
+}
+
 /**
  * 解析一个提交的链色（IDEA 规则）：
- *   1. 自身带分支引用（本地分支/HEAD）→ 该分支名散列色（分支起点，全链锚定色）；
- *   2. 否则继承「等待它的首个车道 owner（子）」的链色（子先处理、已解析）；
- *   3. 无等待者（无名根/尖端）→ 该提交 hash 散列色。
+ *   1. 自身带分支引用（本地分支/HEAD）→ 该分支名散列色（分支起点，全链锚定色），anchor=自身；
+ *   2. 否则继承「等待它的首个车道 owner（子）」的链色与 anchor（子先处理、已解析）；
+ *   3. 无等待者（无名根/尖端）→ 该提交 hash 散列色，anchor=自身。
  */
 function resolveChainColor(
   commit: GraphCommit,
   waitingOwners: readonly string[],
-  memo: Map<string, string>,
-): string {
+  memo: Map<string, ChainColor>,
+  colorOfFn: (key: string) => string,
+): ChainColor {
   const cached = memo.get(commit.hash)
   if (cached !== undefined) return cached
   // 分支名锚定：本地分支（含 HEAD -> 装饰解析出的 head 分支）；远程/标签不定义链色。
   const branchRef = commit.refs.find((ref) => ref.kind === 'branch')
   if (branchRef !== undefined) {
-    const color = colorOf(branchRef.name)
-    memo.set(commit.hash, color)
-    return color
+    const resolved: ChainColor = { color: colorOfFn(branchRef.name), anchor: commit.hash }
+    memo.set(commit.hash, resolved)
+    return resolved
   }
-  // 子链继承：首个等待者（先到的子车道）的链色。
+  // 子链继承：首个等待者（先到的子车道）的链色与 anchor。
   for (const owner of waitingOwners) {
     const inherited = memo.get(owner)
     if (inherited !== undefined) {
@@ -128,20 +188,22 @@ function resolveChainColor(
       return inherited
     }
   }
-  const color = colorOf(commit.hash)
-  memo.set(commit.hash, color)
-  return color
+  const resolved: ChainColor = { color: colorOfFn(commit.hash), anchor: commit.hash }
+  memo.set(commit.hash, resolved)
+  return resolved
 }
 
 /** 处理单个提交：更新车道并产出该行几何与最终色（buildGraph 与增量 builder 共用同一循环体）。 */
 function processCommit(
   commit: GraphCommit,
   lanes: (LaneEntry | null)[],
-  memo: Map<string, string>,
+  memo: Map<string, ChainColor>,
+  colorOfFn: (key: string) => string,
 ): GraphRow {
   const opened = new Set<number>()
   // 车道身份快照（在清空/改写前记录）：每条线的颜色 = 其 owner 的链色。
   const laneHashes: Record<number, string> = {}
+  const laneAnchors: Record<number, string> = {}
   lanes.forEach((entry, index) => {
     if (entry !== null) laneHashes[index] = entry.owner
   })
@@ -170,13 +232,15 @@ function processCommit(
   }
 
   // 3. 第二及更多父提交：复用已等待它的车道，否则开辟新车道；均记分裂曲线。
+  //    owner = parentHash（第二父自身）——被合并分支染源色而非 merge 链色（IDEA 语义）：
+  //    第二父链色独立解析（带源分支 ref 则锚定源色，否则 hash 兜底），不染 merge 色。
   for (let p = 1; p < commit.parents.length; p += 1) {
     const parentHash = commit.parents[p]!
     let target = lanes.findIndex((entry) => entry !== null && entry.wait === parentHash)
     if (target === -1) {
       target = openLane(lanes, opened)
-      lanes[target] = { wait: parentHash, owner: commit.hash }
-      laneHashes[target] = commit.hash
+      lanes[target] = { wait: parentHash, owner: parentHash }
+      laneHashes[target] = parentHash
     }
     edges.push({ from: column, to: target })
   }
@@ -194,17 +258,25 @@ function processCommit(
   // 5. 链色解析：节点 = 当前提交链色；各线 = 其 owner 的链色（子先处理、已解析）。
   //    节点列两段线需并行：上方来线段（若存在）= 上游链色（incomingColor，分支起点
   //    视觉：节点 = 新链色、来线 = 上游链色）；延续线段 = 当前链色（lineColors[column]）。
-  const nodeColor = resolveChainColor(commit, waitingOwners, memo)
+  const resolved = resolveChainColor(commit, waitingOwners, memo, colorOfFn)
+  const nodeColor = resolved.color
+  const nodeAnchor = resolved.anchor
   const lineColors: Record<number, string> = {}
   for (const [laneKey, owner] of Object.entries(laneHashes) as [string, string][]) {
-    lineColors[Number(laneKey)] = memo.get(owner) ?? colorOf(owner)
+    const chain = memo.get(owner)
+    lineColors[Number(laneKey)] = chain?.color ?? colorOfFn(owner)
+    laneAnchors[Number(laneKey)] = chain?.anchor ?? owner
   }
   lineColors[column] = nodeColor
-  const incomingColor = waiting.length > 0
-    ? (memo.get(waitingOwners[0]!) ?? colorOf(waitingOwners[0]!))
-    : undefined
+  laneAnchors[column] = nodeAnchor
+  const incomingChain = waiting.length > 0 ? memo.get(waitingOwners[0]!) : undefined
+  const incomingColor = incomingChain?.color ?? (waiting.length > 0 ? colorOfFn(waitingOwners[0]!) : undefined)
 
-  return { commit, column, verticals, joins, nodeFromTop, nodeContinues, edges, laneHashes, lineColors, nodeColor, ...(incomingColor === undefined ? {} : { incomingColor }) }
+  return {
+    commit, column, verticals, joins, nodeFromTop, nodeContinues, edges,
+    laneHashes, laneAnchors, lineColors, nodeColor, nodeAnchor,
+    ...(incomingColor === undefined ? {} : { incomingColor }),
+  }
 }
 
 /**
@@ -220,9 +292,9 @@ export interface GraphBuilder {
   append(commits: readonly GraphCommit[]): readonly GraphRow[]
 }
 
-export function createGraphBuilder(): GraphBuilder {
+export function createGraphBuilder(colorOfFn: (key: string) => string = colorOf): GraphBuilder {
   const lanes: (LaneEntry | null)[] = []
-  const memo = new Map<string, string>()
+  const memo = new Map<string, ChainColor>()
   let count = 0
   return {
     get count() {
@@ -231,7 +303,7 @@ export function createGraphBuilder(): GraphBuilder {
     append(commits) {
       const rows: GraphRow[] = []
       for (const commit of commits) {
-        rows.push(processCommit(commit, lanes, memo))
+        rows.push(processCommit(commit, lanes, memo, colorOfFn))
         count += 1
       }
       return rows
@@ -239,9 +311,9 @@ export function createGraphBuilder(): GraphBuilder {
   }
 }
 
-/** 一次性图构建：等价于 `createGraphBuilder().append(commits)`。 */
-export function buildGraph(commits: readonly GraphCommit[]): readonly GraphRow[] {
-  return createGraphBuilder().append(commits)
+/** 一次性图构建：等价于 `createGraphBuilder(colorOfFn).append(commits)`。 */
+export function buildGraph(commits: readonly GraphCommit[], colorOfFn: (key: string) => string = colorOf): readonly GraphRow[] {
+  return createGraphBuilder(colorOfFn).append(commits)
 }
 
 /** 图宽度（车道数）：所有行涉及的最大列号 + 1；空图为 0。循环求值，避免大数组展开。 */
