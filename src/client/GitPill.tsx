@@ -72,13 +72,17 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
   // The selector hook requires a selector function (with-selector calls it
   // unconditionally); identity selection reads the whole view snapshot.
   const view = useGit((view) => view)
-  // Last ready snapshot: while a refresh is in flight the controller reports
+  // Last stable view: while a refresh is in flight the controller reports
   // 'loading'; render the previous content instead of unmounting (a null
   // here unmounts the whole entry and makes sibling utilities in the same
   // seat flicker on every poll).
-  const lastReady = useRef<GitView & { state: 'ready' } | null>(null)
-  if (view.state === 'ready') lastReady.current = view
-  const display: GitView = view.state === 'loading' && lastReady.current !== null ? lastReady.current : view
+  // 稳定态 = ready 或 error（cold/no-cwd 渲染 null，记忆与否无视觉差）。
+  // 旧实现只记忆 ready——「无 Git 仓库」等 error 会话永远不会 ready，
+  // 每次 30s 轮询的 loading 相位 pill 整体卸载再重挂载，可见周期性闪烁；
+  // 记忆任意稳定态后，轮询期间的降级 pill 保持挂载、内容不变（零闪烁）。
+  const lastStable = useRef<GitView | null>(null)
+  if (view.state !== 'loading') lastStable.current = view
+  const display: GitView = view.state === 'loading' && lastStable.current !== null ? lastStable.current : view
 
   // 设置（插件级全局）；Pill 与弹窗展示按此切片。置于 records hook 之前(顺序依赖)。
   const uiSettings = useSettings()
