@@ -23,9 +23,10 @@ export const SETTINGS_STORAGE_KEY = 'dsh-git-ui.settings'
  * 存储格式版本：schema 不兼容变更时 +1。
  * v1 → v2：新增 `diff` 维度（字体大小 / 语法高亮 / 上下文折叠）。
  * v2 → v3：新增 `pill.workRecord`（Turn 工作记录徽章开关）。
+ * v3 → v4：新增 `popupOrder`（弹窗区块排序，独立维度）。
  * 旧值经 migrateSettings 补默认字段（不丢既有偏好）。
  */
-export const SETTINGS_SCHEMA_VERSION = 3
+export const SETTINGS_SCHEMA_VERSION = 4
 
 /** 显示模式档位。'custom' 仅为派生结果，不作为规则表成员。 */
 export type PresetId = 'minimal' | 'standard' | 'full' | 'custom'
@@ -67,12 +68,49 @@ export interface PopupSettings {
   readonly changesList: boolean
 }
 
+// ── 弹窗区块排序（独立维度，v4） ───────────────────────────────────────────
+
+/**
+ * 弹窗可排序区块 id：头部分支/路径与底部操作行结构固定，仅内容区块
+ * 参与排序。workRecord 的显隐仍由 `pill.workRecord` 治理（排序与显隐
+ * 正交：隐藏区块保留在序列中，开启后按序出现）。
+ */
+export type PopupBlockId = 'statusBar' | 'branchCreate' | 'workRecord' | 'recentCommits' | 'changesList'
+
+/** 可排序区块清单（顺序即默认展示顺序）。 */
+export const POPUP_BLOCK_IDS: readonly PopupBlockId[] = [
+  'statusBar', 'branchCreate', 'workRecord', 'recentCommits', 'changesList',
+]
+
+/** 默认排序（与历史固定布局一致——老用户升级零变化）。 */
+export const DEFAULT_POPUP_ORDER: readonly PopupBlockId[] = POPUP_BLOCK_IDS
+
+/**
+ * 归一化排序：剔除未知 id、去重、缺失区块按默认序补齐到尾部。
+ * 任何来源（持久化 / 部署预设 / 手动拼接）的排序都经此消毒后再消费。
+ */
+export function normalizePopupOrder(order: readonly string[]): readonly PopupBlockId[] {
+  const seen = new Set<PopupBlockId>()
+  for (const id of order) {
+    if ((POPUP_BLOCK_IDS as readonly string[]).includes(id)) seen.add(id as PopupBlockId)
+  }
+  const rest = POPUP_BLOCK_IDS.filter((id) => !seen.has(id))
+  return [...seen, ...rest]
+}
+
+/** 排序深层相等（长度 + 逐位；归一化后无重复，序即身份）。 */
+export function popupOrderEqual(a: readonly PopupBlockId[], b: readonly PopupBlockId[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i])
+}
+
 /** 完整 UI 设置（插件级全局、跨会话生效）。 */
 export interface GitUISettings {
   readonly pill: PillSettings
   readonly popup: PopupSettings
   /** 差异视图查看设置（独立维度：预设档位只覆盖 pill / popup 信息组合）。 */
   readonly diff: DiffSettings
+  /** 弹窗区块排序（独立维度：调整不把预设档位打回 custom，切预设不丢排序）。 */
+  readonly popupOrder: readonly PopupBlockId[]
 }
 
 /** 差异视图（变更对照 / 新增文件内容）查看参数。 */
@@ -131,6 +169,7 @@ const MINIMAL_UI: GitUISettings = {
     changesList: true,
   },
   diff: DEFAULT_DIFF_SETTINGS,
+  popupOrder: DEFAULT_POPUP_ORDER,
 }
 
 /** 标准：当前既定行为（Pill 全量 + 弹窗全量 + 提交 3 条）。 */
@@ -151,6 +190,7 @@ const STANDARD_UI: GitUISettings = {
     changesList: true,
   },
   diff: DEFAULT_DIFF_SETTINGS,
+  popupOrder: DEFAULT_POPUP_ORDER,
 }
 
 /** 完整：标准 + 弹窗最近提交拉满上限。 */
@@ -158,6 +198,7 @@ const FULL_UI: GitUISettings = {
   pill: { ...STANDARD_UI.pill },
   popup: { ...STANDARD_UI.popup, recentCommits: MAX_RECENT_COMMITS },
   diff: DEFAULT_DIFF_SETTINGS,
+  popupOrder: DEFAULT_POPUP_ORDER,
 }
 
 /**
@@ -187,11 +228,15 @@ export function presetOf(settings: GitUISettings): PresetId {
   return 'custom'
 }
 
-/** 应用一档显示模式：返回该档完整展开值（custom 无意义，原样返回）。 */
+/**
+ * 应用一档显示模式：返回该档完整展开值（custom 无意义，原样返回）。
+ * popupOrder 为独立维度——预设只约定信息组合，不覆盖用户的区块排序，
+ * 切换预设后自定义排序原样保留（与 diff 视图参数同语义）。
+ */
 export function applyPreset(settings: GitUISettings, id: PresetId): GitUISettings {
   if (id === 'custom') return settings
   const preset = PRESETS.find((p) => p.id === id)
-  return preset === undefined ? settings : preset.settings
+  return preset === undefined ? settings : { ...preset.settings, popupOrder: settings.popupOrder }
 }
 
 /**
@@ -208,9 +253,9 @@ export function diffEqual(a: DiffSettings, b: DiffSettings): boolean {
   return a.fontSize === b.fontSize && a.syntaxHighlight === b.syntaxHighlight && a.foldContext === b.foldContext
 }
 
-/** 全部字段（含 diff 维度）深层相等：重置按钮的禁用判定使用。 */
+/** 全部字段（含 diff / popupOrder 维度）深层相等：重置按钮的禁用判定使用。 */
 export function settingsEqualAll(a: GitUISettings, b: GitUISettings): boolean {
-  return settingsEqual(a, b) && diffEqual(a.diff, b.diff)
+  return settingsEqual(a, b) && diffEqual(a.diff, b.diff) && popupOrderEqual(a.popupOrder, b.popupOrder)
 }
 
 export function pillEqual(a: PillSettings, b: PillSettings): boolean {
@@ -248,6 +293,11 @@ export type PopupPatch = Partial<PopupSettings>
 
 /** 差异视图局部补丁（fontSize 经 patchDiff 自动钳制到合法区间）。 */
 export type DiffPatch = Partial<DiffSettings>
+
+/** 应用弹窗排序补丁（不可变更新；任意来源序都经 normalizePopupOrder 消毒）。 */
+export function patchPopupOrder(prev: GitUISettings, next: readonly string[]): GitUISettings {
+  return { ...prev, popupOrder: normalizePopupOrder(next) }
+}
 
 /** 应用 Pill 补丁（不可变更新；counts 子项浅合并）。 */
 export function patchPill(prev: GitUISettings, patch: PillPatch): GitUISettings {
@@ -310,7 +360,8 @@ export function patchDiff(prev: GitUISettings, patch: DiffPatch): GitUISettings 
 }
 
 /**
- * 旧版（v1/v2）设置迁入：v2 补 diff 维度;v3 补 pill.workRecord 默认(true)。
+ * 旧版（v1/v2/v3）设置迁入：v2 补 diff 维度;v3 补 pill.workRecord 默认(true);
+ * v4 补 popupOrder（缺失/损坏 → 默认序，经 normalizePopupOrder 消毒）。
  * 仅当存储信封的版本 < 当前版本时调用;各维度允许部分缺失(旧数据可能只带
  * 某个子字段),缺省子字段补默认——幂等,不丢既有偏好。
  */
@@ -318,6 +369,7 @@ export function migrateSettings(settings: {
   readonly pill?: Partial<Omit<PillSettings, 'counts'>> & { readonly counts?: Partial<CountsSettings> }
   readonly popup: PopupSettings
   readonly diff?: Partial<DiffSettings>
+  readonly popupOrder?: readonly string[]
 }): GitUISettings {
   return {
     pill: {
@@ -333,6 +385,7 @@ export function migrateSettings(settings: {
     },
     popup: settings.popup,
     diff: { ...DEFAULT_DIFF_SETTINGS, ...(settings.diff ?? {}) },
+    popupOrder: normalizePopupOrder(settings.popupOrder ?? DEFAULT_POPUP_ORDER),
   }
 }
 

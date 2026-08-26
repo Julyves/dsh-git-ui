@@ -4,8 +4,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  DEFAULT_DIFF_SETTINGS, DEFAULT_SETTINGS, MAX_RECENT_COMMITS, PRESETS, applyPreset, clampRecents,
-  migrateSettings, patchPill, patchPopup, presetOf, settingsEqual, 
+  DEFAULT_DIFF_SETTINGS, DEFAULT_POPUP_ORDER, DEFAULT_SETTINGS, MAX_RECENT_COMMITS, PRESETS, SETTINGS_SCHEMA_VERSION,
+  applyPreset, clampRecents, migrateSettings, normalizePopupOrder, patchPill, patchPopup, patchPopupOrder,
+  popupOrderEqual, presetOf, settingsEqual, settingsEqualAll,
   type GitUISettings, type SettingsPersistence, type SettingsStorageLike,
 } from '../../src/contracts/settings.ts'
 import { settingsEnvelopeSchema } from '../../src/client/settings/schema.ts'
@@ -180,7 +181,10 @@ describe('createSettingsStore（存储生命周期：host 主存储 + 迁移）'
     store.setSettings(next)
     await store.flush()
     expect(persistence.dump()).toContain('"sync":false')
-    expect(persistence.dump()).toContain('"v":3')
+    // 写盘信封携带当前 schema 版本（版本常量驱动，升版不破测试）。
+    expect(persistence.dump()).toContain(`"v":${SETTINGS_SCHEMA_VERSION}`)
+    // 旧信封（v2，无 popupOrder）迁入后补默认排序。
+    expect(store.get().popupOrder).toEqual(DEFAULT_POPUP_ORDER)
   })
 
   it('migrates the v1 legacy localStorage payload when host has no data (and writes it back)', async () => {
@@ -245,5 +249,48 @@ describe('createSettingsStore（存储生命周期：host 主存储 + 迁移）'
     const current = store.get()
     store.setSettings(current)
     expect(calls).toBe(0)
+  })
+})
+
+describe('popupOrder（弹窗区块排序维度）', () => {
+  it('normalizePopupOrder: 去重/剔未知/缺块按默认序补齐', () => {
+    expect(normalizePopupOrder(['changesList', 'statusBar'])).toEqual(['changesList', 'statusBar', 'branchCreate', 'workRecord', 'recentCommits'])
+    expect(normalizePopupOrder(['bogus', 'statusBar', 'statusBar'])).toEqual(['statusBar', 'branchCreate', 'workRecord', 'recentCommits', 'changesList'])
+    expect(normalizePopupOrder([])).toEqual(DEFAULT_POPUP_ORDER)
+  })
+
+  it('patchPopupOrder: 不可变更新 + 消毒', () => {
+    const next = patchPopupOrder(DEFAULT_SETTINGS, ['recentCommits', 'nope'])
+    expect(next.popupOrder).toEqual(['recentCommits', 'statusBar', 'branchCreate', 'workRecord', 'changesList'])
+    expect(DEFAULT_SETTINGS.popupOrder).toEqual(DEFAULT_POPUP_ORDER) // 原值不动
+  })
+
+  it('popupOrderEqual: 序即身份', () => {
+    expect(popupOrderEqual(DEFAULT_POPUP_ORDER, DEFAULT_POPUP_ORDER)).toBe(true)
+    expect(popupOrderEqual(['statusBar', 'changesList'], ['changesList', 'statusBar'])).toBe(false)
+  })
+
+  it('migrateSettings: v3 旧数据缺 popupOrder 补默认；带合法序保留；带垃圾消毒', () => {
+    const v3 = migrateSettings({ pill: DEFAULT_SETTINGS.pill, popup: DEFAULT_SETTINGS.popup })
+    expect(v3.popupOrder).toEqual(DEFAULT_POPUP_ORDER)
+    const custom = migrateSettings({ pill: DEFAULT_SETTINGS.pill, popup: DEFAULT_SETTINGS.popup, popupOrder: ['changesList', 'statusBar'] })
+    expect(custom.popupOrder).toEqual(['changesList', 'statusBar', 'branchCreate', 'workRecord', 'recentCommits'])
+    const dirty = migrateSettings({ pill: DEFAULT_SETTINGS.pill, popup: DEFAULT_SETTINGS.popup, popupOrder: ['junk'] as unknown as string[] })
+    expect(dirty.popupOrder).toEqual(DEFAULT_POPUP_ORDER)
+  })
+
+  it('独立性: 重排不打回 custom，切预设不丢排序，重置判定包含排序', () => {
+    const reordered: GitUISettings = {
+      ...DEFAULT_SETTINGS,
+      popupOrder: ['changesList' as const, ...DEFAULT_POPUP_ORDER.filter((id) => id !== 'changesList')],
+    }
+    // 重排后 pill+popup 组合未变 → 档位仍是 standard（独立维度语义）。
+    expect(presetOf(reordered)).toBe('standard')
+    // 切到 minimal 再看：用户排序原样保留。
+    const afterPreset = applyPreset(reordered, 'minimal')
+    expect(afterPreset.popupOrder).toEqual(reordered.popupOrder)
+    // 排序不同 → settingsEqualAll 为假（重置按钮可点）。
+    expect(settingsEqualAll(reordered, DEFAULT_SETTINGS)).toBe(false)
+    expect(settingsEqualAll({ ...reordered, popupOrder: DEFAULT_POPUP_ORDER }, DEFAULT_SETTINGS)).toBe(true)
   })
 })

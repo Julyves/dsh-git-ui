@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import type { JSX } from 'react'
 import { useUI } from '../../../contracts/ui-context.tsx'
 import type { GitQueryOutcome, GitView } from '../../controller.ts'
@@ -12,7 +12,8 @@ import { errorText, errorAction } from '../../error-text.ts'
 import { chipLetter, popupBadgeTexts } from '../../pill-segments.tsx'
 import { latestWorkTurn, turnEntryCounts } from '../../work-record-meta.ts'
 import { EntryRow } from '../../records/entry-row.tsx'
-import type { GitUISettings } from '../../../contracts/settings.ts'
+import type { GitUISettings, PopupBlockId } from '../../../contracts/settings.ts'
+import { normalizePopupOrder } from '../../../contracts/settings.ts'
 import type { TurnWorkRecord } from '../../../host/types.ts'
 import * as css from '../../styles.ts'
 import { timeAgo, shortTime } from '../../center/shared.ts'
@@ -130,8 +131,11 @@ export function GitPopupBody({
     void runChange({ kind: 'discard', paths: [path] }, path)
   }
 
-  return (
-    <>
+  // ── 弹窗区块（顺序可自定义） ──────────────────────────────────────────
+  // 头部/底部结构固定；五个内容区块收敛为元素常量，按 settings.popupOrder
+  // 组装（设置页「弹窗区块顺序」卡片驱动；normalizePopupOrder 消毒任意来源）。
+
+  const blockHeader: JSX.Element = (
       <header style={css.popupHeader}>
         <div style={css.popupHeaderMain}>
           <span style={s.dirty ? css.dotDirty : css.dot} aria-hidden="true" />
@@ -179,7 +183,9 @@ export function GitPopupBody({
           </button>
         </div>
       </header>
-      {settings.popup.statusBar && (
+  )
+
+  const blockStatusBar: JSX.Element | null = settings.popup.statusBar ? (
         <div style={css.popupStatusBar}>
           {([
             ['popup.staged', s.staged], ['popup.modified', s.modified], ['popup.untracked', s.untracked],
@@ -206,8 +212,10 @@ export function GitPopupBody({
             <span style={css.popupStatLabel}>{t('popup.lastCommit')}</span>
           </span>
         </div>
-      )}
-      {settings.popup.branchCreate && (
+    )
+    : null
+
+  const blockBranchCreate: JSX.Element | null = settings.popup.branchCreate ? (
         <div style={css.popupBranchOps}>
           <input
             className="dsh-git-ui__branch-input"
@@ -222,8 +230,11 @@ export function GitPopupBody({
             {t('center.createAndSwitch')}
           </Button>
         </div>
-      )}
-      {note !== null && (
+    )
+    : null
+
+  /** 操作告警条：紧跟头部常驻首位（不参与排序——告警优先可见）。 */
+  const blockNote: JSX.Element | null = note !== null ? (
         <div style={css.popupNote} role="alert">
           <span style={css.popupNoteIcon} aria-hidden="true"><AlertIcon /></span>
           <span style={css.popupNoteText} title={note.detail}>{note.text}</span>
@@ -243,8 +254,11 @@ export function GitPopupBody({
             <CloseIcon />
           </button>
         </div>
-      )}
-      {settings.pill.workRecord && records !== null && (() => {
+    )
+    : null
+
+  const blockWorkRecord: JSX.Element | null = settings.pill.workRecord && records !== null
+    ? (() => {
         const windowTurn = latestWorkTurn(records)
         const { internal, sibling, external } = turnEntryCounts(windowTurn)
         const hasAny = internal > 0 || sibling > 0 || external > 0
@@ -304,8 +318,10 @@ export function GitPopupBody({
             </button>
           </>
         )
-      })()}
-      {settings.popup.recentCommits > 0 && (
+      })()
+    : null
+
+  const blockRecentCommits: JSX.Element | null = settings.popup.recentCommits > 0 ? (
         <>
           <div style={css.sectionTitle}>{t('popup.recentCommits')}</div>
           {s.recentCommits.length === 0
@@ -337,8 +353,10 @@ export function GitPopupBody({
               </button>
             ))}
         </>
-      )}
-      {settings.popup.changesList && (
+    )
+    : null
+
+  const blockChangesList: JSX.Element | null = settings.popup.changesList ? (
         <>
           <div style={css.sectionTitle}>{t('popup.changes')}</div>
           {s.changes.length === 0
@@ -427,7 +445,25 @@ export function GitPopupBody({
               </>
             )}
         </>
-      )}
+    )
+    : null
+
+  /** 区块元素表：id → 已守卫内容（隐藏区块为 null，不占位）。 */
+  const blockNodes: Record<PopupBlockId, JSX.Element | null> = {
+    statusBar: blockStatusBar,
+    branchCreate: blockBranchCreate,
+    workRecord: blockWorkRecord,
+    recentCommits: blockRecentCommits,
+    changesList: blockChangesList,
+  }
+
+  return (
+    <>
+      {blockHeader}
+      {blockNote}
+      {normalizePopupOrder(settings.popupOrder).map((id) => (
+        <Fragment key={id}>{blockNodes[id]}</Fragment>
+      ))}
       <div style={css.footerRow}>
         <span style={css.checkedAt}>{t('popup.checkedAt').replace('{time}', new Date(s.checkedAt).toLocaleTimeString())}</span>
         <span style={css.footerActions}>

@@ -262,3 +262,158 @@ export function isAddOnlyDiff(unified: string): boolean {
   }
   return true
 }
+
+/**
+ * 判定一次差异为「纯删除」（文件删除，无任何新侧内容）——与
+ * `isAddOnlyDiff` 镜像对称：
+ *   - 元信息含 `+++ /dev/null`（删除与 /dev/null 对比）且无
+ *     `new file mode` / `rename from`；
+ *   - 不存在任何内容新增行（`+` 前缀且非 `+++` 元信息）；
+ *   - 所有 hunk 新侧均为 `+0,0`。
+ *   - 空文件删除（`deleted file mode` 但无任何 hunk/`+++` 行）同样命中
+ *     ——git 对空文件删除只输出元信息头，无 hunk。
+ *
+ * 满足时 UI 无需并排对照——直接展示被删文件的完整内容（单栏全宽，
+ * 与纯新增同形）。
+ */
+export function isDeleteOnlyDiff(unified: string): boolean {
+  if (unified === '') return false
+  let sawNullTarget = false
+  let sawDeletedMode = false
+  for (const line of unified.split('\n')) {
+    if (line.startsWith('new file mode') || line.startsWith('rename from') || line.startsWith('rename to')) return false
+    if (line.startsWith('deleted file mode')) {
+      sawDeletedMode = true
+      continue
+    }
+    if (line.startsWith('+++ /dev/null')) {
+      sawNullTarget = true
+      continue
+    }
+    if (line.startsWith('+') && !line.startsWith('+++')) return false
+  }
+  if (!sawNullTarget && !sawDeletedMode) return false
+  // hunk 校验仅在存在 +++ /dev/null 时有意义（空文件删除无 hunk）。
+  if (sawNullTarget) {
+    for (const match of unified.matchAll(/^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/gm)) {
+      const newStart = match[3]
+      const newCount = match[4]
+      if (newStart !== '0' || newCount !== '0') return false
+    }
+  }
+  return true
+}
+
+/**
+ * 从纯删除差异中提取被删文件的完整内容（与 extractAddedContent 镜像：
+ * 按 @@ 头旧侧配额消费 `-` 行；`\ No newline` 标记与元信息行跳过）。
+ * 仅对 `isDeleteOnlyDiff` 成立的文本调用；空文件删除返回 ''。
+ */
+export function extractDeletedContent(unified: string): string {
+  const out: string[] = []
+  let oldLeft = 0
+  for (const line of unified.split('\n')) {
+    if (line.startsWith('@@')) {
+      const m = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line)
+      oldLeft = m === null ? 0 : m[2] !== undefined ? Number(m[2]) : 1
+      continue
+    }
+    if (line.startsWith('\\')) continue
+    if (oldLeft > 0 && line.startsWith('-')) {
+      out.push(line.slice(1))
+      oldLeft -= 1
+    }
+  }
+  return out.join('\n')
+}
+
+// ── 单流视图（仅前 / 仅后） ────────────────────────────────────────────────
+
+/** 单流渲染行（仅前/仅后视图）：kind 用于着色（del 红 / add 绿 / 上下文无）。 */
+export interface StreamLine {
+  readonly num: number | null
+  readonly text: string
+  readonly kind: 'context' | 'add' | 'del'
+}
+
+/**
+ * 由对照行序列构建单侧内容流：过滤掉该侧为空位的行（对侧独有变更），
+ * 保留本侧的上下文/删除（或上下文/新增）行——「只看变更前/后」的完整
+ * 单栏内容，无空档。纯函数，可单测。
+ */
+export function buildStream(rows: readonly SideBySideRow[], side: 'left' | 'right'): readonly StreamLine[] {
+  const out: StreamLine[] = []
+  for (const row of rows) {
+    const cell = side === 'left' ? row.left : row.right
+    if (cell.kind === 'empty') continue
+    out.push({ num: cell.num, text: cell.text, kind: cell.kind })
+  }
+  return out
+}
+
+/** 单流折叠块（与 DiffFoldBlock 同构，items 为单流行）。 */
+export interface StreamFoldBlock {
+  readonly kind: 'fold'
+  readonly count: number
+  readonly lines: readonly StreamLine[]
+}
+
+/** 单流普通行块。 */
+export interface StreamRowBlock {
+  readonly kind: 'row'
+  readonly line: StreamLine
+}
+
+/** 单流渲染块：普通行或折叠块（按 kind 判别）。 */
+export type StreamBlock = StreamFoldBlock | StreamRowBlock
+
+/**
+ * 折叠单流中的连续上下文行（与 foldContext 同算法、按行类型独立实现——
+ * 单流中上下文段可能因对侧行剔除而合并，须在过滤后的流上独立折叠，
+ * 不能复用对照行的折叠坐标）。threshold < 1 视为不折叠。纯函数，可单测。
+ */
+export function foldStream(lines: readonly StreamLine[], threshold = 3): readonly StreamBlock[] {
+  if (threshold < 1) return lines.map((line) => ({ kind: 'row' as const, line }))
+  const blocks: StreamBlock[] = []
+  let i = 0
+  while (i < lines.length) {
+    if (lines[i]!.kind !== 'context') {
+      blocks.push({ kind: 'row', line: lines[i]! })
+      i += 1
+      continue
+    }
+    let j = i
+    while (j < lines.length && lines[j]!.kind === 'context') j += 1
+    const run = lines.slice(i, j)
+    if (run.length > threshold) {
+      blocks.push({ kind: 'fold', count: run.length, lines: run })
+    } else {
+      for (const line of run) blocks.push({ kind: 'row', line })
+    }
+    i = j
+  }
+  return blocks
+}
+
+/**
+ * 单流折叠标记的可见流坐标（与 foldMarkerLines 同算法）。纯函数，可单测。
+ */
+export function streamMarkerLines(
+  blocks: readonly StreamBlock[],
+  expanded: ReadonlySet<number>,
+): readonly { readonly index: number; readonly line: number; readonly count: number }[] {
+  const out: Array<{ index: number; line: number; count: number }> = []
+  let visible = 0
+  blocks.forEach((block, index) => {
+    if (block.kind === 'fold') {
+      if (expanded.has(index)) {
+        visible += block.lines.length
+      } else {
+        out.push({ index, line: visible, count: block.lines.length })
+      }
+    } else {
+      visible += 1
+    }
+  })
+  return out
+}

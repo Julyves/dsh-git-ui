@@ -119,6 +119,40 @@ export const settingsRowIcon: CSSProperties = {
 }
 
 
+// ── 弹窗区块排序卡片 ───────────────────────────────────────────────────────
+
+/** 序号槽：定宽右对齐（1–5 的当前位置一目了然，交换后即时反馈）。 */
+export const settingsOrderIndex: CSSProperties = {
+  flex: 'none',
+  width: 14,
+  textAlign: 'right',
+  fontSize: 11,
+  fontWeight: 600,
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontVariantNumeric: 'tabular-nums',
+}
+
+/** 「已隐藏」标注：弱化胶囊——隐藏区块仍在序列中占位，开启后按序出现。 */
+export const settingsOrderHidden: CSSProperties = {
+  display: 'inline-block',
+  marginTop: 2,
+  padding: '0 6px',
+  borderRadius: 8,
+  fontSize: 10,
+  lineHeight: '14px',
+  color: 'var(--dsw-alias-label-tertiary)',
+  background: 'var(--dsw-alias-bg-layer-2)',
+  boxShadow: 'inset 0 0 0 1px var(--dsw-alias-border-l2)',
+}
+
+/** 上移/下移箭头字形（icon-btn 内核）。 */
+export const settingsOrderArrow: CSSProperties = {
+  fontSize: 12,
+  lineHeight: 1,
+  fontWeight: 600,
+}
+
+
 export const settingsRowBody: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',

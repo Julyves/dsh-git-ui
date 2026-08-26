@@ -4,18 +4,19 @@ import { useUI } from '../../../contracts/ui-context.tsx'
 import type { GitAction, GitChange, GitQueryRequest, GitSnapshot } from '../../../host/types.ts'
 import type { GitQueryOutcome } from '../../controller.ts'
 import { diffBaseOf, reconcileDiffSelection, stepDiffSelection, type DiffSelection } from '../../changes-diff.ts'
-import { buildSideBySide, extractAddedContent, isAddOnlyDiff, isBinaryDiff, summarizeChanges } from '../../side-by-side.ts'
+import { buildSideBySide, extractAddedContent, extractDeletedContent, isAddOnlyDiff, isBinaryDiff, isDeleteOnlyDiff, summarizeChanges } from '../../side-by-side.ts'
 import { splitChangePath } from '../../file-tree.ts'
-import { NewFileView } from '../../new-file-view.tsx'
+import { SingleFileView } from '../../single-file-view.tsx'
 import { useSettings } from '../../settings/use-settings.ts'
+import { SegmentedControl } from '../../settings/controls.tsx'
 import { CheckIcon, CloseIcon, DiffIcon, NextIcon, PrevIcon } from '../../icons.tsx'
 import type { GitKey } from '../../locales.ts'
 import * as css from '../../styles.ts'
 import { ChangeGroupHeader } from './ChangeGroupHeader.tsx'
 import { ChangeRow } from './ChangeRow.tsx'
-import { DiffSideBySide } from './DiffSideBySide.tsx'
+import { DiffSideBySide, type DiffViewMode } from './DiffSideBySide.tsx'
 import { Splitter } from '../Splitter.tsx'
-import { byPath, clampNum, groupKeyOfChange, type ChangeGroup, type ChangeGroupKey } from '../shared.ts'
+import { byPath, clampDiffRatio, clampNum, DIFF_RATIO_DEFAULT, groupKeyOfChange, type ChangeGroup, type ChangeGroupKey } from '../shared.ts'
 
 
 export function ChangesTab({
@@ -43,6 +44,11 @@ export function ChangesTab({
   const [diffLoading, setDiffLoading] = useState(false)
   /** diff 查询失败态（C4）：与「真的无差异」区分——查询失败不再误显「无文件变更」。 */
   const [diffFailed, setDiffFailed] = useState(false)
+  /** 对照视图模式（对照 / 仅变更前 / 仅变更后）：会话内粘滞——切换文件保持
+   *  上次选择（IDEA 行为），Git 中心关闭后随组件卸载复位。 */
+  const [diffMode, setDiffMode] = useState<DiffViewMode>('split')
+  /** split 模式左列占比（0–1，钳制区间见 clampDiffRatio）：同样会话内粘滞。 */
+  const [diffRatio, setDiffRatio] = useState(DIFF_RATIO_DEFAULT)
   const diffSeq = useRef(0)
 
   useEffect(() => {
@@ -220,6 +226,26 @@ export function ChangesTab({
     return !isBinaryDiff(diffText) && isAddOnlyDiff(diffText)
   }, [diffText, diffSel, snapshot.changes])
 
+  /**
+   * 纯删除判定（被删文件单栏展示，与新增对称）：+++ /dev/null + 全删行
+   * （或空文件删除——仅有元信息头）。被删内容无需对照：单栏全宽展示
+   * 「删除前的完整文件」，让用户完整阅读被删了什么。
+   */
+  const isDeletedFile = useMemo(() => {
+    if (diffText === null || diffText === '') return false
+    return !isBinaryDiff(diffText) && isDeleteOnlyDiff(diffText)
+  }, [diffText])
+
+  /** 视图模式切换只在真实并排对照时出现——新增/删除/二进制无前后对照语义。 */
+  const showModeToggle = diffText !== null && !diffLoading && !diffFailed
+    && !isNewFile && !isDeletedFile && !isBinaryDiff(diffText)
+
+  const diffModeOptions = [
+    { id: 'split' as const, label: t('diff.view.split') },
+    { id: 'before' as const, label: t('diff.view.before') },
+    { id: 'after' as const, label: t('diff.view.after') },
+  ]
+
   return (
     <div style={css.changesLayout}>
       <div style={{ ...css.changesLeft, width: leftW }}>
@@ -359,12 +385,24 @@ export function ChangesTab({
                 {isNewFile && (
                   <span style={{ ...css.diffBaseBadge, ...css.diffNewBadge }}>{t('diff.badgeNew')}</span>
                 )}
+                {isDeletedFile && (
+                  <span style={{ ...css.diffBaseBadge, ...css.diffDelBadge }}>{t('diff.badgeDeleted')}</span>
+                )}
                 {diffSummary !== null && (diffSummary.add > 0 || diffSummary.del > 0) && (
                   <span style={css.diffSummary}>
                     {diffSummary.add > 0 && <span style={css.diffSummaryAdd}>+{diffSummary.add}</span>}
                     {diffSummary.del > 0 && <span style={css.diffSummaryDel}>−{diffSummary.del}</span>}
                   </span>
                 )}
+                {showModeToggle && (
+                  <SegmentedControl
+                    value={diffMode}
+                    options={diffModeOptions}
+                    ariaLabel={t('diff.view')}
+                    onChange={setDiffMode}
+                  />
+                )}
+                <span style={{ flex: 1 }} />
                 <button
                   type="button"
                   className="dsh-git-ui__icon-btn"
@@ -406,9 +444,20 @@ export function ChangesTab({
                     ? <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
                     : isNewFile
                     ? (
-                      <NewFileView
+                      <SingleFileView
                         key={diffSel.path}
                         content={diffText === '' ? '' : extractAddedContent(diffText)}
+                        path={diffSel.path}
+                        fontSize={settings.diff.fontSize}
+                        highlight={settings.diff.syntaxHighlight}
+                        t={t}
+                      />
+                    )
+                    : isDeletedFile
+                    ? (
+                      <SingleFileView
+                        key={diffSel.path}
+                        content={extractDeletedContent(diffText)}
                         path={diffSel.path}
                         fontSize={settings.diff.fontSize}
                         highlight={settings.diff.syntaxHighlight}
@@ -421,6 +470,9 @@ export function ChangesTab({
                         text={diffText}
                         path={diffSel.path}
                         diff={settings.diff}
+                        mode={diffMode}
+                        leftRatio={diffRatio}
+                        onRatioChange={(next) => setDiffRatio(clampDiffRatio(next))}
                         t={t}
                       />
                     )}

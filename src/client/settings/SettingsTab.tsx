@@ -15,8 +15,8 @@ import { useEffect, useState } from 'react'
 import type { JSX } from 'react'
 import {
   MAX_DIFF_FONT_SIZE, MAX_RECENT_COMMITS, MIN_DIFF_FONT_SIZE, PRESETS,
-  applyPreset, patchDiff, patchPill, patchPopup, presetOf, settingsEqualAll,
-  type DiffPatch, type GitUISettings, type PillPatch, type PopupPatch, type PresetId,
+  applyPreset, normalizePopupOrder, patchDiff, patchPill, patchPopup, patchPopupOrder, presetOf, settingsEqualAll,
+  type DiffPatch, type GitUISettings, type PillPatch, type PopupBlockId, type PopupPatch, type PresetId,
 } from '../../contracts/settings.ts'
 import { settingsStore } from './store.ts'
 import { useSettings } from './use-settings.ts'
@@ -100,6 +100,39 @@ function pillFullyOff(settings: GitUISettings): boolean {
     && !p.counts.staged && !p.counts.modified && !p.counts.untracked
 }
 
+/**
+ * 弹窗可排序区块元数据：图标 / 名称 / 显隐判定（workRecord 由 pill 开关
+ * 治理——排序与显隐正交，隐藏区块在排序序列中标注「已隐藏」）。
+ * 与 GitPopupBody 的 blockNodes 键集一致（PopupBlockId 契约承载）。
+ */
+const POPUP_BLOCK_META: Record<PopupBlockId, { readonly labelKey: GitKey; readonly icon: JSX.Element | null; readonly visible: (s: GitUISettings) => boolean }> = {
+  statusBar: {
+    labelKey: 'settings.statusBar',
+    icon: <span style={css.settingsCountGlyph} aria-hidden="true">123</span>,
+    visible: (s) => s.popup.statusBar,
+  },
+  branchCreate: {
+    labelKey: 'settings.branchCreate',
+    icon: <span style={css.settingsCountGlyph} aria-hidden="true">+</span>,
+    visible: (s) => s.popup.branchCreate,
+  },
+  workRecord: {
+    labelKey: 'settings.workRecord',
+    icon: <RecordIcon />,
+    visible: (s) => s.pill.workRecord,
+  },
+  recentCommits: {
+    labelKey: 'settings.recentCommits',
+    icon: <span style={css.settingsCountGlyph} aria-hidden="true">≋</span>,
+    visible: (s) => s.popup.recentCommits > 0,
+  },
+  changesList: {
+    labelKey: 'settings.changesList',
+    icon: <DiffIcon />,
+    visible: (s) => s.popup.changesList,
+  },
+}
+
 export function SettingsTab({
   t, notify,
 }: {
@@ -123,6 +156,20 @@ export function SettingsTab({
   const applyPill = (patch: PillPatch): void => settingsStore.setSettings(patchPill(settings, patch))
   const applyPopup = (patch: PopupPatch): void => settingsStore.setSettings(patchPopup(settings, patch))
   const applyDiff = (patch: DiffPatch): void => settingsStore.setSettings(patchDiff(settings, patch))
+
+  /** 弹窗区块排序（消毒后序列；存储侧已归一，此处防御任意来源）。 */
+  const popupOrder = normalizePopupOrder(settings.popupOrder)
+
+  /** 上移/下移一位（越界禁用由按钮 disabled 保证；patch 内再消毒）。 */
+  const movePopupBlock = (from: number, delta: -1 | 1): void => {
+    const to = from + delta
+    if (to < 0 || to >= popupOrder.length) return
+    const next = [...popupOrder]
+    const [item] = next.splice(from, 1)
+    if (item === undefined) return
+    next.splice(to, 0, item)
+    settingsStore.setSettings(patchPopupOrder(settings, next))
+  }
 
   const toggleCount = (key: 'staged' | 'modified' | 'untracked'): void => {
     applyPill({ counts: { [key]: !settings.pill.counts[key] } })
@@ -248,6 +295,52 @@ export function SettingsTab({
           desc={t('settings.changesList.desc')}
           control={<Switch checked={settings.popup.changesList} label={t('settings.changesList')} onChange={(next) => applyPopup({ changesList: next })} />}
         />
+      </section>
+
+      <section style={css.settingsCard}>
+        <div style={css.settingsCardHead}>
+          <span style={css.settingsCardTitle}>{t('settings.group.popupOrder')}</span>
+          <span style={css.settingsCardNote}>{t('settings.popupOrder.note')}</span>
+        </div>
+        {popupOrder.map((id, index) => {
+          // 键域与 popupOrder 同源（PopupBlockId 契约），索引必命中。
+          const meta = POPUP_BLOCK_META[id]!
+          const visible = meta.visible(settings)
+          return (
+            <div key={id} className="dsh-git-ui__row" style={css.settingsRow}>
+              <span style={css.settingsOrderIndex} aria-hidden="true">{index + 1}</span>
+              {meta.icon !== null && <span style={css.settingsRowIcon} aria-hidden="true">{meta.icon}</span>}
+              <span style={css.settingsRowBody}>
+                <span style={css.settingsRowName}>{t(meta.labelKey)}</span>
+                {!visible && <span style={css.settingsOrderHidden}>{t('settings.popupOrder.hidden')}</span>}
+              </span>
+              <span style={css.settingsRowControl}>
+                <button
+                  type="button"
+                  className="dsh-git-ui__icon-btn"
+                  style={css.rowIconButton}
+                  title={t('settings.popupOrder.up')}
+                  aria-label={`${t(meta.labelKey)} — ${t('settings.popupOrder.up')}`}
+                  disabled={index === 0}
+                  onClick={() => movePopupBlock(index, -1)}
+                >
+                  <span style={css.settingsOrderArrow} aria-hidden="true">↑</span>
+                </button>
+                <button
+                  type="button"
+                  className="dsh-git-ui__icon-btn"
+                  style={css.rowIconButton}
+                  title={t('settings.popupOrder.down')}
+                  aria-label={`${t(meta.labelKey)} — ${t('settings.popupOrder.down')}`}
+                  disabled={index === popupOrder.length - 1}
+                  onClick={() => movePopupBlock(index, 1)}
+                >
+                  <span style={css.settingsOrderArrow} aria-hidden="true">↓</span>
+                </button>
+              </span>
+            </div>
+          )
+        })}
       </section>
 
       <section style={css.settingsCard}>

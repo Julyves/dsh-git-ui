@@ -44,14 +44,15 @@ export const diffSettingsSchema = z.object({
 })
 
 /**
- * 持久化设置本体（宽松形态）：diff 维度可选——旧版（v1）数据缺该字段，
- * 读取后统一经 migrateSettings 补齐默认值（幂等）。版本判定由解析方
- * （store.parseSettings）按信封 `v` 字段执行。
+ * 持久化设置本体（宽松形态）：diff / popupOrder 维度可选——旧版（v3 及
+ * 之前）数据缺该字段，读取后统一经 migrateSettings 补齐默认值（幂等）。
+ * 版本判定由解析方（store.parseSettings）按信封 `v` 字段执行。
  */
 export const gitUISettingsSchema = z.object({
   pill: pillSettingsSchema,
   popup: popupSettingsSchema,
   diff: diffSettingsSchema.optional(),
+  popupOrder: z.array(z.string()).optional(),
 })
 
 /** 持久化信封：版本号 + 设置本体（版本不匹配时回退默认，为将来迁移留门）。 */

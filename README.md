@@ -66,7 +66,7 @@ The turn work-record session timeline — see [Turn work records](#turn-work-rec
 
 #### Settings
 
-Configurable pill information components and diff-viewer options: a live preview, four display presets (minimal / standard / full / custom — purely derived, so any manual tweak snaps back when it matches a preset again), and per-component switches (status dot, branch name, the three change-count badges, ahead/behind; plus popup blocks: repository path, status bar, branch switcher, new-branch row, recent-commit count, changed-file list). Also reachable via the gear icon in the popup header:
+Configurable pill information components and diff-viewer options: a live preview, four display presets (minimal / standard / full / custom — purely derived, so any manual tweak snaps back when it matches a preset again), and per-component switches (status dot, branch name, the three change-count badges, ahead/behind; plus popup blocks: repository path, status bar, branch switcher, new-branch row, recent-commit count, changed-file list). **Popup section order**: reorder the popup's content sections with up/down arrows (hidden sections stay in the sequence and appear at their position when enabled; ordering is independent of the display presets). A diff-viewer group (code font size, syntax highlighting, context folding) follows. Also reachable via the gear icon in the popup header:
 
 <img src="docs/screenshots/06-Git中心管理插件设置.png" alt="Git center — Settings tab (display presets and switches)" width="720">
 
@@ -87,9 +87,10 @@ How it works: the host folds the session event log (`turn/start` · `turn/end` �
 
 Side-by-side diff in the Changes tab:
 
-- **New files shown directly**: a pure-add diff (`--- /dev/null` shape) renders the created file's full content in a single column with line numbers instead of an empty comparison; 0-byte files show "file is empty".
+- **View modes**: a segmented control in the diff toolbar switches between **Split** (before/after side by side — the default), **Before** and **After** — the single-side modes render the full pre- or post-change content in one full-width column with no gaps. In split mode the divider between the columns is draggable to adjust the ratio (20%–80%); the choice stays for the session.
+- **New / deleted files shown directly**: a pure-add diff (`--- /dev/null` shape) renders the created file's full content in a single column with line numbers instead of an empty comparison — and a pure-delete diff (`+++ /dev/null`) symmetrically renders the deleted file's full content with a "Deleted" badge; 0-byte files show "file is empty".
 - **Syntax highlighting**: keyword / string / comment / number coloring per file type; the whole file is tokenized once and rendered line-by-line, so multi-line comments and strings stay correct. Colors reuse the host theme tokens (auto light/dark); the highlight switch and code font size are configurable.
-- **Context folding**: runs of 12+ unchanged lines collapse into an expandable "… N unchanged lines" strip (click to expand/collapse); can be disabled in settings.
+- **Context folding**: runs of 12+ unchanged lines collapse into an expandable "… N unchanged lines" strip (click to expand/collapse); can be disabled in settings. Folding works in all view modes (coordinates are computed per stream).
 - **Settings**: code font size (10–16px), syntax-highlight switch and context-folding switch live in a diff-viewer group, independent of the display presets.
 
 ### Fresh data & graceful degradation

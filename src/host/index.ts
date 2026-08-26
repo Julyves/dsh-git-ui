@@ -448,6 +448,7 @@ export class GitStatusService extends TypertRemoteService {
           pill: r.pill as Parameters<typeof migrateSettings>[0]['pill'],
           popup: (r.popup as PopupSettings) ?? DEFAULT_SETTINGS.popup,
           diff: r.diff as Parameters<typeof migrateSettings>[0]['diff'],
+          popupOrder: r.popupOrder as readonly string[] | undefined,
         }),
       }
     } catch {

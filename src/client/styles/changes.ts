@@ -90,12 +90,6 @@ export const sbsCol: CSSProperties = {
 }
 
 
-/** 右列：左侧发丝分隔线（取代旧 sbsCellRight 的单元格边框）。 */
-export const sbsColRight: CSSProperties = {
-  borderLeft: '1px solid var(--dsw-alias-border-l2)',
-}
-
-
 /**
  * 列内容包装：width:max-content 使长行撑宽触发本列横向滚动；
  * min-width:100% 使短行背景填满列宽。两列独立，互不重叠。
@@ -282,5 +276,12 @@ export const diffFoldOverlay: CSSProperties = {
 export const diffNewBadge: CSSProperties = {
   color: 'var(--dsw-alias-state-success-primary)',
   borderColor: 'var(--dsw-alias-state-success-primary)',
+}
+
+
+/** 「已删除」徽标（纯删除文件）：错误语义色，与新增徽标对称。 */
+export const diffDelBadge: CSSProperties = {
+  color: 'var(--dsw-alias-state-error-primary)',
+  borderColor: 'var(--dsw-alias-state-error-primary)',
 }
 

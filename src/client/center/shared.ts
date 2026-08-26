@@ -42,6 +42,20 @@ export const CHIP_LETTERS: Record<string, string> = {
 /** 历史列表分页大小。 */
 export const HISTORY_PAGE = 300
 
+// ── 差异对照视图占比（split 模式双列拖拽边界） ─────────────────────────────
+/** 左列最小占比（20%——再窄则行号槽 + 代码不可读）。 */
+export const DIFF_RATIO_MIN = 0.2
+/** 左列最大占比（80%——右列对称下限）。 */
+export const DIFF_RATIO_MAX = 0.8
+/** 占比默认值（等分）。 */
+export const DIFF_RATIO_DEFAULT = 0.5
+
+/** 钳制差异对照占比到合法区间；非有限值回退默认（等分）。 */
+export function clampDiffRatio(value: number): number {
+  if (!Number.isFinite(value)) return DIFF_RATIO_DEFAULT
+  return Math.min(DIFF_RATIO_MAX, Math.max(DIFF_RATIO_MIN, value))
+}
+
 /** IDEA 式时间：不足 60 分钟「x 分钟前」、今天/昨天 HH:mm，其余 Y/M/D HH:mm。 */
 export function timeAgo(iso: string, now: number, t: (key: GitKey) => string): string {
   return formatWhen(iso, now, {

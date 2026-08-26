@@ -2,7 +2,7 @@
  * 左右对照构建测试：上下文对齐、删增配对、空位补齐、行号起算、全增文件。
  */
 import { describe, expect, it } from 'vitest'
-import { buildSideBySide, capSideBySideRows, extractAddedContent, foldContext, foldMarkerLines, isAddOnlyDiff, isBinaryDiff, summarizeChanges, type DiffBlock, type SideBySideRow } from '../../src/client/side-by-side.ts'
+import { buildSideBySide, buildStream, capSideBySideRows, extractAddedContent, extractDeletedContent, foldContext, foldMarkerLines, foldStream, isAddOnlyDiff, isBinaryDiff, isDeleteOnlyDiff, streamMarkerLines, summarizeChanges, type DiffBlock, type SideBySideRow } from '../../src/client/side-by-side.ts'
 
 describe('buildSideBySide', () => {
   it('returns an empty list for empty input', () => {
@@ -389,5 +389,172 @@ describe('hunk 配额感知解析（C2 回归：++/-- 前缀内容行不得被�
     ].join('\n')
     expect(isAddOnlyDiff(NEW_FILE)).toBe(true)
     expect(extractAddedContent(NEW_FILE)).toBe('a\n++i;\n++ space line\nb')
+  })
+})
+
+describe('isDeleteOnlyDiff（纯删除判定）', () => {
+  it('detects a deleted file diff (+++ /dev/null + all-minus rows)', () => {
+    const text = [
+      'diff --git a/gone.txt b/gone.txt',
+      'deleted file mode 100644',
+      'index 111..000',
+      '--- a/gone.txt',
+      '+++ /dev/null',
+      '@@ -1,2 +0,0 @@',
+      '-one',
+      '-two',
+    ].join('\n')
+    expect(isDeleteOnlyDiff(text)).toBe(true)
+  })
+
+  it('rejects ordinary modifications (has + content lines)', () => {
+    const text = [
+      '--- a/x.txt',
+      '+++ b/x.txt',
+      '@@ -1,1 +1,1 @@',
+      '-old',
+      '+new',
+    ].join('\n')
+    expect(isDeleteOnlyDiff(text)).toBe(false)
+  })
+
+  it('rejects pure additions and renames', () => {
+    const added = [
+      '--- /dev/null',
+      '+++ b/new.txt',
+      '@@ -0,0 +1,1 @@',
+      '+hello',
+    ].join('\n')
+    expect(isDeleteOnlyDiff(added)).toBe(false)
+    const renamed = [
+      'diff --git a/a.txt b/b.txt',
+      'rename from a.txt',
+      'rename to b.txt',
+    ].join('\n')
+    expect(isDeleteOnlyDiff(renamed)).toBe(false)
+  })
+
+  it('detects an empty-file deletion (header only, no hunks)', () => {
+    // git 对空文件删除只输出元信息头（无 ---/+++/@@），同样按删除分流。
+    const text = [
+      'diff --git a/empty.txt b/empty.txt',
+      'deleted file mode 100644',
+      'index e69de29..0000000',
+    ].join('\n')
+    expect(isDeleteOnlyDiff(text)).toBe(true)
+  })
+
+  it('returns false for empty input', () => {
+    expect(isDeleteOnlyDiff('')).toBe(false)
+  })
+})
+
+describe('extractDeletedContent（被删内容提取）', () => {
+  it('extracts the full pre-delete content (old-side quota aware)', () => {
+    const text = [
+      'diff --git a/gone.txt b/gone.txt',
+      'deleted file mode 100644',
+      '--- a/gone.txt',
+      '+++ /dev/null',
+      '@@ -1,3 +0,0 @@',
+      '-one',
+      '-two',
+      '-three',
+    ].join('\n')
+    expect(extractDeletedContent(text)).toBe('one\ntwo\nthree')
+  })
+
+  it('skips the no-newline marker and metadata lines', () => {
+    const text = [
+      '--- a/gone.txt',
+      '+++ /dev/null',
+      '@@ -1,2 +0,0 @@',
+      '-last',
+      '\\ No newline at end of file',
+      '-extra?',
+    ].join('\n')
+    // 配额 2：前两行 - 内容被消费；`\\` 标记跳过不占额。
+    expect(extractDeletedContent(text)).toBe('last\nextra?')
+  })
+
+  it('returns empty string for an empty-file deletion', () => {
+    const text = [
+      'diff --git a/e.txt b/e.txt',
+      'deleted file mode 100644',
+    ].join('\n')
+    expect(extractDeletedContent(text)).toBe('')
+  })
+})
+
+describe('buildStream（单侧内容流）', () => {
+  const rows = buildSideBySide([
+    '@@ -1,4 +1,4 @@',
+    ' ctx',
+    '-del1',
+    '-del2',
+    '+add1',
+    ' tail',
+  ].join('\n'))
+
+  it('before stream keeps context + del lines with old-side numbers', () => {
+    expect(buildStream(rows, 'left')).toEqual([
+      { num: 1, text: 'ctx', kind: 'context' },
+      { num: 2, text: 'del1', kind: 'del' },
+      { num: 3, text: 'del2', kind: 'del' },
+      { num: 4, text: 'tail', kind: 'context' },
+    ])
+  })
+
+  it('after stream keeps context + add lines with new-side numbers (no gaps)', () => {
+    expect(buildStream(rows, 'right')).toEqual([
+      { num: 1, text: 'ctx', kind: 'context' },
+      { num: 2, text: 'add1', kind: 'add' },
+      { num: 3, text: 'tail', kind: 'context' },
+    ])
+  })
+})
+
+describe('foldStream / streamMarkerLines（单流折叠）', () => {
+  it('folds long context runs and marks their visible-stream position', () => {
+    const lines = [
+      { num: 1, text: 'a', kind: 'context' as const },
+      { num: 2, text: 'b', kind: 'context' as const },
+      { num: 3, text: 'c', kind: 'context' as const },
+      { num: 4, text: 'd', kind: 'context' as const },
+      { num: 5, text: '-x', kind: 'del' as const },
+    ]
+    const blocks = foldStream(lines, 3)
+    expect(blocks).toEqual([
+      { kind: 'fold', count: 4, lines: lines.slice(0, 4) },
+      { kind: 'row', line: lines[4] },
+    ])
+    expect(streamMarkerLines(blocks, new Set())).toEqual([{ index: 0, line: 0, count: 4 }])
+
+    // 展开后标记消失、全部行可见。
+    expect(streamMarkerLines(blocks, new Set([0]))).toEqual([])
+  })
+
+  it('threshold < 1 disables folding', () => {
+    const lines = [{ num: 1, text: 'a', kind: 'context' as const }]
+    expect(foldStream(lines, 0)).toEqual([{ kind: 'row', line: lines[0] }])
+  })
+
+  it('merged context runs across removed opposite-side lines fold together', () => {
+    // 变更行剔除后，两段上下文在流中合并为一段长 run —— 单流须独立折叠。
+    const rows = buildSideBySide([
+      '@@ -1,7 +1,6 @@',
+      ' c1',
+      ' c2',
+      '-gone',
+      ' c3',
+      ' c4',
+      ' c5',
+      ' c6',
+    ].join('\n'))
+    const stream = buildStream(rows, 'right')
+    expect(stream.every((l) => l.kind === 'context')).toBe(true)
+    expect(stream).toHaveLength(6)
+    const blocks = foldStream(stream, 3)
+    expect(blocks).toEqual([{ kind: 'fold', count: 6, lines: stream }])
   })
 })
