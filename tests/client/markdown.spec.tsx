@@ -154,3 +154,73 @@ describe('renderedSourceOf — diff → 变更后完整文本', () => {
     expect(renderedSourceOf('')).toBe('')
   })
 })
+
+describe('MarkdownView — 原始 HTML img（白名单标签）', () => {
+  it('README 形态的 <img src alt width> 渲染为真实图片元素', () => {
+    const html = render('<img src="docs/screenshots/01-面板内容展示.png" alt="会话头部分支 Pill 与展开的详情面板" width="720">')
+    expect(html).toContain('<img')
+    expect(html).toContain('src="docs/screenshots/01-面板内容展示.png"')
+    expect(html).toContain('alt="会话头部分支 Pill 与展开的详情面板"')
+    expect(html).toContain('width:720')
+    expect(html).toContain('loading="lazy"')
+  })
+
+  it('图片标记不再按原文转义呈现', () => {
+    const html = render('<img src="a.png" alt="x">')
+    expect(html).not.toContain('&lt;img')
+  })
+
+  it('危险 scheme 的 img src 拒绝（不产 img 元素）', () => {
+    const html = render('<img src="javascript:alert(1)" alt="x">')
+    expect(html).not.toContain('<img')
+  })
+
+  it('无 src 的 img 标签按原文呈现（不猜测）', () => {
+    const html = render('<img alt="x">')
+    expect(html).not.toContain('<img')
+    expect(html).toContain('&lt;img')
+  })
+})
+
+describe('MarkdownView — mermaid 围栏块', () => {
+  const FLOW = '```mermaid\ngraph TD\n  A[开始] --> B{判断}\n  B -->|是| C[执行]\n  B -->|否| D[结束]\n```'
+
+  it('flowchart 默认渲染态：输出 SVG（节点/边标签在场）', () => {
+    const html = render(FLOW)
+    expect(html).toContain('<svg')
+    expect(html).toContain('开始')
+    expect(html).toContain('判断')
+    expect(html).toContain('是')
+  })
+
+  it('左上角渲染/源码切换开关在场', () => {
+    const html = render(FLOW)
+    expect(html).toContain(zh['diff.view.rendered'])
+    expect(html).toContain(zh['diff.mermaid.source'])
+    expect(html).toContain('aria-pressed="true"')
+  })
+
+  it('sequenceDiagram 渲染：参与者与消息在场', () => {
+    const html = render('```mermaid\nsequenceDiagram\n  participant U as 用户\n  participant P as Pill\n  U->>P: 点击\n  P-->>U: 弹窗\n```')
+    expect(html).toContain('<svg')
+    expect(html).toContain('用户')
+    expect(html).toContain('点击')
+  })
+
+  it('解析失败：块中心提示 + 原因，开关仍可切源码', () => {
+    const html = render('```mermaid\ngraph TD\n  A ==>?? B\n```')
+    expect(html).toContain(zh['diff.mermaid.error'])
+    expect(html).toContain(zh['diff.mermaid.source'])
+  })
+
+  it('不支持的图形类型：中心提示（诚实降级）', () => {
+    const html = render('```mermaid\npie title 占比\n  "A": 60\n```')
+    expect(html).toContain(zh['diff.mermaid.error'])
+  })
+
+  it('非 mermaid 代码块无切换开关（保持既有形态）', () => {
+    const html = render('```ts\nconst a = 1\n```')
+    expect(html).toContain('<pre')
+    expect(html).not.toContain(zh['diff.mermaid.source'])
+  })
+})

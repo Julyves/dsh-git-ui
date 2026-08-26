@@ -257,7 +257,8 @@ export function GitPopupBody({
     )
     : null
 
-  const blockWorkRecord: JSX.Element | null = settings.pill.workRecord && records !== null
+  /** 工作记录区块：显隐由 popup.workRecord 独立治理（v5 起与 pill 徽章分离）。 */
+  const blockWorkRecord: JSX.Element | null = settings.popup.workRecord && records !== null
     ? (() => {
         const windowTurn = latestWorkTurn(records)
         const { internal, sibling, external } = turnEntryCounts(windowTurn)

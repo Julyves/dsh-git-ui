@@ -95,10 +95,17 @@ describe('GitPopupBody — 区块按序渲染', () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions)
   })
 
-  it('workRecord 随 pill 开关隐藏（排序与显隐正交）', () => {
-    const s: Partial<GitUISettings> = { pill: { ...DEFAULT_SETTINGS.pill, workRecord: false } }
+  it('工作记录区块随 popup.workRecord 隐藏（与 pill 徽章分离治理）', () => {
+    const s: Partial<GitUISettings> = { popup: { ...DEFAULT_SETTINGS.popup, workRecord: false } }
     const html = render(DEFAULT_SETTINGS.popupOrder, s)
     expect(html.includes(MARKERS.workRecord)).toBe(false)
+  })
+
+  it('pill 徽章关闭不再隐藏弹窗区块（v5 分离：两开关独立）', () => {
+    const s: Partial<GitUISettings> = { pill: { ...DEFAULT_SETTINGS.pill, workRecord: false } }
+    const html = render(DEFAULT_SETTINGS.popupOrder, s)
+    // pill 关、popup 开 → 弹窗区块仍在场。
+    expect(html.includes(MARKERS.workRecord)).toBe(true)
   })
 
   it('含未知 id 的序被消毒（缺块补齐，未知剔除，不抛错）', () => {

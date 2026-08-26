@@ -24,9 +24,10 @@ export const SETTINGS_STORAGE_KEY = 'dsh-git-ui.settings'
  * v1 → v2：新增 `diff` 维度（字体大小 / 语法高亮 / 上下文折叠）。
  * v2 → v3：新增 `pill.workRecord`（Turn 工作记录徽章开关）。
  * v3 → v4：新增 `popupOrder`（弹窗区块排序，独立维度）。
+ * v4 → v5：新增 `popup.workRecord`（弹窗工作记录区块开关，与 pill 徽章分离）。
  * 旧值经 migrateSettings 补默认字段（不丢既有偏好）。
  */
-export const SETTINGS_SCHEMA_VERSION = 4
+export const SETTINGS_SCHEMA_VERSION = 5
 
 /** 显示模式档位。'custom' 仅为派生结果，不作为规则表成员。 */
 export type PresetId = 'minimal' | 'standard' | 'full' | 'custom'
@@ -48,7 +49,8 @@ export interface PillSettings {
   readonly counts: CountsSettings
   /** 领先 / 落后徽章（`↑N ↓N`）。 */
   readonly sync: boolean
-  /** Turn 工作记录段（本会话/外部徽章;默认开）。关闭时弹窗分组同步隐藏。 */
+  /** Turn 工作记录段（本会话/外部徽章;默认开）。仅治理 pill 徽章——弹窗
+   *  区块由 popup.workRecord 独立治理（v5 分离）。 */
   readonly workRecord: boolean
 }
 
@@ -66,13 +68,15 @@ export interface PopupSettings {
   readonly recentCommits: number
   /** 变更文件列表（含行内暂存 / 丢弃快捷操作）。 */
   readonly changesList: boolean
+  /** 工作记录区块（v5 起与 pill 徽章分离治理：关 pill 徽章不隐藏弹窗区块）。 */
+  readonly workRecord: boolean
 }
 
 // ── 弹窗区块排序（独立维度，v4） ───────────────────────────────────────────
 
 /**
  * 弹窗可排序区块 id：头部分支/路径与底部操作行结构固定，仅内容区块
- * 参与排序。workRecord 的显隐仍由 `pill.workRecord` 治理（排序与显隐
+ * 参与排序。workRecord 的显隐由 `popup.workRecord` 治理（排序与显隐
  * 正交：隐藏区块保留在序列中，开启后按序出现）。
  */
 export type PopupBlockId = 'statusBar' | 'branchCreate' | 'workRecord' | 'recentCommits' | 'changesList'
@@ -151,7 +155,8 @@ export interface PresetDefinition {
   readonly settings: GitUISettings
 }
 
-/** 极简：Pill 只留状态点与分支名；弹窗保持完整以支持点击后的深度操作。 */
+/** 极简：Pill 只留状态点与分支名；弹窗保持完整以支持点击后的深度操作
+ *（v5 起弹窗工作记录区块随弹窗维度——极简档下徽章与区块都关）。 */
 const MINIMAL_UI: GitUISettings = {
   pill: {
     dot: true,
@@ -167,6 +172,7 @@ const MINIMAL_UI: GitUISettings = {
     branchCreate: true,
     recentCommits: 3,
     changesList: true,
+    workRecord: false,
   },
   diff: DEFAULT_DIFF_SETTINGS,
   popupOrder: DEFAULT_POPUP_ORDER,
@@ -188,6 +194,7 @@ const STANDARD_UI: GitUISettings = {
     branchCreate: true,
     recentCommits: 3,
     changesList: true,
+    workRecord: true,
   },
   diff: DEFAULT_DIFF_SETTINGS,
   popupOrder: DEFAULT_POPUP_ORDER,
@@ -277,6 +284,7 @@ export function popupEqual(a: PopupSettings, b: PopupSettings): boolean {
     && a.branchCreate === b.branchCreate
     && a.recentCommits === b.recentCommits
     && a.changesList === b.changesList
+    && a.workRecord === b.workRecord
 }
 
 /** Pill 层局部补丁（counts 为可选子项补丁，缺省字段保留原值）。 */
@@ -331,6 +339,7 @@ export function patchPopup(prev: GitUISettings, patch: PopupPatch): GitUISetting
       branchCreate: patch.branchCreate ?? prev.popup.branchCreate,
       recentCommits: recent,
       changesList: patch.changesList ?? prev.popup.changesList,
+      workRecord: patch.workRecord ?? prev.popup.workRecord,
     },
   }
 }
@@ -360,14 +369,16 @@ export function patchDiff(prev: GitUISettings, patch: DiffPatch): GitUISettings 
 }
 
 /**
- * 旧版（v1/v2/v3）设置迁入：v2 补 diff 维度;v3 补 pill.workRecord 默认(true);
- * v4 补 popupOrder（缺失/损坏 → 默认序，经 normalizePopupOrder 消毒）。
+ * 旧版（v1–v4）设置迁入：v2 补 diff 维度;v3 补 pill.workRecord 默认(true);
+ * v4 补 popupOrder（缺失/损坏 → 默认序，经 normalizePopupOrder 消毒）;
+ * v5 补 popup.workRecord——**沿用 pill.workRecord 当前值**（v4 及之前该
+ * 开关同时治理两处，迁移保持视觉延续：徽章开的弹窗区块也开，反之亦然）。
  * 仅当存储信封的版本 < 当前版本时调用;各维度允许部分缺失(旧数据可能只带
  * 某个子字段),缺省子字段补默认——幂等,不丢既有偏好。
  */
 export function migrateSettings(settings: {
   readonly pill?: Partial<Omit<PillSettings, 'counts'>> & { readonly counts?: Partial<CountsSettings> }
-  readonly popup: PopupSettings
+  readonly popup: Omit<PopupSettings, 'workRecord'> & { readonly workRecord?: boolean }
   readonly diff?: Partial<DiffSettings>
   readonly popupOrder?: readonly string[]
 }): GitUISettings {
@@ -383,7 +394,10 @@ export function migrateSettings(settings: {
         untracked: settings.pill?.counts?.untracked ?? DEFAULT_SETTINGS.pill.counts.untracked,
       },
     },
-    popup: settings.popup,
+    popup: {
+      ...settings.popup,
+      workRecord: settings.popup.workRecord ?? settings.pill?.workRecord ?? DEFAULT_SETTINGS.popup.workRecord,
+    },
     diff: { ...DEFAULT_DIFF_SETTINGS, ...(settings.diff ?? {}) },
     popupOrder: normalizePopupOrder(settings.popupOrder ?? DEFAULT_POPUP_ORDER),
   }

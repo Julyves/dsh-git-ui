@@ -151,13 +151,16 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
   const workspaceRoot = display.state === 'ready' ? display.snapshot.root : ''
   const viewRecords = records === null ? null : applyAuthorOverrides(records, workspaceRoot, overrides)
 
-  /** 查看即已读:弹窗打开或 Git 中心停驻记录页时标记,未读徽章清零。
+  /** 查看即已读:弹窗打开(且其工作记录区块在场)或 Git 中心停驻记录页时
+   * 标记,未读徽章清零。
    * BUG-R5 修复:已读基准不仅随「开始查看」的边沿刷新,也随**查看期间的记录
    * 流入**刷新——记录数据经 checkedAt 刷新键持续到达(30s 轮询 + turn 完成
    * 即刷),旧边沿实现下用户正看着新条目出现,「new N」却在上涨,关闭后
-   * 点开全是已看内容,未读信号失信。 */
+   * 点开全是已看内容,未读信号失信。
+   * v5 分离守卫:弹窗工作记录区块被关闭时弹窗内无记录可看——打开弹窗
+   * 不得清未读(用户没看到却清零 = 未读信号失信)。 */
   const markWorkSeen = (): void => setSeenAt(markSeen(sessionId))
-  const viewingRecords = open || (centerOpen && centerTab === 'records')
+  const viewingRecords = (open && uiSettings.popup.workRecord) || (centerOpen && centerTab === 'records')
   useEffect(() => {
     if (viewingRecords) markWorkSeen()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 查看态边沿 + 查看期间每批记录到达各标记一次

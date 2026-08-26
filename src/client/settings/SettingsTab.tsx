@@ -101,9 +101,10 @@ function pillFullyOff(settings: GitUISettings): boolean {
 }
 
 /**
- * 弹窗可排序区块元数据：图标 / 名称 / 显隐判定（workRecord 由 pill 开关
- * 治理——排序与显隐正交，隐藏区块在排序序列中标注「已隐藏」）。
- * 与 GitPopupBody 的 blockNodes 键集一致（PopupBlockId 契约承载）。
+ * 弹窗可排序区块元数据：图标 / 名称 / 显隐判定（workRecord 由
+ * popup.workRecord 治理——排序与显隐正交，隐藏区块在排序序列中标注
+ * 「已隐藏」）。与 GitPopupBody 的 blockNodes 键集一致（PopupBlockId
+ * 契约承载）。
  */
 const POPUP_BLOCK_META: Record<PopupBlockId, { readonly labelKey: GitKey; readonly icon: JSX.Element | null; readonly visible: (s: GitUISettings) => boolean }> = {
   statusBar: {
@@ -117,9 +118,9 @@ const POPUP_BLOCK_META: Record<PopupBlockId, { readonly labelKey: GitKey; readon
     visible: (s) => s.popup.branchCreate,
   },
   workRecord: {
-    labelKey: 'settings.workRecord',
+    labelKey: 'settings.popupWorkRecord',
     icon: <RecordIcon />,
-    visible: (s) => s.pill.workRecord,
+    visible: (s) => s.popup.workRecord,
   },
   recentCommits: {
     labelKey: 'settings.recentCommits',
@@ -294,6 +295,12 @@ export function SettingsTab({
           name={t('settings.changesList')}
           desc={t('settings.changesList.desc')}
           control={<Switch checked={settings.popup.changesList} label={t('settings.changesList')} onChange={(next) => applyPopup({ changesList: next })} />}
+        />
+        <SettingsRow
+          icon={<RecordIcon />}
+          name={t('settings.popupWorkRecord')}
+          desc={t('settings.popupWorkRecord.desc')}
+          control={<Switch checked={settings.popup.workRecord} label={t('settings.popupWorkRecord')} onChange={(next) => applyPopup({ workRecord: next })} />}
         />
       </section>
 

@@ -13,11 +13,12 @@
  *     巧妙映射——'ts'→typescript、'py'→python、'sh'→shellscript 均命中
  *     EXTENSION_LANG 表；未注册语言自然 undefined 回落纯文本）。
  */
-import { useMemo, type JSX, type ReactNode } from 'react'
+import { useMemo, useState, useId, type JSX, type ReactNode } from 'react'
 import { buildSideBySide, buildStream } from './side-by-side.ts'
 import { highlightLines } from './syntax/highlighter.ts'
 import { useHighlightReady } from './syntax/use-highlight-ready.ts'
 import { langOfPath } from './syntax/lang-map.ts'
+import { DiagramSvg, parseMermaid } from './mermaid-lite.tsx'
 import type { GitKey } from './locales.ts'
 import * as css from './styles.ts'
 
@@ -29,9 +30,15 @@ const MAX_MARKDOWN_ROWS = 2000
 function safeUrl(url: string): string | null {
   const trimmed = url.trim()
   if (trimmed === '') return null
-  // 相对链接 / 锚点 / 白名单 scheme 放行；其余（javascript:/data:/vbscript:…）拒绝。
-  if (/^[/#/.]/.test(trimmed) || /^https?:\/\//i.test(trimmed) || /^mailto:/i.test(trimmed)) return trimmed
-  return null
+  // 带 scheme 的仅放行白名单（http/https/mailto）；无 scheme 的（相对路径/
+  // 锚点/协议相对）一律放行——相对路径不以 / . # 开头的形态（docs/x.png）
+  // 是 README 图片的常态，不能误拒。
+  const schemeMatch = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed)
+  if (schemeMatch !== null) {
+    const scheme = schemeMatch[1]!.toLowerCase()
+    return scheme === 'http' || scheme === 'https' || scheme === 'mailto' ? trimmed : null
+  }
+  return trimmed
 }
 
 // ── 行内解析：扫描 **粗** *斜* ~~删~~ `码` [文](url) ![图](url) ─────────────
@@ -50,6 +57,28 @@ function parseInline(text: string, keyPrefix: string): readonly ReactNode[] {
 
   while (i < text.length) {
     const rest = text.slice(i)
+    // 原始 HTML img（白名单标签）：README 等文档常直接书写 <img src=… width=…>。
+    // 只提取 src/alt/width 三个属性，src 仍走 safeUrl 白名单，其余属性丢弃。
+    if (rest.startsWith('<')) {
+      const m = /^<img\s[^>]*>/i.exec(rest)
+      if (m !== null) {
+        const tag = m[0]
+        const src = /\bsrc\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1]
+        const alt = /\balt\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1] ?? ''
+        const width = /\bwidth\s*=\s*["']?(\d+)["']?/i.exec(tag)?.[1]
+        if (src === undefined) {
+          buf += tag
+        } else {
+          const url = safeUrl(src)
+          push(url === null
+            ? alt
+            : <img key={nextKey()} src={url} alt={alt} loading="lazy"
+                style={{ ...css.mdImage, ...(width !== undefined ? { width: Number(width) } : {}) }} />)
+        }
+        i += tag.length
+        continue
+      }
+    }
     // 行内代码：`...`（最短匹配——内容不再解析强调，避免嵌套歧义）。
     if (rest.startsWith('`')) {
       const end = text.indexOf('`', i + 1)
@@ -293,6 +322,57 @@ function listMarker(ordered: boolean, index: number): string {
   return ordered ? `${index + 1}.` : '•'
 }
 
+/**
+ * Mermaid 围栏块：左上角「渲染 / 源码」切换；渲染失败在块区域中心提示
+ * （附解析原因），可切源码查看原文。源码态为纯文本（mermaid grammar
+ * 不在 shiki 预算子集内，与未注册语言的回落一致）。
+ */
+function MermaidBlock({ source, t }: {
+  readonly source: string
+  readonly t: (key: GitKey) => string
+}): JSX.Element {
+  const [mode, setMode] = useState<'rendered' | 'source'>('rendered')
+  const parse = useMemo(() => parseMermaid(source), [source])
+  // useId 含非 url 安全字符（如 «:r0:»），marker 引用需净化。
+  const markerId = `dmd-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
+  const options: Array<{ id: 'rendered' | 'source'; label: string }> = [
+    { id: 'rendered', label: t('diff.view.rendered') },
+    { id: 'source', label: t('diff.mermaid.source') },
+  ]
+  return (
+    <div style={css.mdMermaidWrap}>
+      <div style={css.mdMermaidToggle} role="group" aria-label={t('diff.view')}>
+        {options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className="dsh-git-ui__segment"
+            style={mode === option.id ? { ...css.mdMermaidToggleBtn, ...css.mdMermaidToggleBtnOn } : css.mdMermaidToggleBtn}
+            aria-pressed={mode === option.id}
+            onClick={() => setMode(option.id)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {mode === 'rendered'
+        ? (parse.ok
+          ? <DiagramSvg diagram={parse.diagram} markerId={markerId} />
+          : (
+            <div style={css.mdMermaidError}>
+              <span>{t('diff.mermaid.error')}</span>
+              <span style={css.mdMermaidErrorReason}>{parse.reason}</span>
+            </div>
+          ))
+        : (
+          <pre style={css.mdPre}>
+            <code style={css.mdCode}>{source}</code>
+          </pre>
+        )}
+    </div>
+  )
+}
+
 /** Markdown 渲染视图：source 为纯文本源（当前侧完整内容）。 */
 export function MarkdownView({
   source, fontSize, highlight, t,
@@ -313,6 +393,8 @@ export function MarkdownView({
   /** 围栏代码块渲染：语言名 → grammar id（经扩展名表映射），高亮整块。 */
   const renderCode = (lang: string, codeLines: readonly string[], key: string): JSX.Element => {
     const text = codeLines.join('\n')
+    // mermaid 块：走图渲染器（含渲染/源码切换与失败提示）。
+    if (lang === 'mermaid') return <MermaidBlock key={key} source={text} t={t} />
     const langId = lang === '' ? undefined : langOfPath(`x.${lang}`)
     const tokens = highlight && ready > 0 && langId !== undefined
       ? highlightLines(text, langId)

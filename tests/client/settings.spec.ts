@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_DIFF_SETTINGS, DEFAULT_POPUP_ORDER, DEFAULT_SETTINGS, MAX_RECENT_COMMITS, PRESETS, SETTINGS_SCHEMA_VERSION,
   applyPreset, clampRecents, migrateSettings, normalizePopupOrder, patchPill, patchPopup, patchPopupOrder,
-  popupOrderEqual, presetOf, settingsEqual, settingsEqualAll,
+  popupEqual, popupOrderEqual, presetOf, settingsEqual, settingsEqualAll,
   type GitUISettings, type SettingsPersistence, type SettingsStorageLike,
 } from '../../src/contracts/settings.ts'
 import { settingsEnvelopeSchema } from '../../src/client/settings/schema.ts'
@@ -292,5 +292,34 @@ describe('popupOrder（弹窗区块排序维度）', () => {
     // 排序不同 → settingsEqualAll 为假（重置按钮可点）。
     expect(settingsEqualAll(reordered, DEFAULT_SETTINGS)).toBe(false)
     expect(settingsEqualAll({ ...reordered, popupOrder: DEFAULT_POPUP_ORDER }, DEFAULT_SETTINGS)).toBe(true)
+  })
+})
+
+describe('popup.workRecord（v5 弹窗区块独立开关）', () => {
+  it('v4 旧数据缺 popup.workRecord → 沿用 pill.workRecord 当前值（视觉延续）', () => {
+    const v4On = migrateSettings({
+      pill: { ...DEFAULT_SETTINGS.pill, workRecord: true },
+      popup: { rootPath: true, statusBar: true, branchSwitcher: true, branchCreate: true, recentCommits: 3, changesList: true },
+    })
+    expect(v4On.popup.workRecord).toBe(true)
+    const v4Off = migrateSettings({
+      pill: { ...DEFAULT_SETTINGS.pill, workRecord: false },
+      popup: { rootPath: true, statusBar: true, branchSwitcher: true, branchCreate: true, recentCommits: 3, changesList: true },
+    })
+    expect(v4Off.popup.workRecord).toBe(false)
+  })
+
+  it('v5 数据带显式值 → 原样保留（不再跟随 pill）', () => {
+    const explicit = migrateSettings({
+      pill: { ...DEFAULT_SETTINGS.pill, workRecord: false },
+      popup: { ...DEFAULT_SETTINGS.popup, workRecord: true },
+    })
+    expect(explicit.popup.workRecord).toBe(true)
+  })
+
+  it('popupEqual 感知 workRecord 差异（档位判定包含该字段）', () => {
+    const flipped = patchPopup(DEFAULT_SETTINGS, { workRecord: false })
+    expect(popupEqual(DEFAULT_SETTINGS.popup, flipped.popup)).toBe(false)
+    expect(presetOf(flipped)).toBe('custom')
   })
 })

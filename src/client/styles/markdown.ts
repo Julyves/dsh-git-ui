@@ -175,3 +175,75 @@ export const mdTableCell: CSSProperties = {
   padding: '4px 10px',
   border: '1px solid var(--dsw-alias-border-l2)',
 }
+
+
+// ── Mermaid 图块（渲染/源码切换） ───────────────────────────────────────────
+
+/** mermaid 块外壳：relative 锚点（左上角切换开关 absolute 覆盖）。 */
+export const mdMermaidWrap: CSSProperties = {
+  position: 'relative',
+  margin: '0 0 10px',
+  paddingTop: 24,
+}
+
+/** 左上角切换组：贴块内左上，横向两枚小按钮。 */
+export const mdMermaidToggle: CSSProperties = {
+  position: 'absolute',
+  top: 4,
+  left: 6,
+  display: 'inline-flex',
+  gap: 2,
+}
+
+/** 切换小按钮（默认弱化态）。 */
+export const mdMermaidToggleBtn: CSSProperties = {
+  border: 0,
+  padding: '2px 8px',
+  borderRadius: 5,
+  fontSize: 10,
+  lineHeight: '16px',
+  fontFamily: 'inherit',
+  background: 'transparent',
+  color: 'var(--dsw-alias-label-tertiary)',
+  cursor: 'pointer',
+}
+
+/** 切换小按钮（激活态）。 */
+export const mdMermaidToggleBtnOn: CSSProperties = {
+  background: 'var(--dsw-alias-interactive-bg-hover)',
+  color: 'var(--dsw-alias-label-primary)',
+  fontWeight: 600,
+}
+
+/** 渲染失败态：块区域中心提示（文案 + 解析原因）。 */
+export const mdMermaidError: CSSProperties = {
+  minHeight: 120,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 4,
+  border: '1px dashed var(--dsw-alias-border-l2)',
+  borderRadius: 8,
+  background: 'var(--dsw-alias-bg-layer-1)',
+  color: 'var(--dsw-alias-label-secondary)',
+  fontSize: 12,
+}
+
+/** 解析原因小字（失败提示的第二行）。 */
+export const mdMermaidErrorReason: CSSProperties = {
+  fontSize: 11,
+  color: 'var(--dsw-alias-label-tertiary)',
+  maxWidth: '80%',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+}
+
+/** 图表 SVG：宽度撑满块、高度随内容（viewBox 等比）。 */
+export const mdDiagramSvg: CSSProperties = {
+  display: 'block',
+  width: '100%',
+  height: 'auto',
+  fontFamily: 'inherit',
+}

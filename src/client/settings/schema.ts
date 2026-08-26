@@ -35,6 +35,9 @@ export const popupSettingsSchema = z.object({
   branchCreate: boolSchema,
   recentCommits: z.number().int().min(0).max(MAX_RECENT_COMMITS),
   changesList: boolSchema,
+  // workRecord 为宽松可选(旧版数据缺字段),读取后经 migrateSettings
+  // 以 pill.workRecord 当前值补齐(视觉延续)。
+  workRecord: boolSchema.optional(),
 })
 
 export const diffSettingsSchema = z.object({
