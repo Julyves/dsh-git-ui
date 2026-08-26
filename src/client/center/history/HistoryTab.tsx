@@ -3,7 +3,7 @@ import type { JSX } from 'react'
 import type { GitBranch, GitFileStat, GraphCommit } from '../../../host/types.ts'
 import { createColorAllocator, createGraphBuilder, createTipAwareColorOf, graphWidth, markFilterEnds, type GraphRow, type GraphRowMarker } from '../../git-graph.ts'
 import { buildFileTree, type FileTreeNode } from '../../file-tree.ts'
-import { CollapseAllIcon, CommitIcon, ExpandAllIcon } from '../../icons.tsx'
+import { CloseIcon, CollapseAllIcon, CommitIcon, ExpandAllIcon } from '../../icons.tsx'
 import type { GitKey } from '../../locales.ts'
 import { SelectMenu } from '../../select-menu.tsx'
 import * as css from '../../styles.ts'
@@ -411,14 +411,33 @@ export function HistoryTab({
         <Splitter kind="col" onDrag={(dx) => setLeftW((w) => clampNum(w + dx, 140, 320))} />
         <div style={css.historyColumn}>
           <div style={css.historyToolbar}>
-            <input
-              className="dsh-git-ui__branch-input"
-              style={css.toolbarSearch}
-              placeholder={t('history.search')}
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              aria-label={t('history.search')}
-            />
+            <div style={css.searchWrap}>
+              <input
+                className="dsh-git-ui__branch-input"
+                style={searchInput === '' ? css.toolbarSearch : css.toolbarSearchClearable}
+                placeholder={t('history.search')}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                aria-label={t('history.search')}
+              />
+              {searchInput !== '' && (
+                // 一键清除：立即清输入并立即落地过滤（绕过 300ms 防抖——点 X
+                // 的意图是「马上回到全量列表」；防抖 effect 随后触发为值相等 no-op）。
+                <button
+                  type="button"
+                  className="dsh-git-ui__icon-btn"
+                  style={css.searchClearBtn}
+                  title={t('history.clearSearch')}
+                  aria-label={t('history.clearSearch')}
+                  onClick={() => {
+                    setSearchInput('')
+                    setFilter((prev) => (prev.search === '' ? prev : { ...prev, search: '' }))
+                  }}
+                >
+                  <CloseIcon />
+                </button>
+              )}
+            </div>
             <SelectMenu
               ariaLabel={t('history.branch')}
               value={filter.ref ?? ''}

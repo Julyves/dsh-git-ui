@@ -202,6 +202,43 @@ export const toolbarSearch: CSSProperties = {
 }
 
 
+// ── 搜索框一键清除（输入非空时出现的内嵌 X） ────────────────────────────────
+
+/** 搜索框包裹层：relative 定位锚点（清除按钮 absolute 贴右缘内测）。 */
+export const searchWrap: CSSProperties = {
+  position: 'relative',
+  display: 'flex',
+  flex: 1,
+  minWidth: 80,
+}
+
+/** 有清除按钮时的输入框：右侧让位（文字不压按钮）。 */
+export const toolbarSearchClearable: CSSProperties = {
+  ...toolbarSearch,
+  minWidth: 80,
+  paddingRight: 24,
+}
+
+/** 内嵌清除按钮：贴输入框右缘垂直居中的小号 icon-btn。 */
+export const searchClearBtn: CSSProperties = {
+  position: 'absolute',
+  top: '50%',
+  right: 5,
+  transform: 'translateY(-50%)',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 16,
+  height: 16,
+  padding: 0,
+  border: 0,
+  borderRadius: 4,
+  background: 'transparent',
+  color: 'var(--dsw-alias-label-tertiary)',
+  cursor: 'pointer',
+}
+
+
 export const toolbarSelect: CSSProperties = {
   flex: 'none',
   maxWidth: 150,

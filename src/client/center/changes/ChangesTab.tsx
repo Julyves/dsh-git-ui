@@ -6,9 +6,11 @@ import type { GitQueryOutcome } from '../../controller.ts'
 import { diffBaseOf, reconcileDiffSelection, stepDiffSelection, type DiffSelection } from '../../changes-diff.ts'
 import { buildSideBySide, extractAddedContent, extractDeletedContent, isAddOnlyDiff, isBinaryDiff, isDeleteOnlyDiff, summarizeChanges } from '../../side-by-side.ts'
 import { splitChangePath } from '../../file-tree.ts'
+import { MarkdownView, renderedSourceOf } from '../../markdown.tsx'
 import { SingleFileView } from '../../single-file-view.tsx'
 import { useSettings } from '../../settings/use-settings.ts'
 import { SegmentedControl } from '../../settings/controls.tsx'
+import { langOfPath } from '../../syntax/lang-map.ts'
 import { CheckIcon, CloseIcon, DiffIcon, NextIcon, PrevIcon } from '../../icons.tsx'
 import type { GitKey } from '../../locales.ts'
 import * as css from '../../styles.ts'
@@ -17,6 +19,9 @@ import { ChangeRow } from './ChangeRow.tsx'
 import { DiffSideBySide, type DiffViewMode } from './DiffSideBySide.tsx'
 import { Splitter } from '../Splitter.tsx'
 import { byPath, clampDiffRatio, clampNum, DIFF_RATIO_DEFAULT, groupKeyOfChange, type ChangeGroup, type ChangeGroupKey } from '../shared.ts'
+
+/** 变更页视图模式：原始三态（对照/前/后，DiffSideBySide 消费）+ md 渲染态。 */
+type ChangesViewMode = DiffViewMode | 'rendered'
 
 
 export function ChangesTab({
@@ -44,9 +49,10 @@ export function ChangesTab({
   const [diffLoading, setDiffLoading] = useState(false)
   /** diff 查询失败态（C4）：与「真的无差异」区分——查询失败不再误显「无文件变更」。 */
   const [diffFailed, setDiffFailed] = useState(false)
-  /** 对照视图模式（对照 / 仅变更前 / 仅变更后）：会话内粘滞——切换文件保持
-   *  上次选择（IDEA 行为），Git 中心关闭后随组件卸载复位。 */
-  const [diffMode, setDiffMode] = useState<DiffViewMode>('split')
+  /** 对照视图模式（对照 / 仅变更前 / 仅变更后 / md 渲染）：会话内粘滞——
+   *  切换文件保持上次选择（IDEA 行为），Git 中心关闭后随组件卸载复位。
+   *  「渲染」仅对 md 文件有意义；粘滞到非 md 文件时在渲染层回落对照。 */
+  const [diffMode, setDiffMode] = useState<ChangesViewMode>('split')
   /** split 模式左列占比（0–1，钳制区间见 clampDiffRatio）：同样会话内粘滞。 */
   const [diffRatio, setDiffRatio] = useState(DIFF_RATIO_DEFAULT)
   const diffSeq = useRef(0)
@@ -236,15 +242,33 @@ export function ChangesTab({
     return !isBinaryDiff(diffText) && isDeleteOnlyDiff(diffText)
   }, [diffText])
 
-  /** 视图模式切换只在真实并排对照时出现——新增/删除/二进制无前后对照语义。 */
+  /** 视图模式切换只在真实可对照内容上出现——二进制无对照语义。
+   *  新增/删除的 md 文件同样提供（渲染其单侧内容；原始态回退 SingleFileView
+   *  分流），非 md 的新增/删除保持原分流不加开关。 */
+  const isMarkdownFile = diffSel !== null && langOfPath(diffSel.path) === 'markdown'
   const showModeToggle = diffText !== null && !diffLoading && !diffFailed
-    && !isNewFile && !isDeletedFile && !isBinaryDiff(diffText)
+    && !isBinaryDiff(diffText)
+    && ((!isNewFile && !isDeletedFile) || isMarkdownFile)
 
-  const diffModeOptions = [
-    { id: 'split' as const, label: t('diff.view.split') },
-    { id: 'before' as const, label: t('diff.view.before') },
-    { id: 'after' as const, label: t('diff.view.after') },
+  /** 「渲染」态仅对非删除 md 生效；粘滞残留（切到非 md 文件）回落对照。 */
+  const canRender = isMarkdownFile && !isDeletedFile
+  const effectiveMode: ChangesViewMode = diffMode === 'rendered' && !canRender ? 'split' : diffMode
+
+  const diffModeOptions: Array<{ id: ChangesViewMode; label: string }> = [
+    { id: 'split', label: t('diff.view.split') },
+    { id: 'before', label: t('diff.view.before') },
+    { id: 'after', label: t('diff.view.after') },
+    ...(canRender ? [{ id: 'rendered' as const, label: t('diff.view.rendered') }] : []),
   ]
+
+  /**
+   * 渲染态数据源：由 diff 全量上下文重建「变更后」侧完整文本（staged 基线
+   * = 暂存区内容；纯新增 = 新文件内容；空 diff = 空文本 → 空态提示）。
+   */
+  const renderedSource = useMemo(
+    () => (canRender && diffText !== null && !isBinaryDiff(diffText) ? renderedSourceOf(diffText) : ''),
+    [canRender, diffText],
+  )
 
   return (
     <div style={css.changesLayout}>
@@ -396,7 +420,7 @@ export function ChangesTab({
                 )}
                 {showModeToggle && (
                   <SegmentedControl
-                    value={diffMode}
+                    value={effectiveMode}
                     options={diffModeOptions}
                     ariaLabel={t('diff.view')}
                     onChange={setDiffMode}
@@ -442,6 +466,17 @@ export function ChangesTab({
                   ? <div style={css.emptyNote}>{t('diff.loadFailed')}</div>
                   : diffText === null
                     ? <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
+                    : effectiveMode === 'rendered'
+                    ? (
+                      // md 渲染态（优先于单栏/并排分流——渲染语义覆盖原始形态）。
+                      <MarkdownView
+                        key={`${diffSel.path}#rendered`}
+                        source={renderedSource}
+                        fontSize={settings.diff.fontSize}
+                        highlight={settings.diff.syntaxHighlight}
+                        t={t}
+                      />
+                    )
                     : isNewFile
                     ? (
                       <SingleFileView
@@ -470,7 +505,7 @@ export function ChangesTab({
                         text={diffText}
                         path={diffSel.path}
                         diff={settings.diff}
-                        mode={diffMode}
+                        mode={effectiveMode}
                         leftRatio={diffRatio}
                         onRatioChange={(next) => setDiffRatio(clampDiffRatio(next))}
                         t={t}

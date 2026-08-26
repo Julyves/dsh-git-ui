@@ -261,17 +261,21 @@ export function PrevIcon(): JSX.Element {
   )
 }
 
-/** 设置（齿轮）。 */
+/** 设置（齿轮）：hub 圆 + 外圈 body + 8 个方头短齿径向咬合外圈。 */
 export function GearIcon(): JSX.Element {
   return (
     <svg width={14} height={14} viewBox="0 0 14 14" style={{ display: 'block', flex: 'none' }} aria-hidden="true">
-      <circle cx={7} cy={7} r={2.2} fill="none" stroke="currentColor" strokeWidth={1.3} />
+      {/* hub（轴孔）与 body（轮盘）双圈 + 齿；齿用方头（butt）短段——圆头细射
+          线会被读作「太阳/亮度」（历史版本的误读形态），齿轮齿必须方头且
+          内端咬住外圈，与圈连成一体。 */}
+      <circle cx={7} cy={7} r={2.1} fill="none" stroke="currentColor" strokeWidth={1.2} />
+      <circle cx={7} cy={7} r={3.9} fill="none" stroke="currentColor" strokeWidth={1.1} />
       <path
-        d="M7 1.4 V3 M7 11 V12.6 M1.4 7 H3 M11 7 H12.6 M2.56 2.56 L3.7 3.7 M10.3 10.3 L11.44 11.44 M11.44 2.56 L10.3 3.7 M3.7 10.3 L2.56 11.44"
+        d="M7 1.7 V3.1 M7 10.9 V12.3 M1.7 7 H3.1 M10.9 7 H12.3 M3.25 3.25 L4.24 4.24 M10.75 3.25 L9.76 4.24 M3.25 10.75 L4.24 9.76 M10.75 10.75 L9.76 9.76"
         fill="none"
         stroke="currentColor"
-        strokeWidth={1.3}
-        strokeLinecap="round"
+        strokeWidth={1.6}
+        strokeLinecap="butt"
       />
     </svg>
   )
