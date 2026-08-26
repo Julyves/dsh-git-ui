@@ -42,17 +42,26 @@ export function HistoryFilterTree({
     )
   }
   const amber = 'var(--dsw-alias-state-warn-primary)'
+  /** 默认 ref 判定（B7）：全名比对——本地根分支 `main` 或远程默认分支
+   * `origin/main`。不再用剥前缀 bare 比对：文件夹分支 `feature/main` 的 bare
+   * 也是 'main'，会被误标默认分支星（它不是默认分支）。 */
+  const isDefaultRef = (name: string): boolean =>
+    tree !== null && tree.defaultBranch !== null && (name === tree.defaultBranch || name === `origin/${tree.defaultBranch}`)
   /** 分支图标与着色：当前检出 > 默认分支 > 普通。 */
-  const branchFace = (name: string, bare: string): { icon: JSX.Element; color?: string } => {
+  const branchFace = (name: string): { icon: JSX.Element; color?: string } => {
     if (tree !== null && name === tree.current) return { icon: <TagIcon />, color: amber }
-    if (tree !== null && tree.defaultBranch !== null && bare === tree.defaultBranch) return { icon: <StarIcon />, color: amber }
+    if (isDefaultRef(name)) return { icon: <StarIcon />, color: amber }
     return { icon: <BranchIcon /> }
   }
   const row = (name: string, bare: string, active: boolean, mark: boolean, indent: number, branch?: GitBranch): JSX.Element => {
-    const face = branchFace(name, bare)
+    const face = branchFace(name)
     const hasSync = branch !== undefined && ((branch.ahead ?? 0) > 0 || (branch.behind ?? 0) > 0)
     return (
       <button
+        // B4:key 在工厂内给出——row() 的全部 .map 调用点(本地/远程/搜索态/
+        // 文件夹)产出的列表项由此获得稳定身份,消除 React unique-key 告警。
+        // 分支全名在树内唯一(远程名恒含 '/',不与本地撞);tagRow 已有 key。
+        key={name}
         type="button"
         className="dsh-git-ui__row"
         style={{ ...(active ? { ...css.treeRow, ...css.treeRowActive } : css.treeRow), paddingLeft: indent, paddingTop: 3, paddingBottom: 3 }}

@@ -370,3 +370,103 @@ describe('runQuery — 注入面加固(H5:ref 选项注入拒绝)', () => {
     expect(result.error.code).toBe('invalid-name')
   })
 })
+
+describe('runQuery — bug-hunt 回归锁(B2/B3/B6, fix/bug-hunt)', () => {
+  /** 带正则元字符主题的仓库：feat(graph) / plain / [wip] thing。 */
+  async function repoWithRegexSubjects(): Promise<string> {
+    const dir = await tempDir()
+    await gitInit(dir)
+    git(dir, 'commit', '--allow-empty', '-m', 'feat(graph): add colors')
+    git(dir, 'commit', '--allow-empty', '-m', 'plain subject')
+    git(dir, 'commit', '--allow-empty', '-m', '[wip] thing')
+    return dir
+  }
+
+  it('B2: 搜索按字面匹配——正则元字符不再吞匹配(feat(graph) 可命中)', async () => {
+    const dir = await repoWithRegexSubjects()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, search: 'feat(graph)' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'history') return
+    expect(result.value.commits.map((c) => c.subject)).toEqual(['feat(graph): add colors'])
+    expect(result.value.total).toBe(1)
+  })
+
+  it('B2: 不平衡正则不再使查询失败(按字面字符搜索,ok 且不 fatal)', async () => {
+    const dir = await repoWithRegexSubjects()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, search: '(' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'history') return
+    // 字面 '(' 命中含括号的主题(feat(graph));旧 ERE 实现下 git fatal 整查询失败。
+    expect(result.value.commits.map((c) => c.subject)).toEqual(['feat(graph): add colors'])
+  })
+
+  it('B2: 字面搜索保持大小写不敏感', async () => {
+    const dir = await repoWithRegexSubjects()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, search: 'FEAT(GRAPH)' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'history') return
+    expect(result.value.commits.map((c) => c.subject)).toEqual(['feat(graph): add colors'])
+  })
+
+  it('B2: author 含正则元字符按字面匹配(点号不通配、未配对 [ 不 fatal)', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    git(dir, '-c', 'user.name=A.B', 'commit', '--allow-empty', '-m', 'by dotted')
+    git(dir, '-c', 'user.name=AXB', 'commit', '--allow-empty', '-m', 'by wildcard lookalike')
+    // 字面 A.B 只命中 A.B(旧 BRE 实现里 '.' 通配,AXB 也被计入)。
+    const dotted = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, author: 'A.B' }))
+    expect(dotted.ok).toBe(true)
+    if (!dotted.ok || dotted.value.kind !== 'history') return
+    expect(dotted.value.total).toBe(1)
+    expect(dotted.value.commits[0]?.subject).toBe('by dotted')
+    // 未配对 '[' 的作者名:字面匹配不 fatal(旧实现 git fatal → 整查询失败)。
+    const bracket = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, author: 'No[body' }))
+    expect(bracket.ok).toBe(true)
+  })
+
+  it('B2 交互: 搜索+作者组合时两者的字面转义同时生效(无 -F 波及)', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    git(dir, '-c', 'user.name=A.B', 'commit', '--allow-empty', '-m', 'feat(graph): dotted author')
+    git(dir, '-c', 'user.name=Test User', 'commit', '--allow-empty', '-m', 'feat(graph): plain author')
+    // 组合过滤:搜索含括号 + 作者含点号。回归:git 的 --fixed-strings 会同时
+    // 作用于 --author,使转义后的 A\.B 被当字面反斜杠而失配(复审发现的交互坑),
+    // 故字面化统一走 BRE+escapeBre,不使用 -F。
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, search: 'feat(graph)', author: 'A.B' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'history') return
+    expect(result.value.commits.map((c) => c.subject)).toEqual(['feat(graph): dotted author'])
+    expect(result.value.total).toBe(1)
+  })
+
+  it('B3: merge 提交的详情列出首父差异(不再恒空)', async () => {
+    const dir = await repoWithMerge()
+    const head = git(dir, 'rev-parse', 'HEAD').trim()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'show', ref: head }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'show') return
+    // 旧实现:combined diff 对干净 merge 输出 0 字节 → stats 恒空。
+    // 修复:--first-parent 列出合并引入的 f.txt(IDEA 语义)。
+    expect(result.value.stats).toEqual([{ path: 'f.txt', status: 'added' }])
+  })
+
+  it('B3: 单父提交的 show 统计不受 --first-parent 影响', async () => {
+    const dir = await repoWithCommits()
+    const head = git(dir, 'rev-parse', 'HEAD').trim()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'show', ref: head }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'show') return
+    expect(result.value.stats).toEqual([{ path: 'b.txt', status: 'added' }])
+  })
+
+  it('B6: 哈希精准定位不附加 author/since 过滤(深链不被内容过滤滤没)', async () => {
+    const dir = await repoWithCommits()
+    const head = git(dir, 'rev-parse', 'HEAD').trim()
+    // 目标提交作者为 Test User;author=Nobody 若被附加,目标提交被滤没(旧实现)。
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 10, skip: 0, search: head.slice(0, 7), author: 'Nobody' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'history') return
+    expect(result.value.commits[0]?.hash).toBe(head)
+    expect(result.value.total).toBe(1)
+  })
+})

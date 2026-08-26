@@ -38,6 +38,10 @@ export function HistoryTab({
   const [detail, setDetail] = useState<{ commit: GraphCommit; body: string; stats: readonly GitFileStat[] } | null>(null)
   /** 详情加载失败态(H3):show 查询失败/超时 — 不再永久「加载中」。 */
   const [detailError, setDetailError] = useState(false)
+  /** 列表加载失败态(B5):history 查询失败与「真的无结果」区分——空态/哨兵分文案。
+   * 兼作 B1 自动续载刹车:失败置位后底部静置续载 effect 停发(无失败风暴),
+   * 用户滚动触发 onScroll / 切换过滤仍是显式重试通道。 */
+  const [listError, setListError] = useState(false)
   /** 是否已到列表尽头(某页返回空/少于整页);未知 total 下的续载兜底(H4)。 */
   const [reachedEnd, setReachedEnd] = useState(false)
   /** 组合过滤条件（左树 ref + 工具栏搜索/用户/日期）；任一变化重载。 */
@@ -190,6 +194,7 @@ export function HistoryTab({
     if (active !== null && active.seq === seq) return
     inflight.current = { seq, skip }
     setLoading(true)
+    setListError(false)
     const outcome = await query({
       kind: 'history',
       limit: HISTORY_PAGE,
@@ -206,7 +211,12 @@ export function HistoryTab({
     }
     setLoading(false)
     if (inflight.current?.seq === seq) inflight.current = null
-    if (!outcome.ok) return
+    // 失败态(B1/B5):置错误标记——自动续载刹车 + 空态/哨兵区分文案。
+    // 不置 reachedEnd:数据可能还有,用户滚动/切过滤仍可显式重试。
+    if (!outcome.ok) {
+      setListError(true)
+      return
+    }
     if (outcome.value.kind !== 'history') return
     const page = outcome.value.commits
     if (page.length < HISTORY_PAGE) setReachedEnd(true)
@@ -269,6 +279,7 @@ export function HistoryTab({
     setSelected(null)
     setDetail(null)
     setDetailError(false)
+    setListError(false)
     selectedHash.current = null
     setReachedEnd(false)
     // 过滤切换：列表内容整体替换，滚动与窗口化切片归零。
@@ -302,7 +313,15 @@ export function HistoryTab({
     pendingFocus.current = focusRef.hash
     setSearchInput(focusRef.hash)
     setFocusNonce((n) => n + 1)
-    setFilter((prev) => (prev.search === focusRef.hash ? prev : { ...prev, ref: null, search: focusRef.hash }))
+    // B6:深链定位清空全部内容过滤(ref/author/since)——定位语义优先。旧实现
+    // 保留 author/since 时目标提交被滤没,定位静默失败(pendingFocus 一次性
+    // 消费,无选中无提示)。host 侧对 hexLike 不附加内容过滤是同一语义的守卫。
+    setFilter((prev) => {
+      const next = { ref: null as string | null, search: focusRef.hash, author: '', since: '' }
+      return prev.ref === null && prev.search === focusRef.hash && prev.author === '' && prev.since === ''
+        ? prev
+        : { ...prev, ...next }
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 深链请求一次一响应
   }, [focusRef])
   useEffect(() => {
@@ -332,12 +351,15 @@ export function HistoryTab({
 
   // 底部静置自动续载(H9):滚动条停在底部时不再依赖 onScroll,随批次/加载态
   // 自查补载;用户上滚后自然停止。
+  // B1 刹车:listError 置位时停发——失败后 loading 回落会重触发本 effect,
+  // 若无此守卫将形成无退避的无限失败请求风暴(续载失败 + 贴底即触发)。
+  // 重试通道保留给用户:onScroll(滚动)与过滤切换(loadPage 前清 listError)。
   useEffect(() => {
     const el = listRef.current
-    if (el === null || loading || !hasMore) return
+    if (el === null || loading || listError || !hasMore) return
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 320) void loadPage(commits.length, filter)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 底部静置自动续载
-  }, [commits, loading, hasMore])
+  }, [commits, loading, listError, hasMore])
 
   const toggleDir = (path: string): void => {
     setCollapsed((prev) => {
@@ -442,7 +464,8 @@ export function HistoryTab({
               <div style={css.centeredEmpty}>{t('center.loading')}</div>
             )}
             {!loading && commits.length === 0 && (
-              <div style={css.centeredEmpty}>{t('history.noResults')}</div>
+              // B5:查询失败与「真的无结果」分文案——失败可提示重试,不再静默吞错。
+              <div style={css.centeredEmpty}>{listError ? t('history.loadFailed') : t('history.noResults')}</div>
             )}
             {commits.length > 0 && (
               <div style={{ ...css.historyHead, gridTemplateColumns: gridTpl }} aria-hidden="true">
@@ -476,7 +499,8 @@ export function HistoryTab({
               </>
             )}
             {hasMore && (
-              <div style={css.loadSentinel}>{loading ? t('center.loading') : ''}</div>
+              // B1/B5:续载失败在哨兵位提示(列表非空时不占空态位),用户滚动即重试。
+              <div style={css.loadSentinel}>{loading ? t('center.loading') : listError ? t('history.loadFailed') : ''}</div>
             )}
           </div>
         </div>

@@ -27,6 +27,17 @@ function isValidRef(ref: string): boolean {
 }
 
 /**
+ * BRE 转义:`--grep`/`--author` 的值在无 -E/-F 时按 POSIX 基本正则解释——
+ * 用户输入与作者名都是字面数据,含 `.`/`[`/`*`/`^`/`$`/`\` 时会被解释为
+ * 元字符(点号通配、未配对 `[` 致 git fatal)。前置反斜杠归一为字面匹配(B2);
+ * BRE 的 `( )` 本就是普通字符,无需转义。grep 与 author 共用同一转义——
+ * 保持标志面单一(仅 --regexp-ignore-case),避免 -F 波及 author 的交互。
+ */
+function escapeBre(literal: string): string {
+  return literal.replace(/[.[\*^$\\]/g, (ch) => `\\${ch}`)
+}
+
+/**
  * 执行一条只读查询。结果均为 JSON 纯数据且有界
  * （history 分页；diff 文本受 runner 的 spill/截断约束）。
  * `config` 当前未用：保留以与 runAction 共享 runner 签名契约
@@ -77,15 +88,25 @@ async function historyQuery(
   const search = query.search?.trim() ?? ''
   const hexLike = /^[0-9a-f]{7,40}$/i.test(search)
   // 哈希精准检索：仅定位目标提交自身（--no-walk 不遍历祖先）→ 单条目，
-  // 不再列出该提交的全部祖先；文本搜索走 --grep（-i -E，跨引用匹配）。
+  // 不再列出该提交的全部祖先；文本搜索走 --grep。
+  // B2:字面匹配 = BRE + escapeBre(--regexp-ignore-case 保大小写不敏感)。
+  // 不用 -F:git 的 --fixed-strings 会**同时**作用于 --author,与 author 的
+  // 转义形态互斥(转义后的 \. 被 -F 当字面反斜杠,搜索+作者组合时匹配失效);
+  // 不用 -E:ERE 下 `(` 未配对即 git fatal、`feat(graph)` 被当捕获组。
+  // BRE 的 ( ) 是普通字符,escapeBre 归一 . [ \ * ^ $ 后全部字面。
+  // rev-list --count 复用同一 filters,口径一致(标志均支持)。
   const scope = hexLike ? [] : query.ref === undefined ? ['--all'] : [query.ref]
   const noWalk = hexLike ? ['--no-walk', search] : []
   const filters: string[] = []
-  if (search !== '' && !hexLike) filters.push('--regexp-ignore-case', '--extended-regexp', `--grep=${search}`)
+  if (search !== '' && !hexLike) filters.push('--regexp-ignore-case', `--grep=${escapeBre(search)}`)
   const author = query.author?.trim() ?? ''
-  if (author !== '') filters.push(`--author=${author}`)
   const since = query.since?.trim() ?? ''
-  if (since !== '') filters.push(`--since=${since}`)
+  // B6:哈希精准定位时不附加内容过滤——--no-walk 已锚定唯一提交,author/since
+  // 只会把目标提交本身滤没(深链定位静默失败的注入面)。
+  if (!hexLike) {
+    if (author !== '') filters.push(`--author=${escapeBre(author)}`)
+    if (since !== '') filters.push(`--since=${since}`)
+  }
 
   const log = await runCommand(
     deps.run,
@@ -177,7 +198,10 @@ async function showQuery(deps: SnapshotDeps, root: string, ref: string): Promise
 
   const stat = await runCommand(
     deps.run,
-    ['git', '-c', 'core.quotePath=false', 'show', '--format=', '--name-status', '-z', ref],
+    // B3:--first-parent——merge 提交的默认 combined diff 只列「与两个父都不同」
+    // 的文件(冲突解决产物),干净 merge 输出 0 字节 → 右栏恒「差异为空」。
+    // 首父差异是 IDEA 语义(合并引入了什么);单父提交 diff vs 唯一父,行为不变。
+    ['git', '-c', 'core.quotePath=false', 'show', '--first-parent', '--format=', '--name-status', '-z', ref],
     root,
     'show --name-status',
     deps.signal,
