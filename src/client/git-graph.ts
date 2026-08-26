@@ -17,8 +17,10 @@
  *     多子异色时以先处理者（更低车道索引）为依据——确定性启发式，非语义主干）；
  *     无等待者（无名根/tip）→ `colorOf(hash)` 兜底。
  *   - 节点 = 所在链色；汇聚线各自保持**子链色**汇入（IDEA 丰富度）；
- *     merge 分裂曲线 = merge 链色（曲线是 merge 节点发出的，不随目标车道——
- *     octopus merge 复用车道时目标线保持其源链色，两者互不染指）。
+ *     merge 分裂曲线 = **被合并分支（目标车道）侧链色**——曲线承载被合并分支的
+ *     走向（如 dev 汇入 main），须保持被合并分支源色；curve 不随 merge 节点色，
+ *     否则会提前染成合并目标色（用户可见 bug）。octopus merge 复用车道时目标线
+ *     保持其各自源链色，曲线与车道线互不染指。
  *   - 每行解析完毕的最终色随 `lineColors`/`nodeColor`/`incomingColor` 存入行
  *     ——渲染零上下文、纯数据可测、增量追加安全（已渲染行颜色永不变）。
  *
@@ -68,7 +70,7 @@ export interface GraphRow {
   readonly incomingColor?: string
 }
 
-/** 一条分裂曲线（merge 节点 → 第二父车道，着 merge 链色）。 */
+/** 一条分裂曲线（merge 节点 → 第二父车道，着被合并分支侧链色）。 */
 export interface GraphEdge {
   readonly from: number
   readonly to: number
@@ -133,6 +135,34 @@ export function createColorAllocator(knownNames: readonly string[]): (key: strin
   return (key: string): string => {
     const idx = assignment.get(key)
     return idx !== undefined ? GRAPH_COLORS[idx]! : colorOf(key)
+  }
+}
+
+/** 分支 tip 锚定条目：本地分支 tip 的短哈希 → 分支名。 */
+export type BranchTipEntry = readonly [shortHash: string, branchName: string]
+
+/**
+ * tip 感知取色器：包装既有取色函数——key 命中某本地分支 tip 的短哈希前缀时，改返回
+ * 该分支名的锚定色；否则透传原函数。
+ *
+ * 用途（merge 第二父兜底路径）：拓扑序父在后，merge 行处理时被合并分支 tip 尚未到达，
+ * 其车道线色回退 colorOfFn(parentHash) 的 hash 散列色——与分支锚定色脱节，且 1/24
+ * 概率撞上合并目标分支色（「弯折段提前染目标色」的残留根因）。HistoryTab 用
+ * tree.local 的 shortHash 构造条目传入，使兜底取到被合并分支锚定色，与该分支自身行
+ * 同色（无跳变）。仅本地分支——链色只由 kind='branch' 定义，远程/标签不参与。
+ * 前缀匹配按短哈希等长（core.abbrev 同仓库一致）无互前缀歧义；git 的 abbreviated
+ * object name 以唯一性为准自动延长——不同提交不可能共享某 tip 的短哈希前缀，
+ * 故命中即确定是该 tip 提交。
+ */
+export function createTipAwareColorOf(
+  base: (key: string) => string,
+  tips: readonly BranchTipEntry[],
+): (key: string) => string {
+  return (key: string): string => {
+    for (const [short, name] of tips) {
+      if (short !== '' && key.startsWith(short)) return base(name)
+    }
+    return base(key)
   }
 }
 
@@ -234,6 +264,11 @@ function processCommit(
   // 3. 第二及更多父提交：复用已等待它的车道，否则开辟新车道；均记分裂曲线。
   //    owner = parentHash（第二父自身）——被合并分支染源色而非 merge 链色（IDEA 语义）：
   //    第二父链色独立解析（带源分支 ref 则锚定源色，否则 hash 兜底），不染 merge 色。
+  //    时序注意：拓扑序父在后，merge 行处理时第二父的链色必然未解析（tip 未到达），
+  //    新开车道线色回退 colorOfFn(parentHash)。调用方可让 colorOfFn 感知「分支 tip
+  //    短哈希 → 分支名」（HistoryTab 的 tree.local.shortHash 映射），使该兜底取到
+  //    被合并分支的锚定色——否则是纯 hash 散列色，与分支锚定色脱节且可能撞上
+  //    合并目标分支色（「弯折段提前染目标色」的残留根因）。
   for (let p = 1; p < commit.parents.length; p += 1) {
     const parentHash = commit.parents[p]!
     let target = lanes.findIndex((entry) => entry !== null && entry.wait === parentHash)

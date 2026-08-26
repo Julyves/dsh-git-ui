@@ -3,7 +3,7 @@
  * 用例覆盖:线性延续、分裂、merge 回归、车道回收复用、收敛、图宽度。
  */
 import { describe, expect, it } from 'vitest'
-import { buildGraph, colorOf, createGraphBuilder, graphWidth, markFilterEnds, GRAPH_COLORS } from '../src/client/git-graph.ts'
+import { buildGraph, colorOf, createGraphBuilder, createTipAwareColorOf, graphWidth, markFilterEnds, GRAPH_COLORS } from '../src/client/git-graph.ts'
 import type { GraphCommit } from '../src/host/types.ts'
 
 /** 构造简单提交链(新→旧,与 git log 输出序一致)。 */
@@ -268,11 +268,59 @@ describe('colorOf / laneHashes / 链色（IDEA 语义）', () => {
 
   it('keeps the merged branch lane at its source color (IDEA: side chain keeps source color)', () => {
     const rows = buildGraph(MERGE_SEQUENCE)
-    // merge 分裂曲线（edges）= nodeColor = merge 链色；但第二父车道线（lineColors[1]）
+    // merge 分裂曲线（edges）渲染读 edge.to 车道色 = lineColors[1]
     // = 被合并分支源色 colorOf('feat-1')——侧链不染 merge 色（IDEA 语义修正）。
+    // 曲线承载被合并分支走向，须保持其源色；不随 merge 节点色（否则提前染成合并目标色）。
     expect(rows[0]!.lineColors?.[1]).toBe(colorOf('feat-1'))
     // main-1 行贯穿的 feat 车道线保持 feat-1 源色（owner=feat-1，未到达→hash 兜底色）。
     expect(rows[1]!.lineColors?.[1]).toBe(colorOf('feat-1'))
+  })
+
+  it('colors the merge fork curve by the merged-branch side, not the merge node/target color (回归: 弯折段提前染目标色)', () => {
+    // dev 向 main 合并：merge M 在 main 链上，第二父为 dev tip d2（带 dev ref）。
+    const seq = [
+      { ...commit('M', ['m1', 'd2']), refs: [{ kind: 'branch' as const, name: 'main', head: true }] },
+      { ...commit('d2', ['d1']), refs: [{ kind: 'branch' as const, name: 'dev', head: false }] },
+      commit('d1', ['base']),
+      commit('m1', ['base']),
+      commit('base', []),
+    ]
+    const rows = buildGraph(seq)
+    const merge = rows[0]!
+    expect(merge.edges).toEqual([{ from: 0, to: 1 }])
+    // 渲染层读 edge.to 车道色：曲线染被合并分支（dev tip d2）侧色，
+    // 而非 merge 节点色(main)——这是用户可见的「dev 弯向 main 段提前染 main 色」bug 的锁定点。
+    expect(merge.lineColors?.[1]).not.toBe(merge.nodeColor)
+    expect(merge.lineColors?.[1]).toBe(colorOf('d2'))
+  })
+
+  it('anchors the merge fork lane to the merged-branch tip via tip-aware colorOfFn (回归: 兜底散列撞目标色)', () => {
+    // 残留根因复现：merge 行时第二父 tip 未到达，线色回退 colorOfFn(parentHash) 的
+    // hash 散列色——与分支锚定色脱节，且 1/24 概率撞上合并目标分支色。
+    // 构造撞色 hash：hashKey('main') % 24 == 13，13 个 'a' 的散列同为 13。
+    const D2 = 'a'.repeat(13)
+    expect(colorOf(D2)).toBe(colorOf('main')) // 前提：兜底散列确实撞上 main 色
+    const seq = [
+      { ...commit('m2', ['M']), refs: [{ kind: 'branch' as const, name: 'main', head: true }] },
+      commit('M', ['m1', D2]),
+      { ...commit(D2, ['d1']), refs: [{ kind: 'branch' as const, name: 'dev', head: false }] },
+      commit('m1', ['base']),
+      commit('d1', ['base']),
+      commit('base', []),
+    ]
+    // 无 tip 感知（裸 colorOf）：merge 行 edge.to 车道 = 兜底散列色 = main 色 → 复现 bug。
+    const raw = buildGraph(seq)
+    const rawMerge = raw[1]!
+    expect(rawMerge.nodeColor).toBe(colorOf('main'))
+    expect(rawMerge.lineColors?.[1]).toBe(colorOf('main')) // 撞色：曲线仍显示 main 色
+    // tip 感知 colorOfFn（createTipAwareColorOf，HistoryTab 用 tree.local.shortHash 映射）：
+    // 命中分支 tip 短哈希前缀 → 返回分支锚定色，曲线与 dev 自身行同色。
+    const fixed = buildGraph(seq, createTipAwareColorOf(colorOf, [[D2.slice(0, 7), 'dev']]))
+    const fixedMerge = fixed[1]!
+    expect(fixedMerge.lineColors?.[1]).toBe(colorOf('dev'))
+    // 与被合并分支自身行（d2 node 锚定 dev 色）同色——无跳变。
+    expect(fixed[2]!.nodeColor).toBe(colorOf('dev'))
+    expect(fixedMerge.lineColors?.[1]).toBe(fixed[2]!.nodeColor)
   })
 
   it('keeps joins lanes at their own child chain colors (distinct branches)', () => {

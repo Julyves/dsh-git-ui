@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
 import type { GitBranch, GitFileStat, GraphCommit } from '../../../host/types.ts'
-import { createColorAllocator, createGraphBuilder, graphWidth, markFilterEnds, type GraphRow, type GraphRowMarker } from '../../git-graph.ts'
+import { createColorAllocator, createGraphBuilder, createTipAwareColorOf, graphWidth, markFilterEnds, type GraphRow, type GraphRowMarker } from '../../git-graph.ts'
 import { buildFileTree, type FileTreeNode } from '../../file-tree.ts'
 import { CollapseAllIcon, CommitIcon, ExpandAllIcon } from '../../icons.tsx'
 import type { GitKey } from '../../locales.ts'
@@ -100,25 +100,43 @@ export function HistoryTab({
    * 图几何清空，只平铺条目。
    */
   const searching = filter.search !== ''
-  /** 分支名避撞分配器：tree 加载后用全量分支名做确定性避撞，减少同色碰撞（IDEA 式可读性）。 */
+  /**
+   * 分支名避撞分配器：tree 加载后用全量分支名做确定性避撞，减少同色碰撞（IDEA 式可读性）。
+   *
+   * 并包装「分支 tip 锚定」（createTipAwareColorOf）：merge 行处理第二父时，被合并分支
+   * tip 尚未进入已处理序列（拓扑序父在后），其链色未解析，车道线色回退到
+   * colorOfFn(parentHash) 的 hash 散列色——与该分支锚定色脱节，甚至撞上合并目标分支色
+   * （「弯折段提前染目标色」的残留根因）。用 tree.local 的 shortHash 映射，让兜底取到
+   * 被合并分支锚定色，与该分支自身行同色（无跳变）。
+   */
   const graphColorOf = useMemo(
-    () => createColorAllocator(tree ? [...tree.local, ...tree.remote, ...tree.tags].map((b) => b.name) : []),
+    () => createTipAwareColorOf(
+      createColorAllocator(tree ? [...tree.local, ...tree.remote, ...tree.tags].map((b) => b.name) : []),
+      tree ? tree.local.flatMap((b) => (b.shortHash ? [[b.shortHash, b.name] as const] : [])) : [],
+    ),
     [tree],
   )
   const builderRef = useRef(createGraphBuilder(graphColorOf))
   const prevCommitsRef = useRef<readonly GraphCommit[]>([])
+  /** 上一个 builder 实际使用的 colorOfFn：引用变化（tree 到达→分配器/tip 映射就绪）须整体重建，
+   * 否则增量 append 仍走旧 builder 的空分配器——避撞与 tip 锚定均不生效（时序缺陷修复）。 */
+  const builderColorRef = useRef(graphColorOf)
   const [graphRows, setGraphRows] = useState<readonly GraphRow[]>([])
   useEffect(() => {
     if (searching) {
       builderRef.current = createGraphBuilder(graphColorOf)
+      builderColorRef.current = graphColorOf
       prevCommitsRef.current = commits
       setGraphRows([])
       return
     }
+    const colorChanged = builderColorRef.current !== graphColorOf
     const prev = prevCommitsRef.current
-    const isExtension = prev.length <= commits.length && prev.every((c, i) => c.hash === commits[i]?.hash)
+    // 增量扩展仅当 builder 持有的 colorOfFn 未变且列表确为前缀扩展时成立。
+    const isExtension = !colorChanged && prev.length <= commits.length && prev.every((c, i) => c.hash === commits[i]?.hash)
     if (!isExtension) {
       builderRef.current = createGraphBuilder(graphColorOf)
+      builderColorRef.current = graphColorOf
       setGraphRows(builderRef.current.append(commits))
     } else if (commits.length > prev.length) {
       const newRows = builderRef.current.append(commits.slice(prev.length))

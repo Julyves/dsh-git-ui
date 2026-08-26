@@ -168,11 +168,12 @@ export function GraphStrip({
         <path
           key={`e-${i}`}
           // 曲线控制点 0.4/0.6 交错：起段微陡、中段平缓、收段回陡——比中点控制更圆润的曲线。
-          // 颜色 = merge 链色（曲线是 merge 节点发出的；不随目标车道色——octopus 复用
-          // 车道时目标线保持其源链色，曲线独立于车道线）。
+          // 颜色 = 目标车道（被合并分支）侧链色——merge 分裂曲线承载的是被合并分支的
+          // 走向（dev 汇入 main），须保持被合并分支源色；curve 不随 merge 节点色，
+          // 否则从主分支节点弯向被合并分支的这段会提前染成合并目标色（用户可见的 bug）。
           d={`M ${x(edge.from)} ${cy} C ${x(edge.from)} ${cy + (h - cy) * 0.4}, ${x(edge.to)} ${cy + (h - cy) * 0.6}, ${x(edge.to)} ${h}`}
           fill="none"
-          stroke={nodeColor}
+          stroke={colorOfLane(edge.to)}
           strokeWidth={1.5}
           strokeLinecap="round"
           strokeLinejoin="round"
