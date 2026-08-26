@@ -34,21 +34,27 @@ export function markSeen(sessionId: string, now: number = Date.now()): number {
   return now
 }
 
-/** 自 seenAt 以来新出现的条目数(全 turn、三作者组并计)。
- * 不可按 turn.startAt 剪枝:跨越已读时刻的长 turn 内仍可能有新条目。 */
+/** 自 seenAt 以来新出现的**路径**数(全 turn、三作者组并计)。
+ * 不可按 turn.startAt 剪枝:跨越已读时刻的长 turn 内仍可能有新条目。
+ * 同一路径可出现在多个 turn 记录中(host 归因是 per-turn 的)——按路径
+ * 取最大 firstSeenAt 后计数,未读口径与时段视图的去重口径一致(BUG-R1)。 */
 export function countUnseen(records: readonly TurnWorkRecord[] | null, seenAt: number): number {
   if (records === null || seenAt <= 0) return 0
-  let unseen = 0
+  const latestByPath = new Map<string, number>()
+  const consider = (entries: ReadonlyArray<{ readonly path: string; readonly firstSeenAt: number }>): void => {
+    for (const entry of entries) {
+      const known = latestByPath.get(entry.path)
+      if (known === undefined || entry.firstSeenAt > known) latestByPath.set(entry.path, entry.firstSeenAt)
+    }
+  }
   for (const turn of records) {
-    for (const entry of turn.internal) {
-      if (entry.firstSeenAt > seenAt) unseen += 1
-    }
-    for (const entry of turn.sibling) {
-      if (entry.firstSeenAt > seenAt) unseen += 1
-    }
-    for (const entry of turn.external) {
-      if (entry.firstSeenAt > seenAt) unseen += 1
-    }
+    consider(turn.internal)
+    consider(turn.sibling)
+    consider(turn.external)
+  }
+  let unseen = 0
+  for (const firstSeenAt of latestByPath.values()) {
+    if (firstSeenAt > seenAt) unseen += 1
   }
   return unseen
 }

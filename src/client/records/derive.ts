@@ -9,10 +9,48 @@
  * 下发的 TurnWorkRecord[]，本模块负责视图层重塑）。
  */
 
-import type { TurnWorkRecord, WorkEntry } from '../../host/types.ts'
+import type { TurnWorkRecord, WorkEntry, WorkEntryState } from '../../host/types.ts'
 
 /** 相邻有工作 turn 合并为同一时段的间隔阈值(ms)。默认 10 分钟。 */
 export const SESSION_GAP_MS = 10 * 60 * 1000
+
+/** 条目状态信息量排序:dirty(可行动) > committed(终态+深链) > reverted > gone。
+ * 同一路径跨多 turn 的条目合并时,取信息量高者——「现在仍待处理」压过
+ * 历史终态,终态压过中性待定。 */
+const STATE_RANK: Record<WorkEntryState, number> = { dirty: 3, committed: 2, reverted: 1, gone: 0 }
+
+/** 合并排序键:状态优先,同状态时权威自证(attribution)压过启发式推断——
+ * 同路径被 turn1 启发式提取、turn3 平台自证写入时,合并取自证,
+ * 不让已证实的条目退化回 ≈ 不确定标记。 */
+function rankOf(entry: WorkEntry): number {
+  return STATE_RANK[entry.state] * 2 + (entry.attribution === 'authoritative' ? 1 : 0)
+}
+
+/** 合并同路径的两份条目:整体取排序键高者,firstSeenAt 取更早
+ * (首次出现时刻是路径属性,不是 turn 属性),fresh 任一为真即真
+ * (任一轮曾标「新」即该路径对本时段是新产出)。 */
+function mergeEntry(a: WorkEntry, b: WorkEntry): WorkEntry {
+  const keep = rankOf(a) >= rankOf(b) ? a : b
+  return {
+    ...keep,
+    firstSeenAt: Math.min(a.firstSeenAt, b.firstSeenAt),
+    ...(a.fresh === true || b.fresh === true ? { fresh: true } : {}),
+  }
+}
+
+/** 把 next 批条目按路径合并进 into(路径唯一化,保持字母序)。
+ * host 归因是 per-turn 的——同一路径可出现在多个 turn 记录中;时段是
+ * 路径级视图,合并须去重(BUG-R1:旧实现直接拼接,同卡片重复行 + 计数虚高)。 */
+function mergeByPath(into: readonly WorkEntry[], next: readonly WorkEntry[]): readonly WorkEntry[] {
+  if (next.length === 0) return into
+  const map = new Map<string, WorkEntry>()
+  for (const entry of into) map.set(entry.path, entry)
+  for (const entry of next) {
+    const existing = map.get(entry.path)
+    map.set(entry.path, existing === undefined ? entry : mergeEntry(existing, entry))
+  }
+  return [...map.values()].sort((a, b) => a.path.localeCompare(b.path))
+}
 
 /** 一个工作时段：连续有工作 turn 的聚合窗口。 */
 export interface WorkSession {
@@ -26,11 +64,11 @@ export interface WorkSession {
   readonly turnCount: number
   /** 任务叙事:时段内首个 turn 的用户指令摘要(null = 未捕获)。 */
   readonly narrative: string | null
-  /** 本会话条目（路径并集；组装层已按路径去重）。 */
+  /** 本会话条目（跨 turn 路径并集,已按路径去重合并——见 mergeByPath）。 */
   readonly internal: readonly WorkEntry[]
-  /** 其他 dsh 会话(同工作区)AI 写入条目（作者三分）。 */
+  /** 其他 dsh 会话(同工作区)AI 写入条目（作者三分;跨 turn 去重）。 */
   readonly sibling: readonly WorkEntry[]
-  /** 外部(人工)条目（路径并集）。 */
+  /** 外部(人工)条目（跨 turn 路径并集,已去重）。 */
   readonly external: readonly WorkEntry[]
 }
 
@@ -68,9 +106,10 @@ export function buildSessions(
         endAt: turn.endAt === null ? null : Math.max(last.endAt, turn.endAt),
         // 叙事取时段内首个非空(首 turn 缺叙事时由后续 turn 补位)。
         narrative: last.narrative ?? turn.narrative,
-        internal: [...last.internal, ...turn.internal],
-        sibling: [...last.sibling, ...turn.sibling],
-        external: [...last.external, ...turn.external],
+        // 条目按路径去重合并(同一路径跨多 turn 只留一份,信息量高者胜)。
+        internal: mergeByPath(last.internal, turn.internal),
+        sibling: mergeByPath(last.sibling, turn.sibling),
+        external: mergeByPath(last.external, turn.external),
       }
     } else {
       sessions.push(newSession(turn))

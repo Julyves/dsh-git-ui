@@ -88,7 +88,7 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
   // 弹窗分组的显隐,不切断数据源:Git 中心「记录」Tab 是主动入口,恒可用
   // (蓝图意图;关闭开关的意义是"减少 pill 打扰",不是禁用功能)。
   // 拉取失败或未就绪 → records=null → 徽章与弹窗分组静默隐藏(确定降级)。
-  const { records } = useTurnRecords(
+  const { records, failed: recordsFailed } = useTurnRecords(
     (q) => query(q),
     display.state === 'ready' ? display.snapshot.checkedAt : -1,
   )
@@ -134,7 +134,7 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
   /** 改判一条归因:**写前合并**——磁盘(他实例的并发改判)∪ 本实例内存
  * (尚未落盘的连续快速改判)后再写,盲写会静默抹掉他人状态(P2-5);
  * 副作用独立于 setState updater(StrictMode 安全)。失败静默,内存态仍生效。 */
-  const reclassify = (path: string, to: 'internal' | 'external'): void => {
+  const reclassify = (path: string, to: 'internal' | 'sibling' | 'external'): void => {
     const root = display.state === 'ready' ? display.snapshot.root : ''
     void (async () => {
       const raw = await storageRead(OVERRIDES_FILE).catch(() => null)
@@ -148,16 +148,17 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
   const workspaceRoot = display.state === 'ready' ? display.snapshot.root : ''
   const viewRecords = records === null ? null : applyAuthorOverrides(records, workspaceRoot, overrides)
 
-  /** 查看即已读:弹窗打开或 Git 中心停驻记录页时标记,未读徽章清零。 */
+  /** 查看即已读:弹窗打开或 Git 中心停驻记录页时标记,未读徽章清零。
+   * BUG-R5 修复:已读基准不仅随「开始查看」的边沿刷新,也随**查看期间的记录
+   * 流入**刷新——记录数据经 checkedAt 刷新键持续到达(30s 轮询 + turn 完成
+   * 即刷),旧边沿实现下用户正看着新条目出现,「new N」却在上涨,关闭后
+   * 点开全是已看内容,未读信号失信。 */
   const markWorkSeen = (): void => setSeenAt(markSeen(sessionId))
+  const viewingRecords = open || (centerOpen && centerTab === 'records')
   useEffect(() => {
-    if (open) markWorkSeen()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- open 上升沿标记一次
-  }, [open])
-  useEffect(() => {
-    if (centerOpen && centerTab === 'records') markWorkSeen()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 记录页停驻上升沿标记
-  }, [centerOpen, centerTab])
+    if (viewingRecords) markWorkSeen()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 查看态边沿 + 查看期间每批记录到达各标记一次
+  }, [viewingRecords, viewRecords])
 
   /** 打开 Git 中心并定位到「记录」Tab（弹窗工作记录「全部 turn 记录」入口）。 */
   const openRecordsInCenter = (): void => {
@@ -365,6 +366,7 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
         t={t}
         openRequest={centerRequest}
         records={viewRecords}
+        recordsFailed={recordsFailed}
         onReclassify={reclassify}
       />
     </span>

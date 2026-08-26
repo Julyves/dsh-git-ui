@@ -29,7 +29,7 @@ export interface SessionCardProps {
   /** 已提交条目 → Git 中心历史页定位该提交。 */
   readonly onOpenCommit?: (hash: string) => void
   /** 人工改判归因(仓库级持久化;缺省 = 无纠错入口)。 */
-  readonly onReclassify?: (path: string, to: 'internal' | 'external') => void
+  readonly onReclassify?: (path: string, to: 'internal' | 'sibling' | 'external') => void
 }
 
 /** HH:mm 钟面。 */
@@ -51,7 +51,7 @@ function EntryGroup({ title, dot, group, entries, t, onOpenDiff, onOpenCommit, o
   readonly t: (key: GitKey) => string
   readonly onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
   readonly onOpenCommit?: (hash: string) => void
-  readonly onReclassify?: (path: string, to: 'internal' | 'external') => void
+  readonly onReclassify?: (path: string, to: 'internal' | 'sibling' | 'external') => void
 }): JSX.Element | null {
   if (entries.length === 0) return null
   return (

@@ -38,7 +38,7 @@ export function GitPopupBody({
   /** turn 工作记录(最近窗口用于徽章与分组);null = 未就绪。 */
   records: readonly TurnWorkRecord[] | null
   /** 人工改判归因(与记录页一致的三段 ⇄ 入口)。 */
-  onReclassify: (path: string, to: 'internal' | 'external') => void
+  onReclassify: (path: string, to: 'internal' | 'sibling' | 'external') => void
   t: (key: GitKey) => string
 }): JSX.Element {
   const { Button } = useUI()

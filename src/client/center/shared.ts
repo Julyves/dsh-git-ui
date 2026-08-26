@@ -78,8 +78,11 @@ export interface GitCenterProps {
   readonly openRequest?: { readonly path: string; readonly base: 'worktree' | 'staged' } | null
   /** turn 工作记录(由 GitPill 统一拉取并下发;null = 未就绪/未开启)。 */
   readonly records?: readonly TurnWorkRecord[] | null
+  /** records=null 时的失败态(true = 拉取失败;false/缺省 = 首次加载中)。
+   *  BUG-R4:旧实现 null 一律渲染「加载失败」,慢仓库首屏秒级闪失败文案。 */
+  readonly recordsFailed?: boolean
   /** 人工改判归因(仓库级持久化;缺省 = 记录页无纠错入口)。 */
-  readonly onReclassify?: (path: string, to: 'internal' | 'external') => void
+  readonly onReclassify?: (path: string, to: 'internal' | 'sibling' | 'external') => void
 }
 
 /** 反馈条：text 为展示文案（业务错误经 i18n 友好化）；detail 保留原始信息供 title。 */

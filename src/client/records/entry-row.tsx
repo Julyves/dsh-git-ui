@@ -22,7 +22,17 @@ export interface EntryRowProps {
   /** 该条目所属分组(纠错按钮的改判方向)。 */
   readonly group?: 'internal' | 'sibling' | 'external'
   /** 人工改判归因(仓库级持久化;缺省 = 无纠错入口)。 */
-  readonly onReclassify?: (path: string, to: 'internal' | 'external') => void
+  readonly onReclassify?: (path: string, to: 'internal' | 'sibling' | 'external') => void
+}
+
+/** ⇄ 改判的下一站(三态循环 internal → external → sibling → internal)。
+ *  3-循环是全可达置换:任两组之间至多两击互通,误改判完全可逆——
+ *  BUG-R2 修复(旧实现非 internal 组一律改 internal,sibling 条目改出后
+ *  无任何通道回到 sibling 组)。按钮 title 动态标注目的地,用户可预期。 */
+const RECLASSIFY_NEXT: Record<'internal' | 'sibling' | 'external', 'internal' | 'sibling' | 'external'> = {
+  internal: 'external',
+  external: 'sibling',
+  sibling: 'internal',
 }
 
 /** 一条工作条目（状态 chip + 文件名 + 目录 + 状态徽章）。 */
@@ -73,9 +83,9 @@ export function EntryRow({ entry, t, onOpenDiff, onOpenCommit, group, onReclassi
             type="button"
             className="dsh-git-ui__icon-btn"
             style={css.entryReclassifyButton}
-            title={group === 'internal' ? t('work.reclassify.external') : t('work.reclassify.internal')}
-            aria-label={group === 'internal' ? t('work.reclassify.external') : t('work.reclassify.internal')}
-            onClick={() => onReclassify(entry.path, group === 'internal' ? 'external' : 'internal')}
+            title={t(`work.reclassify.${RECLASSIFY_NEXT[group]}`)}
+            aria-label={t(`work.reclassify.${RECLASSIFY_NEXT[group]}`)}
+            onClick={() => onReclassify(entry.path, RECLASSIFY_NEXT[group])}
           >
             ⇄
           </button>

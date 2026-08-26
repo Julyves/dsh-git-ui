@@ -27,6 +27,8 @@ import * as css from './styles.ts'
 export interface RecordsTabProps {
   /** turn 工作记录（GitPill 下发）；null = 未就绪/未开启。 */
   readonly records: readonly TurnWorkRecord[] | null
+  /** records=null 的成因区分（BUG-R4）:true = 拉取失败;false/缺省 = 首次加载中。 */
+  readonly loadFailed?: boolean
   readonly t: (key: GitKey) => string
   /** 打开的变更文件（仍变更条目）→ 交给 GitCenter 定位 Changes 标签。 */
   readonly onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
@@ -37,7 +39,7 @@ export interface RecordsTabProps {
   /** 已提交条目 → Git 中心历史页定位该提交。 */
   readonly onOpenCommit?: (hash: string) => void
   /** 人工改判归因(仓库级持久化;缺省 = 无纠错入口)。 */
-  readonly onReclassify?: (path: string, to: 'internal' | 'external') => void
+  readonly onReclassify?: (path: string, to: 'internal' | 'sibling' | 'external') => void
 }
 
 /** 空白占位（无记录 / 加载失败）：图标 + 文案。 */
@@ -67,7 +69,7 @@ const FILTERS: readonly { readonly key: RecordFilter; readonly label: GitKey }[]
  *   - 无任何时段 → 「还没有工作时段」；
  *   - 有时段但当前过滤下无条目 → 「当前过滤下没有条目，切换其他筛选」。
  */
-export function RecordsTab({ records, t, onOpenDiff, initialFilter = 'all', execute, onOpenCommit, onReclassify }: RecordsTabProps): JSX.Element {
+export function RecordsTab({ records, loadFailed = false, t, onOpenDiff, initialFilter = 'all', execute, onOpenCommit, onReclassify }: RecordsTabProps): JSX.Element {
   const [filter, setFilter] = useState<RecordFilter>(initialFilter)
   /** 批量暂存:P3(只提交 AI 成果)的主出口——AI 组 = internal+sibling 的仍变更路径。 */
   const stageOf = (paths: readonly string[]): void => {
@@ -75,8 +77,10 @@ export function RecordsTab({ records, t, onOpenDiff, initialFilter = 'all', exec
     void execute({ kind: 'stage', paths: [...paths] }, t('work.stage.success'))
   }
 
+  // null 三分(R4):拉取失败 → 失败文案;否则 = 首次加载中(快照折叠 +
+  // 探测在大仓库可达秒级)→ 加载文案,不再把「正在加载」误报为「失败」。
   if (records === null) {
-    return <EmptyNote text={t('work.loadFailed')} t={t} />
+    return <EmptyNote text={loadFailed ? t('work.loadFailed') : t('center.loading')} t={t} />
   }
   const sessions = buildSessions(records)
   // 过滤为纯客户端派生（不复用任何额外查询）。

@@ -127,7 +127,13 @@ async function upgradeGonePaths(
   if (tracker === undefined || probe === undefined) return 0
   const gone = new Set<string>()
   for (const turn of records) {
+    // 三方作者同等收敛:internal/sibling/external 的 gone 条目都进入探测
+    // 候选(BUG-R3:旧实现漏遍历 sibling 组——其他会话 AI 写入的条目永久停留
+    // 「已消失」,已提交深链永不出现)。
     for (const entry of turn.internal) {
+      if (entry.state === 'gone') gone.add(entry.path)
+    }
+    for (const entry of turn.sibling) {
       if (entry.state === 'gone') gone.add(entry.path)
     }
     for (const entry of turn.external) {

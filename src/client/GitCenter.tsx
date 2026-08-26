@@ -34,7 +34,7 @@ export type { GitCenterProps, GitCenterTab } from './center/shared.ts'
 
 
 export function GitCenter({
-  open, onClose, initialTab = 'changes', snapshot, run, query, t, openRequest = null, records = null, onReclassify,
+  open, onClose, initialTab = 'changes', snapshot, run, query, t, openRequest = null, records = null, recordsFailed = false, onReclassify,
 }: GitCenterProps): JSX.Element | null {
   const { Modal, Toast } = useUI()
   const [tab, setTab] = useState<TabKey>(initialTab)
@@ -176,7 +176,7 @@ export function GitCenter({
             aria-labelledby="dsh-git-ui-tab-records"
             style={tab === 'records' ? { display: 'contents' } : { display: 'none' }}
           >
-            <RecordsTab records={records} t={t}
+            <RecordsTab records={records} loadFailed={recordsFailed} t={t}
               onOpenDiff={(path, base) => {
                 setRecordOpenRequest({ path, base })
                 setTab('changes')

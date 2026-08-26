@@ -28,9 +28,9 @@ function entry(path: string, state: WorkEntry['state'] = 'dirty'): WorkEntry {
 }
 
 /** 渲染 RecordsTab 为静态 HTML 字符串。 */
-function render(records: readonly TurnWorkRecord[] | null, initialFilter: 'all' | 'internal' | 'sibling' | 'external' = 'all'): string {
+function render(records: readonly TurnWorkRecord[] | null, initialFilter: 'all' | 'internal' | 'sibling' | 'external' = 'all', loadFailed = false): string {
   return renderToStaticMarkup(
-    <RecordsTab records={records} t={t} onOpenDiff={() => {}} initialFilter={initialFilter} />,
+    <RecordsTab records={records} loadFailed={loadFailed} t={t} onOpenDiff={() => {}} initialFilter={initialFilter} />,
   )
 }
 
@@ -72,9 +72,12 @@ describe('RecordsTab — 过滤空态不卡死（回归）', () => {
     expect(html).toContain(t('work.group.external'))
   })
 
-  it('records 未就绪（null）时显示加载失败态', () => {
-    const html = render(null)
-    expect(html).toContain(t('work.loadFailed'))
+  it('records=null：显式 loadFailed 显示失败态；缺省显示加载中（R4 三分）', () => {
+    const failed = render(null, 'all', true)
+    expect(failed).toContain(t('work.loadFailed'))
+    const loading = render(null)
+    expect(loading).toContain(t('center.loading'))
+    expect(loading).not.toContain(t('work.loadFailed'))
   })
 })
 

@@ -1,8 +1,8 @@
 /**
  * 归因人工纠错(overrides):用户对「这条记录归谁」的一票否决权。
  *
- * 语义:按 **工作区根 + 路径** 持久化的作者改判(internal ↔ external),
- * 会话无关——「这个文件从来都是我改的」是仓库级事实,不是会话级偏好。
+ * 语义:按 **工作区根 + 路径** 持久化的作者改判(internal/sibling/external
+ * 三态),会话无关——「这个文件从来都是我改的」是仓库级事实,不是会话级偏好。
  * 存储走既有插件数据通道(storageRead/Write → overrides.json,白名单单段名);
  * 应用在展示层(GitPill 统一过滤),host 归因管线零感知。
  */
@@ -12,8 +12,10 @@ import type { TurnWorkRecord, WorkEntry } from '../../host/types.ts'
 /** 覆盖存储文件名(插件数据目录下的单段白名单名)。 */
 export const OVERRIDES_FILE = 'overrides.json'
 
-/** 改判目标:internal = 归本会话 AI;external = 归人工。 */
-export type AuthorOverride = 'internal' | 'external'
+/** 改判目标:internal = 归本会话 AI;sibling = 归其他会话 AI;external = 归人工。
+ * (BUG-R2:值域补 sibling——三态循环使 ⇄ 改判完全可逆;旧二元值域下误改判
+ * sibling 条目后,「其他会话 AI」归因永久丢失且无撤销通道。) */
+export type AuthorOverride = 'internal' | 'sibling' | 'external'
 
 /** 全量覆盖表:工作区根 → (路径 → 改判)。 */
 export type AuthorOverrideMap = Readonly<Record<string, Readonly<Record<string, AuthorOverride>>>>
@@ -29,7 +31,9 @@ export function parseOverrides(raw: string | null): AuthorOverrideMap {
       if (typeof paths !== 'object' || paths === null || Array.isArray(paths)) continue
       const bucket: Record<string, AuthorOverride> = {}
       for (const [path, value] of Object.entries(paths as Record<string, unknown>)) {
-        if (value === 'internal' || value === 'external') bucket[path] = value
+        // 旧版本文件只含 internal/external——新值 sibling 对旧客户端天然
+        // 降级(校验拒绝 → 回退启发式),前向兼容无迁移。
+        if (value === 'internal' || value === 'sibling' || value === 'external') bucket[path] = value
       }
       out[root] = bucket
     }
@@ -68,11 +72,12 @@ export function mergeOverrides(mine: AuthorOverrideMap, theirs: AuthorOverrideMa
 
 /**
  * 把人工改判应用到记录集(逐 turn 在三组间搬移条目)。override 是
- * **最终归属**语义:internal = 归本会话 AI;external = 归人工。
- * 搬移矩阵(修复 P1-1:旧实现漏掉 sibling→internal 方向,⇄ 在第三组失效):
- *   - 任意组 + override internal → internal 组(sibling 行的改判方向补全);
- *   - internal/sibling 组 + override external → external 组;
- *   - 已在目标组的条目无操作(改判回原组 = 撤销,效果等价);
+ * **最终归属**语义:internal = 归本会话 AI;sibling = 归其他会话 AI;
+ * external = 归人工。
+ * 搬移矩阵(3×3 全可达——BUG-R2 修复:旧矩阵 sibling 组只出不进,
+ * 「改回其他会话 AI」无通道):
+ *   - override X 的条目(无论原在何组)一律落 X 组;
+ *   - override 与所在组一致 = 无操作;改判回原组 = 撤销,效果等价;
  *   - 无改判条目原位保留(未改判的 sibling 留 sibling 组)。
  * 返回新数组;无覆盖时原样返回(引用稳定)。
  */
@@ -84,32 +89,35 @@ export function applyAuthorOverrides(
   const bucket = overrides[root]
   if (bucket === undefined || Object.keys(bucket).length === 0) return records
   return records.map((turn) => {
+    // 按改判目标三分(to* 桶)+ 无改判保留桶;三组各自独立分拣。
     const split = (entries: readonly WorkEntry[]): {
       readonly toInternal: readonly WorkEntry[]
+      readonly toSibling: readonly WorkEntry[]
       readonly toExternal: readonly WorkEntry[]
       readonly kept: readonly WorkEntry[]
     } => {
       const toInternal: WorkEntry[] = []
+      const toSibling: WorkEntry[] = []
       const toExternal: WorkEntry[] = []
       const kept: WorkEntry[] = []
       for (const entry of entries) {
         const value = bucket[entry.path]
         if (value === 'internal') toInternal.push(entry)
+        else if (value === 'sibling') toSibling.push(entry)
         else if (value === 'external') toExternal.push(entry)
         else kept.push(entry)
       }
-      return { toInternal, toExternal, kept }
+      return { toInternal, toSibling, toExternal, kept }
     }
     const internal = split(turn.internal)
     const sibling = split(turn.sibling)
     const external = split(turn.external)
     return {
       ...turn,
-      // 本组的 to* 桶拼回本组(override 与当前组一致 = 无操作;改判回原组
-      // = 撤销,效果等价);异组的 to* 桶按 override 方向搬入。
+      // 每组 = 本组保留 + 本组自证(override 与组一致) + 异组按改判搬入。
       internal: [...internal.kept, ...internal.toInternal, ...sibling.toInternal, ...external.toInternal],
-      sibling: sibling.kept,
-      external: [...external.kept, ...external.toExternal, ...sibling.toExternal, ...internal.toExternal],
+      sibling: [...sibling.kept, ...sibling.toSibling, ...internal.toSibling, ...external.toSibling],
+      external: [...external.kept, ...external.toExternal, ...internal.toExternal, ...sibling.toExternal],
     }
   })
 }

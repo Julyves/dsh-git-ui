@@ -150,6 +150,60 @@ describe('summarizeSessions — 摘要计数', () => {
   })
 })
 
+/** 指定路径/状态/归因的条目(合并优先级语义测试用)。 */
+function specific(path: string, state: WorkEntry['state'], attribution: 'authoritative' | 'inferred', firstSeenAt: number, fresh?: boolean): WorkEntry {
+  return { path, status: 'modified', state, firstSeenAt, commitHash: null, attribution, ...(fresh === true ? { fresh: true } : {}) }
+}
+
+describe('buildSessions — 跨 turn 同路径去重合并(BUG-R1)', () => {
+  it('同路径只留一份,且保持路径字母序', () => {
+    const records = [
+      { ...workTurn(1, 1000, 2000, 0, 0), internal: [specific('b.ts', 'dirty', 'inferred', 1000), specific('a.ts', 'dirty', 'inferred', 1000)] },
+      { ...workTurn(2, 2010, 3000, 0, 0), internal: [specific('a.ts', 'dirty', 'inferred', 2010)] },
+    ]
+    const merged = buildSessions(records)[0]!.internal
+    expect(merged.map((e) => e.path)).toEqual(['a.ts', 'b.ts'])
+  })
+
+  it('状态信息量高者胜:dirty 压过 committed/gone(仍待处理是当前事实)', () => {
+    const records = [
+      { ...workTurn(1, 1000, 2000, 0, 0), internal: [specific('a.ts', 'committed', 'authoritative', 1000)] },
+      { ...workTurn(2, 2010, 3000, 0, 0), internal: [specific('a.ts', 'dirty', 'inferred', 2010)] },
+    ]
+    expect(buildSessions(records)[0]!.internal[0]!.state).toBe('dirty')
+  })
+
+  it('同状态时权威自证压过启发式(不让已证实条目退化回 ≈)', () => {
+    const records = [
+      { ...workTurn(1, 1000, 2000, 0, 0), internal: [specific('a.ts', 'dirty', 'inferred', 1000)] },
+      { ...workTurn(2, 2010, 3000, 0, 0), internal: [specific('a.ts', 'dirty', 'authoritative', 2010)] },
+    ]
+    expect(buildSessions(records)[0]!.internal[0]!.attribution).toBe('authoritative')
+  })
+
+  it('firstSeenAt 取更早(首次出现是路径属性);fresh 任一为真即真', () => {
+    const records = [
+      { ...workTurn(1, 1000, 2000, 0, 0), internal: [specific('a.ts', 'dirty', 'inferred', 5000)] },
+      { ...workTurn(2, 2010, 3000, 0, 0), internal: [specific('a.ts', 'dirty', 'inferred', 2010, true)] },
+    ]
+    const merged = buildSessions(records)[0]!.internal[0]!
+    expect(merged.firstSeenAt).toBe(2010)
+    expect(merged.fresh).toBe(true)
+  })
+
+  it('不合并的时段(间隔超阈值)各自保留,互不去重', () => {
+    const gap = SESSION_GAP_MS
+    const records = [
+      { ...workTurn(1, 0, 1000, 0, 0), external: [specific('x.log', 'dirty', 'inferred', 500)] },
+      { ...workTurn(2, 1000 + gap + 1, 2000 + gap, 0, 0), external: [specific('x.log', 'dirty', 'inferred', 1500)] },
+    ]
+    const sessions = buildSessions(records)
+    expect(sessions).toHaveLength(2)
+    expect(sessions[0]!.external).toHaveLength(1)
+    expect(sessions[1]!.external).toHaveLength(1)
+  })
+})
+
 describe('buildSessions — 任务叙事', () => {
   it('session narrative = 首个非空 turn 叙事(首 turn 缺失由后续补位)', () => {
     const records = [
