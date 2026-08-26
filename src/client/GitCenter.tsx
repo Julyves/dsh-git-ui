@@ -22,7 +22,7 @@ import type { JSX } from 'react'
 import { useUI } from '../contracts/ui-context.tsx'
 import type { GitAction } from '../host/types.ts'
 import { errorText } from './error-text.ts'
-import { CloseIcon, GearIcon, RecordIcon } from './icons.tsx'
+import { CloseIcon, CommitIcon, DiffIcon, GearIcon, RecordIcon } from './icons.tsx'
 import { RecordsTab } from './records/index.tsx'
 import { SettingsTab } from './settings/SettingsTab.tsx'
 import * as css from './styles.ts'
@@ -86,8 +86,9 @@ export function GitCenter({
   }
 
   const tabs: Array<{ key: TabKey; label: string; icon?: JSX.Element; dividerBefore?: boolean }> = [
-    { key: 'changes', label: t('center.changes') },
-    { key: 'history', label: t('center.history') },
+    // 四 Tab 统一携带语义图标：变更=对照双栏 / 历史=提交图节点 / 记录=时钟 / 设置=齿轮。
+    { key: 'changes', label: t('center.changes'), icon: <DiffIcon /> },
+    { key: 'history', label: t('center.history'), icon: <CommitIcon /> },
     { key: 'records', label: t('work.tab'), icon: <RecordIcon /> },
     // 偏好区：与功能 Tab 用发丝分隔线轻隔离（设置 = 非仓库操作）。
     { key: 'settings', label: t('settings.title'), icon: <GearIcon />, dividerBefore: true },
