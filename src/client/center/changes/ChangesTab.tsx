@@ -41,6 +41,8 @@ export function ChangesTab({
   const [diffSel, setDiffSel] = useState<DiffSelection | null>(null)
   const [diffText, setDiffText] = useState<string | null>(null)
   const [diffLoading, setDiffLoading] = useState(false)
+  /** diff 查询失败态（C4）：与「真的无差异」区分——查询失败不再误显「无文件变更」。 */
+  const [diffFailed, setDiffFailed] = useState(false)
   const diffSeq = useRef(0)
 
   useEffect(() => {
@@ -91,13 +93,27 @@ export function ChangesTab({
 
   const showDiff = async (path: string, base: 'worktree' | 'staged'): Promise<void> => {
     const seq = ++diffSeq.current
+    // 同目标静默刷新（C5）：快照轮询/操作成功后的重取保留旧内容、不闪
+    // loading——DiffSideBySide 保持挂载，滚动位置与折叠展开态不丢，内容
+    // 就位后原位替换。仅切换目标（新文件/基线迁移）才清空并进入加载态。
+    const sameTarget = diffSel !== null && diffSel.path === path && diffSel.base === base
     setDiffSel({ path, base })
-    setDiffText(null)
-    setDiffLoading(true)
+    setDiffFailed(false)
+    if (!sameTarget) {
+      setDiffText(null)
+      setDiffLoading(true)
+    }
     const outcome = await query({ kind: 'diff', path, base })
     if (seq !== diffSeq.current) return
     setDiffLoading(false)
-    setDiffText(outcome.ok && outcome.value.kind === 'diff' ? outcome.value.text : null)
+    if (outcome.ok && outcome.value.kind === 'diff') {
+      setDiffText(outcome.value.text)
+    } else if (diffText === null) {
+      // 查询失败且无旧内容可保留：进入错误态（C4）——与「真的无差异」区分。
+      // 已有内容时静默刷新失败不打断阅读，下轮轮询自然重试。
+      setDiffText(null)
+      setDiffFailed(true)
+    }
   }
 
   // 打开定位请求（pill 点击变更文件）：展开文件所在分组并打开对照。
@@ -117,7 +133,8 @@ export function ChangesTab({
   }, [openRequest])
 
   // 差异视图跟随快照：管理操作成功/轮询刷新后，文件消失 → 关闭对照；
-  // 暂存侧迁移（MM 双条目）→ 按新基线重取；内容也可能随操作变化 → 一律重取。
+  // 暂存侧迁移（MM 双条目）→ 按新基线重取；内容也可能随操作变化 → 一律重取
+  // （重取本身经 showDiff 的同目标判定静默进行，不打断阅读）。
   useEffect(() => {
     if (diffSel === null) return
     const desired = reconcileDiffSelection(diffSel, snapshot.changes)
@@ -125,10 +142,28 @@ export function ChangesTab({
       diffSeq.current += 1
       setDiffSel(null)
       setDiffText(null)
+      setDiffFailed(false)
     } else {
       void showDiff(desired.path, desired.base)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 快照驱动的差异协调；showDiff 经 diffSeq 防竞态
+  }, [snapshot])
+
+  // 选择集随快照修剪（C1）：行消失（agent 恢复/删除/外部提交了文件）后路径
+  // 不得残留——失效路径进入 commit 会让 git add 失败、整个提交序列中止，且
+  // 行已不渲染、用户无从反选。与 diff 选择的 reconcile 对称，按路径存活集修剪。
+  useEffect(() => {
+    setSelected((prev) => {
+      if (prev.size === 0) return prev
+      const alive = new Set(snapshot.changes.map((c) => c.path))
+      let changed = false
+      const next = new Set<string>()
+      for (const path of prev) {
+        if (alive.has(path)) next.add(path)
+        else changed = true
+      }
+      return changed ? next : prev
+    })
   }, [snapshot])
 
   const commit = (): void => {
@@ -358,16 +393,18 @@ export function ChangesTab({
                   style={css.rowIconButton}
                   title={t('center.close')}
                   aria-label={t('center.close')}
-                  onClick={() => { diffSeq.current += 1; setDiffSel(null); setDiffText(null) }}
+                  onClick={() => { diffSeq.current += 1; setDiffSel(null); setDiffText(null); setDiffFailed(false) }}
                 >
                   <CloseIcon />
                 </button>
               </div>
               {diffLoading
                 ? <div style={css.emptyNote}>{t('center.loading')}</div>
-                : diffText === null
-                  ? <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
-                  : isNewFile
+                : diffFailed
+                  ? <div style={css.emptyNote}>{t('diff.loadFailed')}</div>
+                  : diffText === null
+                    ? <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
+                    : isNewFile
                     ? (
                       <NewFileView
                         key={diffSel.path}

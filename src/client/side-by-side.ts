@@ -18,7 +18,17 @@ export interface SideBySideRow {
   readonly right: SideCell
 }
 
-/** 由 unified diff 文本构建对照行序列。空输入返回空数组。 */
+/** 由 unified diff 文本构建对照行序列。空输入返回空数组。
+ *
+ * **hunk 配额感知解析**（C2 修复）：内容行与元信息行天然存在前缀歧义——
+ * 行文本以 `++ `/`-- ` 开头时，diff 行（`+++ foo` / `--- bar`）与
+ * `+++ b/path` / `--- a/f` 头部同形。按行首前缀判别会把这类内容行当元信息
+ * 静默丢弃（并排视图整行消失/新文件视图丢内容）。权威判据是 @@ 头携带的
+ * 行数配额：**首个 @@ 之前与配额耗尽之后**的行均为元信息（直接跳过）；
+ * 配额在场时的 `-`/`+`/空格前缀行是内容行（`+++i;` 也是），按前缀分类
+ * 并扣减对应侧配额（上下文行双侧各扣一）。`\ No newline` 标记与裸空行
+ * 不扣配额。
+ */
 export function buildSideBySide(unified: string): readonly SideBySideRow[] {
   if (unified === '') return []
   const rows: SideBySideRow[] = []
@@ -26,6 +36,10 @@ export function buildSideBySide(unified: string): readonly SideBySideRow[] {
   let rightNum = 0
   let dels: string[] = []
   let adds: string[] = []
+  /** 当前 hunk 旧/新侧剩余内容行数（配额）。 */
+  let oldLeft = 0
+  let newLeft = 0
+  let inHunk = false
 
   /** 将积累的删除/添加块按索引配对成对照行。 */
   const flush = (): void => {
@@ -43,18 +57,21 @@ export function buildSideBySide(unified: string): readonly SideBySideRow[] {
   }
 
   for (const line of unified.split('\n')) {
-    if (line.startsWith('@@')) {
-      flush()
-      const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line)
-      if (m !== null) {
-        leftNum = Number(m[1]) - 1
-        rightNum = Number(m[2]) - 1
+    // hunk 外（首个 @@ 之前 / 配额耗尽之后）：仅 @@ 头有意义，其余
+    // （diff --git / index / --- / +++ / new file 等元信息与尾部空串）跳过。
+    if (!inHunk || (oldLeft <= 0 && newLeft <= 0)) {
+      inHunk = false
+      if (line.startsWith('@@')) {
+        flush()
+        const m = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line)
+        if (m !== null) {
+          leftNum = Number(m[1]) - 1
+          rightNum = Number(m[3]) - 1
+          oldLeft = m[2] !== undefined ? Number(m[2]) : 1
+          newLeft = m[4] !== undefined ? Number(m[4]) : 1
+          inHunk = true
+        }
       }
-      continue
-    }
-    // 元信息行（diff --git / index / --- / +++ / new file 等）跳过。
-    if (/^(diff --git|index |--- |\+\+\+ |new file |deleted file |old mode |new mode |similarity index |rename from |rename to |Binary files |GIT binary patch)/.test(line)) {
-      flush()
       continue
     }
     // `\ No newline at end of file`：随被改行之后的**文件尾标记**，不是内容
@@ -66,20 +83,27 @@ export function buildSideBySide(unified: string): readonly SideBySideRow[] {
     if (line.startsWith('-')) {
       if (adds.length > 0) flush()
       dels.push(line.slice(1))
+      oldLeft -= 1
       continue
     }
     if (line.startsWith('+')) {
       adds.push(line.slice(1))
+      newLeft -= 1
       continue
     }
-    // 上下文行（含空行：unified 的上下文行以空格开头；裸空行视为文件尾）。
+    // 上下文行（unified 的上下文行以空格开头；裸空行视为文件尾）。
     flush()
-    if (line === '') continue
+    if (line === '') {
+      inHunk = false
+      continue
+    }
     const text = line.slice(1)
     rows.push({
       left: { num: (leftNum += 1), text, kind: 'context' },
       right: { num: (rightNum += 1), text, kind: 'context' },
     })
+    oldLeft -= 1
+    newLeft -= 1
   }
   flush()
   return rows
@@ -180,12 +204,25 @@ export function foldMarkerLines(
  * 从纯新增差异中提取创建后的完整文件内容（去掉 diff 包装与元信息行）。
  * 仅对 `isAddOnlyDiff` 成立的文本调用；`\ No newline at end of file`
  * 标记行被跳过（它不是内容）。空文件返回 ''。
+ *
+ * hunk 配额感知（C2 修复）：`+++` 前缀既可能是 `+++ b/path` 元信息，也可能
+ * 是 `++` 开头的内容行（如 `+++i;`）——按 @@ 头的新侧行数配额消费 `+` 行，
+ * 配额外（首个 @@ 之前/配额耗尽之后）一律视为元信息跳过。
  */
 export function extractAddedContent(unified: string): string {
   const out: string[] = []
+  let newLeft = 0
   for (const line of unified.split('\n')) {
-    if (line.startsWith('+++')) continue
-    if (line.startsWith('+')) out.push(line.slice(1))
+    if (line.startsWith('@@')) {
+      const m = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line)
+      newLeft = m === null ? 0 : m[4] !== undefined ? Number(m[4]) : 1
+      continue
+    }
+    if (line.startsWith('\\')) continue
+    if (newLeft > 0 && line.startsWith('+')) {
+      out.push(line.slice(1))
+      newLeft -= 1
+    }
   }
   return out.join('\n')
 }

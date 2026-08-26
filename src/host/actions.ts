@@ -17,17 +17,24 @@ import { resolve, sep } from 'node:path'
 import { resolveWorkspace, runCommand, snapshotForSession, type GitStatusConfig, type SnapshotDeps } from './core.ts'
 import type { GitAction, GitActionResult, GitActionRequest, GitOperationErrorCode } from './types.ts'
 
-/** Build the command sequence for one action, validating every path against the root. */
-function buildArgv(action: GitAction, root: string): { readonly argv: readonly (readonly string[])[] } | { readonly error: string } {
+/** Build the command sequence for one action, validating every path against the root.
+ * `unborn`（仓库无任何提交）：unstage 的 `restore --staged` 以 HEAD 为参照，
+ * 无 HEAD 时必败（fatal: could not resolve HEAD）——改用 `rm --cached` 把
+ * 条目移出索引（等价的取消暂存语义，C3 修复）。 */
+function buildArgv(action: GitAction, root: string, unborn = false): { readonly argv: readonly (readonly string[])[] } | { readonly error: string } {
   switch (action.kind) {
     case 'stage':
       return withPaths([['git', 'add', '--']], action.paths, root)
     case 'stage-all':
       return { argv: [['git', 'add', '-A']] }
     case 'unstage':
-      return withPaths([['git', 'restore', '--staged', '--']], action.paths, root)
+      return unborn
+        ? withPaths([['git', 'rm', '--cached', '-r', '--']], action.paths, root)
+        : withPaths([['git', 'restore', '--staged', '--']], action.paths, root)
     case 'unstage-all':
-      return { argv: [['git', 'restore', '--staged', '--', '.']] }
+      return unborn
+        ? { argv: [['git', 'rm', '--cached', '-r', '--', '.']] }
+        : { argv: [['git', 'restore', '--staged', '--', '.']] }
     case 'discard':
       return withPaths([['git', 'restore', '--']], action.paths, root)
     case 'discard-all':
@@ -120,6 +127,18 @@ export function classifyOperationError(kind: GitAction['kind'], message: string)
 }
 
 /**
+ * HEAD 是否不存在（unborn 仓库）。`--verify --quiet` 无输出、缺 HEAD 时
+ * exit 1。探测本身失败（spawn/超时）按「非 unborn」处理——让后续
+ * restore 命令以自己的错误呈现，不吞真实故障。
+ */
+async function headMissing(deps: SnapshotDeps, root: string): Promise<boolean> {
+  const out = await runCommand(deps.run, ['git', 'rev-parse', '--verify', '--quiet', 'HEAD'], root, 'rev-parse HEAD', deps.signal)
+  if ('failure' in out) return false
+  if (out.run.timedOut) return false
+  return out.run.exitCode !== 0
+}
+
+/**
  * Execute one management action against the session's repository and return
  * the refreshed snapshot on success (the caller re-renders from it, so the
  * UI never waits for the next poll).
@@ -145,7 +164,13 @@ export async function runAction(
     }
   }
 
-  const built = buildArgv(request.action, root)
+  // unstage 在 unborn 仓库（无 HEAD）下 restore --staged 必败——先探测，
+  // 命中则 buildArgv 改用 rm --cached（C3）。
+  const unborn = kind === 'unstage' || kind === 'unstage-all'
+    ? await headMissing(deps, root)
+    : false
+
+  const built = buildArgv(request.action, root, unborn)
   if ('error' in built) return { ok: false, error: { code: 'invalid-path', message: built.error } }
 
   // Run the command sequence; a failure stops the rest. 先行命令可能已生效：

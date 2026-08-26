@@ -71,7 +71,7 @@ describe('buildSideBySide', () => {
 })
 
 describe('capSideBySideRows', () => {
-  const rows = buildSideBySide('@@ -1,1 +1,1 @@\n a\n-b\n+c\n')
+  const rows = buildSideBySide('@@ -1,2 +1,2 @@\n a\n-b\n+c\n')
 
   it('returns the rows unchanged when within the cap', () => {
     expect(capSideBySideRows(rows, rows.length)).toBe(rows)
@@ -118,7 +118,8 @@ describe('summarizeChanges', () => {
 })
 
 describe('foldContext', () => {
-  const ctx = (n: number): string[] => ['@@ -1,1 +1,1 @@', ' keep', ...Array.from({ length: n }, (_, i) => ` c${i}`), '+add']
+  // 夹具配额自洽：n+1 上下文 + 1 新增 → 旧侧 n+1、新侧 n+2（真实 git 输出必一致）。
+  const ctx = (n: number): string[] => [`@@ -1,${n + 1} +1,${n + 2} @@`, ' keep', ...Array.from({ length: n }, (_, i) => ` c${i}`), '+add']
 
   it('leaves short context runs (≤ threshold) inline', () => {
     const rows = buildSideBySide(ctx(2).join('\n'))
@@ -141,7 +142,7 @@ describe('foldContext', () => {
 
   it('folds each long run separately when changes separate them', () => {
     const rows = buildSideBySide([
-      '@@ -1,1 +1,1 @@',
+      '@@ -1,10 +1,12 @@',
       ...Array.from({ length: 5 }, () => ' a'),
       '+first',
       ...Array.from({ length: 5 }, () => ' b'),
@@ -325,5 +326,68 @@ describe('foldMarkerLines（可见流坐标）', () => {
   it('returns empty when every fold is expanded', () => {
     const blocks: readonly DiffBlock[] = [fold(5), fold(2)]
     expect(foldMarkerLines(blocks, new Set([0, 1]))).toEqual([])
+  })
+})
+
+describe('hunk 配额感知解析（C2 回归：++/-- 前缀内容行不得被当元信息丢弃）', () => {
+  // 以下夹具均为真实 git 输出形态（2026-08-26 临时仓库实测）。
+  const MODIFIED = [
+    'diff --git a/f.txt b/f.txt',
+    'index 22f0f67..b3fbe25 100644',
+    '--- a/f.txt',
+    '+++ b/f.txt',
+    '@@ -1,5 +1,6 @@',
+    ' line1',
+    '-++ foo',
+    '+++ foo CHANGED',
+    ' ++i;',
+    ' -- bar',
+    ' line5',
+    '+more',
+  ].join('\n')
+
+  it('并排视图保留 ++ 开头的新增/删除行（diff 行 +++ foo / --- bar 与元信息同形）', () => {
+    const rows = buildSideBySide(MODIFIED)
+    // 「++ foo」→「++ foo CHANGED」的修改必须成对出现在对照行中。
+    const pair = rows.find((r) => r.left.text === '++ foo')
+    expect(pair).toBeDefined()
+    expect(pair?.right.kind).toBe('add')
+    expect(pair?.right.text).toBe('++ foo CHANGED')
+    // 以 ++ 开头的未变更上下文行（++i;）双侧保留。
+    const ctx = rows.find((r) => r.left.text === '++i;')
+    expect(ctx?.right.text).toBe('++i;')
+    // 汇总计数包含全部内容行：1 删 + 2 增。
+    expect(summarizeChanges(rows)).toEqual({ add: 2, del: 1 })
+  })
+
+  it('删除行文本以 -- 开头时同样保留（--- bar 与 --- a/f 同形）', () => {
+    const rows = buildSideBySide([
+      '--- a/f',
+      '+++ b/f',
+      '@@ -1,2 +1 @@',
+      '--- bar to delete',
+      ' keep',
+    ].join('\n'))
+    const del = rows.find((r) => r.left.text === '-- bar to delete')
+    expect(del).toBeDefined()
+    expect(del?.left.kind).toBe('del')
+    expect(del?.right.kind).toBe('empty')
+  })
+
+  it('新文件视图提取内容不丢 ++ 开头的行（+++i; 是内容不是 +++ 元信息）', () => {
+    const NEW_FILE = [
+      'diff --git a/new.txt b/new.txt',
+      'new file mode 100644',
+      'index 0000000..a3a0810',
+      '--- /dev/null',
+      '+++ b/new.txt',
+      '@@ -0,0 +1,4 @@',
+      '+a',
+      '+++i;',
+      '+++ space line',
+      '+b',
+    ].join('\n')
+    expect(isAddOnlyDiff(NEW_FILE)).toBe(true)
+    expect(extractAddedContent(NEW_FILE)).toBe('a\n++i;\n++ space line\nb')
   })
 })

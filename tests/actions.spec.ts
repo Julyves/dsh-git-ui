@@ -88,6 +88,33 @@ describe('runAction — stage / unstage', () => {
     if (!result.ok) return
     expect(result.snapshot.staged).toBe(0)
   })
+
+  // C3 回归：unborn 仓库（首次提交前）的取消暂存。restore --staged 以 HEAD
+  // 为参照、无 HEAD 必败（fatal: could not resolve HEAD）——修复后改用
+  // rm --cached 移出索引，文件回到未跟踪。
+  it('unstages listed paths in an unborn repository (no HEAD yet)', async () => {
+    const dir = await tempDir()
+    await gitInit(dir, { commit: false })
+    await writeFile(join(dir, 'a.txt'), 'hello\n')
+    git(dir, 'add', 'a.txt')
+    expect(gitStatus(dir, 'status', '--porcelain').stdout).toContain('A  a.txt')
+    const result = await runAction(depsFor(dir), CONFIG, request('s1', { kind: 'unstage', paths: ['a.txt'] }))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.snapshot).toMatchObject({ unborn: true, staged: 0, untracked: 1 })
+  })
+
+  it('unstages everything in an unborn repository with unstage-all', async () => {
+    const dir = await tempDir()
+    await gitInit(dir, { commit: false })
+    await writeFile(join(dir, 'a.txt'), 'a\n')
+    await writeFile(join(dir, 'b.txt'), 'b\n')
+    git(dir, 'add', '.')
+    const result = await runAction(depsFor(dir), CONFIG, request('s1', { kind: 'unstage-all' }))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.snapshot).toMatchObject({ unborn: true, staged: 0, untracked: 2 })
+  })
 })
 
 describe('runAction — discard', () => {
