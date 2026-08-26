@@ -76,6 +76,9 @@ export interface GitCenterProps {
   readonly t: (key: GitKey) => string
   /** 打开定位：从 pill 点击变更文件而来——切到 changes 标签并打开该文件对照。 */
   readonly openRequest?: { readonly path: string; readonly base: 'worktree' | 'staged' } | null
+  /** 打开定位：从 pill 点击最近提交而来——切到 history 标签并哈希直达选中
+   *  （HistoryTab 经 focusRef 消费，B6 清过滤/H8 nonce 语义同记录页深链）。 */
+  readonly commitRequest?: { readonly hash: string; readonly nonce: number } | null
   /** turn 工作记录(由 GitPill 统一拉取并下发;null = 未就绪/未开启)。 */
   readonly records?: readonly TurnWorkRecord[] | null
   /** records=null 时的失败态(true = 拉取失败;false/缺省 = 首次加载中)。

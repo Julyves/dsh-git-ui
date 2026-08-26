@@ -21,7 +21,7 @@ import { PopRefresher } from './PopRefresher.tsx'
 /** Dimmed pill for degraded states（弱化图标锚点 + 说明文字）。 */
 
 export function GitPopupBody({
-  view, settings, refresh, openCenter, openRecords, openSettings, onOpenDiff, run, query, records, onReclassify, t,
+  view, settings, refresh, openCenter, openRecords, openSettings, onOpenDiff, onOpenCommit, run, query, records, onReclassify, t,
 }: {
   view: GitView & { state: 'ready' }
   settings: GitUISettings
@@ -33,6 +33,8 @@ export function GitPopupBody({
   openSettings: () => void
   /** 变更文件点击：打开 Git 中心并定位该文件的对照视图。 */
   onOpenDiff: (path: string, base: 'worktree' | 'staged') => void
+  /** 最近提交行点击：打开 Git 中心并定位该提交（历史页哈希直达选中）。 */
+  onOpenCommit: (hash: string) => void
   run: (action: GitAction) => Promise<GitActionResult>
   query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
   /** turn 工作记录(最近窗口用于徽章与分组);null = 未就绪。 */
@@ -314,8 +316,17 @@ export function GitPopupBody({
               </div>
             )
             : s.recentCommits.slice(0, settings.popup.recentCommits).map((commit) => (
-              <div key={commit.hash} className="dsh-git-ui__row" style={css.commitRow}>
-                <div style={css.commitSubjectPop} title={commit.subject}>{commit.subject}</div>
+              // 整行可点击深链：打开 Git 中心历史页并哈希直达选中该提交。
+              // 仅在本区块渲染（recentCommits > 0 守卫已含设置语义）。
+              <button
+                key={commit.hash}
+                type="button"
+                className="dsh-git-ui__row dsh-git-ui__change-link"
+                style={css.commitRowBtn}
+                title={`${commit.subject} · ${commit.shortHash} — ${t('popup.openCommit')}`}
+                onClick={() => onOpenCommit(commit.hash)}
+              >
+                <div style={css.commitSubjectPop}>{commit.subject}</div>
                 <div style={css.commitMetaLine}>
                   <span style={css.commitHash}>{commit.shortHash}</span>
                   <span style={css.commitDot}>·</span>
@@ -323,7 +334,7 @@ export function GitPopupBody({
                   <span style={css.commitDot}>·</span>
                   <span style={css.commitMeta}>{timeAgo(commit.dateIso, now, t)}</span>
                 </div>
-              </div>
+              </button>
             ))}
         </>
       )}

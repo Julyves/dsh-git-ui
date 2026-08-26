@@ -114,6 +114,9 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   /** 从 pill 变更行点击「打开 Git 中心并定位该文件 diff」的请求。 */
   const [centerRequest, setCenterRequest] = useState<{ path: string; base: 'worktree' | 'staged' } | null>(null)
+  /** 从 pill 最近提交点击「打开 Git 中心 → 历史页定位该提交」的请求
+   *  (nonce 保证重复点击同一提交也重触发定位,H8 语义)。 */
+  const [centerCommitRequest, setCenterCommitRequest] = useState<{ hash: string; nonce: number } | null>(null)
   /** Git 中心初始 Tab：常规打开 = 变更；齿轮打开 = 设置；记录入口 = 记录。 */
   const [centerTab, setCenterTab] = useState<GitCenterTab>('changes')
   /** 工作记录已读时刻(未读徽章的增量基准;查看即刷新)。 */
@@ -172,6 +175,15 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
   const openDiffInCenter = (path: string, base: 'worktree' | 'staged'): void => {
     setCenterTab('changes')
     setCenterRequest({ path, base })
+    setOpen(false)
+    setPos(null)
+    setCenterOpen(true)
+  }
+
+  /** 打开 Git 中心并定位该提交（最近提交行点击 → 历史页哈希直达选中）。 */
+  const openCommitInCenter = (hash: string): void => {
+    setCenterTab('history')
+    setCenterCommitRequest({ hash, nonce: Date.now() })
     setOpen(false)
     setPos(null)
     setCenterOpen(true)
@@ -347,6 +359,7 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
             openRecords={openRecordsInCenter}
             openSettings={openSettingsInCenter}
             onOpenDiff={openDiffInCenter}
+            onOpenCommit={openCommitInCenter}
             run={run}
             query={query}
             records={viewRecords}
@@ -365,6 +378,7 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
         query={query}
         t={t}
         openRequest={centerRequest}
+        commitRequest={centerCommitRequest}
         records={viewRecords}
         recordsFailed={recordsFailed}
         onReclassify={reclassify}

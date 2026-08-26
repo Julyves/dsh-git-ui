@@ -34,7 +34,7 @@ A status capsule on the right of each session header: a status dot (green when c
 
 ### Detail popover
 
-Clicking the pill opens: the repository root path, status counts with dirty and ahead/behind badges, recent commits (hash · subject · author · relative time), the changed-file list with status chips and inline per-file actions (stage / unstage / discard), an inline branch switcher, a manual refresh button, and the last-checked time:
+Clicking the pill opens: the repository root path, status counts with dirty and ahead/behind badges, recent commits (hash · subject · author · relative time — click a commit to jump to the History tab with it located and selected), the changed-file list with status chips and inline per-file actions (stage / unstage / discard), an inline branch switcher, a manual refresh button, and the last-checked time:
 
 <img src="docs/screenshots/02-面板选择切换分支.png" alt="Inline branch switching in the detail popover" width="720">
 

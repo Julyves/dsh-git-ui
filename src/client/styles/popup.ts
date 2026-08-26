@@ -177,6 +177,21 @@ export const commitRow: CSSProperties = {
 }
 
 
+/** 提交行按钮（popup 最近提交）：整行可点击深链历史页——button 复位 +
+ *  commitRow 两段布局；hover 背景/按压/焦点反馈由全局 __row/__change-link 类提供。 */
+export const commitRowBtn: CSSProperties = {
+  ...commitRow,
+  width: '100%',
+  border: 'none',
+  background: 'transparent',
+  fontFamily: 'inherit',
+  fontSize: 'inherit',
+  lineHeight: 'inherit',
+  textAlign: 'left',
+  cursor: 'pointer',
+}
+
+
 export const commitHash: CSSProperties = {
   flex: 'none',
   fontFamily: 'var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace)',

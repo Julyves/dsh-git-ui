@@ -34,7 +34,7 @@ export type { GitCenterProps, GitCenterTab } from './center/shared.ts'
 
 
 export function GitCenter({
-  open, onClose, initialTab = 'changes', snapshot, run, query, t, openRequest = null, records = null, recordsFailed = false, onReclassify,
+  open, onClose, initialTab = 'changes', snapshot, run, query, t, openRequest = null, commitRequest = null, records = null, recordsFailed = false, onReclassify,
 }: GitCenterProps): JSX.Element | null {
   const { Modal, Toast } = useUI()
   const [tab, setTab] = useState<TabKey>(initialTab)
@@ -44,8 +44,10 @@ export function GitCenter({
   /** 记录 Tab 跳转 Changes 的打开请求(仍变更条目点击)。 */
   const [recordOpenRequest, setRecordOpenRequest] = useState<{ path: string; base: 'worktree' | 'staged' } | null>(null)
   /** 记录 Tab 跳转 History 的定位请求(已提交条目点击 → 提交哈希)。
-   * 对象态含 nonce:重复点击同一提交也产生新引用,重触发 HistoryTab 定位(H8)。 */
-  const [commitRequest, setCommitRequest] = useState<{ hash: string; nonce: number } | null>(null)
+   * 对象态含 nonce:重复点击同一提交也产生新引用,重触发 HistoryTab 定位(H8)。
+   * 与外部 commitRequest prop(pill 最近提交深链)合并后下发 HistoryTab——
+   * 外部请求仅在中心关闭时可到达(弹窗与中心互斥),二者不竞争。 */
+  const [historyFocus, setHistoryFocus] = useState<{ hash: string; nonce: number } | null>(null)
 
   // 打开即定位（pill 齿轮 / 常规打开 / 变更文件直达）：open 上升沿重设 tab，
   // 而非依赖 initialTab 引用变化——连续两次齿轮打开时引用不变，需以 open 为触发。
@@ -58,6 +60,12 @@ export function GitCenter({
   useEffect(() => {
     if (openRequest !== null) setTab('changes')
   }, [openRequest])
+
+  // 打开定位请求（pill 点击最近提交）：切到 history 标签，HistoryTab 经
+  // focusRef 哈希直达选中。commitRequest 引用变化（nonce）即再次定位。
+  useEffect(() => {
+    if (commitRequest !== null) setTab('history')
+  }, [commitRequest])
 
   /** Execute a management action with shared busy/feedback/toast handling. */
   const execute = async (action: GitAction, successText: string): Promise<boolean> => {
@@ -91,7 +99,7 @@ export function GitCenter({
   /** 关闭:清空记录跳转请求,避免再次打开时残留定位。 */
   const closeCenter = (): void => {
     setRecordOpenRequest(null)
-    setCommitRequest(null)
+    setHistoryFocus(null)
     onClose()
   }
 
@@ -168,7 +176,7 @@ export function GitCenter({
             aria-labelledby="dsh-git-ui-tab-history"
             style={tab === 'history' ? { display: 'contents' } : { display: 'none' }}
           >
-            <HistoryTab query={query} run={run} t={t} focusRef={commitRequest} />
+            <HistoryTab query={query} run={run} t={t} focusRef={historyFocus ?? commitRequest} />
           </div>
           <div
             role="tabpanel"
@@ -184,7 +192,7 @@ export function GitCenter({
               execute={execute}
               onOpenCommit={(hash) => {
                 // nonce 保证重复点击同一提交也重触发定位(H8)。
-                setCommitRequest({ hash, nonce: Date.now() })
+                setHistoryFocus({ hash, nonce: Date.now() })
                 setTab('history')
               }}
               onReclassify={onReclassify}
