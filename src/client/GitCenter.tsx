@@ -34,7 +34,7 @@ export type { GitCenterProps, GitCenterTab } from './center/shared.ts'
 
 
 export function GitCenter({
-  open, onClose, initialTab = 'changes', snapshot, run, query, t, openRequest = null, commitRequest = null, records = null, recordsFailed = false, onReclassify,
+  open, onClose, initialTab = 'history', snapshot, run, query, t, openRequest = null, commitRequest = null, records = null, recordsFailed = false, onReclassify,
 }: GitCenterProps): JSX.Element | null {
   const { Modal, Toast } = useUI()
   const [tab, setTab] = useState<TabKey>(initialTab)
@@ -48,6 +48,9 @@ export function GitCenter({
    * 与外部 commitRequest prop(pill 最近提交深链)合并后下发 HistoryTab——
    * 外部请求仅在中心关闭时可到达(弹窗与中心互斥),二者不竞争。 */
   const [historyFocus, setHistoryFocus] = useState<{ hash: string; nonce: number } | null>(null)
+  /** 历史 Tab 文件树点击「在变更页查看该提交中此文件的变更」的请求
+   *  (nonce 保证重复点击同一文件也重触发加载)。 */
+  const [historyFileRequest, setHistoryFileRequest] = useState<{ path: string; hash: string; nonce: number } | null>(null)
 
   // 打开即定位（pill 齿轮 / 常规打开 / 变更文件直达）：open 上升沿重设 tab，
   // 而非依赖 initialTab 引用变化——连续两次齿轮打开时引用不变，需以 open 为触发。
@@ -66,6 +69,12 @@ export function GitCenter({
   useEffect(() => {
     if (commitRequest !== null) setTab('history')
   }, [commitRequest])
+
+  // 历史 Tab 文件树深链：切到 changes 标签，ChangesTab 以 commit 基线
+  // 加载该文件在该提交中的变更（工具栏带提交哈希徽标）。
+  useEffect(() => {
+    if (historyFileRequest !== null) setTab('changes')
+  }, [historyFileRequest])
 
   /** Execute a management action with shared busy/feedback/toast handling. */
   const execute = async (action: GitAction, successText: string): Promise<boolean> => {
@@ -86,9 +95,10 @@ export function GitCenter({
   }
 
   const tabs: Array<{ key: TabKey; label: string; icon?: JSX.Element; dividerBefore?: boolean }> = [
-    // 四 Tab 统一携带语义图标：变更=对照双栏 / 历史=提交图节点 / 记录=时钟 / 设置=齿轮。
-    { key: 'changes', label: t('center.changes'), icon: <DiffIcon /> },
+    // 历史 = 默认首项（浏览是只读高频入口）；变更第二。四 Tab 统一携带
+    // 语义图标：历史=提交图节点 / 变更=对照双栏 / 记录=时钟 / 设置=齿轮。
     { key: 'history', label: t('center.history'), icon: <CommitIcon /> },
+    { key: 'changes', label: t('center.changes'), icon: <DiffIcon /> },
     { key: 'records', label: t('work.tab'), icon: <RecordIcon /> },
     // 偏好区：与功能 Tab 用发丝分隔线轻隔离（设置 = 非仓库操作）。
     { key: 'settings', label: t('settings.title'), icon: <GearIcon />, dividerBefore: true },
@@ -101,6 +111,7 @@ export function GitCenter({
   const closeCenter = (): void => {
     setRecordOpenRequest(null)
     setHistoryFocus(null)
+    setHistoryFileRequest(null)
     onClose()
   }
 
@@ -169,7 +180,7 @@ export function GitCenter({
             aria-labelledby="dsh-git-ui-tab-changes"
             style={tab === 'changes' ? { display: 'contents' } : { display: 'none' }}
           >
-            <ChangesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} openRequest={recordOpenRequest ?? openRequest} />
+            <ChangesTab snapshot={snapshot} busy={busy} execute={execute} query={query} t={t} openRequest={recordOpenRequest ?? openRequest} commitFileRequest={historyFileRequest} />
           </div>
           <div
             role="tabpanel"
@@ -177,7 +188,14 @@ export function GitCenter({
             aria-labelledby="dsh-git-ui-tab-history"
             style={tab === 'history' ? { display: 'contents' } : { display: 'none' }}
           >
-            <HistoryTab query={query} run={run} t={t} focusRef={historyFocus ?? commitRequest} />
+            <HistoryTab
+              query={query} run={run} t={t} focusRef={historyFocus ?? commitRequest}
+              onOpenCommitFile={(path, hash) => {
+                // nonce 保证重复点击同一文件也重触发加载。
+                setHistoryFileRequest({ path, hash, nonce: Date.now() })
+                setTab('changes')
+              }}
+            />
           </div>
           <div
             role="tabpanel"

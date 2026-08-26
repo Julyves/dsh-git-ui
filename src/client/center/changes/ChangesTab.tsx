@@ -25,7 +25,7 @@ type ChangesViewMode = DiffViewMode | 'rendered'
 
 
 export function ChangesTab({
-  snapshot, busy, execute, query, t, openRequest = null,
+  snapshot, busy, execute, query, t, openRequest = null, commitFileRequest = null,
 }: {
   snapshot: GitSnapshot
   busy: boolean
@@ -33,6 +33,9 @@ export function ChangesTab({
   query: (query: GitQueryRequest['query']) => Promise<GitQueryOutcome>
   t: (key: GitKey) => string
   openRequest: { path: string; base: 'worktree' | 'staged' } | null
+  /** 提交文件深链（历史页文件树点击）：以 commit 基线加载该文件在该提交
+   *  中的变更；对象引用变化（nonce）即重新加载。null = 无请求。 */
+  commitFileRequest?: { readonly path: string; readonly hash: string; readonly nonce: number } | null
 }): JSX.Element {
   const { Button } = useUI()
   const settings = useSettings()
@@ -56,6 +59,40 @@ export function ChangesTab({
   /** split 模式左列占比（0–1，钳制区间见 clampDiffRatio）：同样会话内粘滞。 */
   const [diffRatio, setDiffRatio] = useState(DIFF_RATIO_DEFAULT)
   const diffSeq = useRef(0)
+  /** 提交基线对照视图（历史页文件树深链）：{path, hash} 激活时接管右侧
+   *  展示区——工具栏带提交哈希徽标，diff 以 commit 基线加载。 */
+  const [commitView, setCommitView] = useState<{ path: string; hash: string } | null>(null)
+  const [commitText, setCommitText] = useState<string | null>(null)
+  const [commitLoading, setCommitLoading] = useState(false)
+  const [commitFailed, setCommitFailed] = useState(false)
+  const commitSeq = useRef(0)
+
+  /** 历史页文件树深链：加载该文件在该提交中的变更（nonce 驱动重触发）。 */
+  useEffect(() => {
+    if (commitFileRequest === null) return
+    const { path, hash } = commitFileRequest
+    const seq = ++commitSeq.current
+    setCommitView({ path, hash })
+    setCommitText(null)
+    setCommitFailed(false)
+    setCommitLoading(true)
+    void query({ kind: 'diff', path, base: 'commit', commit: hash }).then((outcome) => {
+      if (seq !== commitSeq.current) return
+      setCommitLoading(false)
+      if (outcome.ok && outcome.value.kind === 'diff') setCommitText(outcome.value.text)
+      else setCommitFailed(true)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 请求对象一次一响应
+  }, [commitFileRequest])
+
+  /** 关闭提交基线视图，回到常规工作区对照。 */
+  const closeCommitView = (): void => {
+    commitSeq.current += 1
+    setCommitView(null)
+    setCommitText(null)
+    setCommitLoading(false)
+    setCommitFailed(false)
+  }
 
   useEffect(() => {
     if (armed === null) return
@@ -209,10 +246,16 @@ export function ChangesTab({
     if (next !== null) void showDiff(next.path, next.base)
   }
 
-  /** 差异增删摘要（由 diffText 派生；空/无对照时为 null）。 */
+  // ── 活动视图统一派生：提交基线视图激活时接管右侧展示区 ──────────────────
+  const activePath = commitView?.path ?? diffSel?.path ?? null
+  const activeText = commitView !== null ? commitText : diffText
+  const activeLoading = commitView !== null ? commitLoading : diffLoading
+  const activeFailed = commitView !== null ? commitFailed : diffFailed
+
+  /** 差异增删摘要（由活动文本派生——常规对照与提交基线视图共用；空/无对照时为 null）。 */
   const diffSummary = useMemo(
-    () => (diffText === null || diffText === '' ? null : summarizeChanges(buildSideBySide(diffText))),
-    [diffText],
+    () => (activeText === null || activeText === '' ? null : summarizeChanges(buildSideBySide(activeText))),
+    [activeText],
   )
 
   /**
@@ -220,17 +263,18 @@ export function ChangesTab({
    *   - diff 文本为「纯新增」（--- /dev/null + 全增行）；
    *   - 或 diff 为空且该文件在变更清单中本就是新增/未跟踪——这是
    *     0 字节未跟踪文件（git --no-index 对空文件输出空文本），
-   *     同样直接展示（空文件提示）而非无意义的「无差异」空态。
+   *     同样直接展示（空文件提示）而非无意义的「无差异」空态
+   *     （提交基线视图无此兜底——空文本就是空态）。
    */
   const isNewFile = useMemo(() => {
-    if (diffText === null) return false
-    if (diffText === '') {
-      return diffSel !== null && snapshot.changes.some(
+    if (activeText === null) return false
+    if (activeText === '') {
+      return commitView === null && diffSel !== null && snapshot.changes.some(
         (c) => c.path === diffSel.path && (c.status === 'untracked' || c.status === 'added'),
       )
     }
-    return !isBinaryDiff(diffText) && isAddOnlyDiff(diffText)
-  }, [diffText, diffSel, snapshot.changes])
+    return !isBinaryDiff(activeText) && isAddOnlyDiff(activeText)
+  }, [activeText, diffSel, snapshot.changes, commitView])
 
   /**
    * 纯删除判定（被删文件单栏展示，与新增对称）：+++ /dev/null + 全删行
@@ -238,16 +282,16 @@ export function ChangesTab({
    * 「删除前的完整文件」，让用户完整阅读被删了什么。
    */
   const isDeletedFile = useMemo(() => {
-    if (diffText === null || diffText === '') return false
-    return !isBinaryDiff(diffText) && isDeleteOnlyDiff(diffText)
-  }, [diffText])
+    if (activeText === null || activeText === '') return false
+    return !isBinaryDiff(activeText) && isDeleteOnlyDiff(activeText)
+  }, [activeText])
 
   /** 视图模式切换只在真实可对照内容上出现——二进制无对照语义。
    *  新增/删除的 md 文件同样提供（渲染其单侧内容；原始态回退 SingleFileView
    *  分流），非 md 的新增/删除保持原分流不加开关。 */
-  const isMarkdownFile = diffSel !== null && langOfPath(diffSel.path) === 'markdown'
-  const showModeToggle = diffText !== null && !diffLoading && !diffFailed
-    && !isBinaryDiff(diffText)
+  const isMarkdownFile = activePath !== null && langOfPath(activePath) === 'markdown'
+  const showModeToggle = activeText !== null && !activeLoading && !activeFailed
+    && !isBinaryDiff(activeText)
     && ((!isNewFile && !isDeletedFile) || isMarkdownFile)
 
   /** 「渲染」态仅对非删除 md 生效；粘滞残留（切到非 md 文件）回落对照。 */
@@ -266,8 +310,8 @@ export function ChangesTab({
    * = 暂存区内容；纯新增 = 新文件内容；空 diff = 空文本 → 空态提示）。
    */
   const renderedSource = useMemo(
-    () => (canRender && diffText !== null && !isBinaryDiff(diffText) ? renderedSourceOf(diffText) : ''),
-    [canRender, diffText],
+    () => (canRender && activeText !== null && !isBinaryDiff(activeText) ? renderedSourceOf(activeText) : ''),
+    [canRender, activeText],
   )
 
   return (
@@ -384,7 +428,7 @@ export function ChangesTab({
       </div>
       <Splitter kind="col" onDrag={(dx) => setLeftW((w) => clampNum(w + dx, 280, 520))} />
       <div style={css.changesRight}>
-        {diffSel === null
+        {activePath === null
           ? (
             <div style={css.emptyState}>
               <span style={css.emptyStateIcon} aria-hidden="true"><DiffIcon /></span>
@@ -394,14 +438,23 @@ export function ChangesTab({
           : (
             <>
               <div style={css.diffToolbar}>
-                <span style={css.diffBaseBadge}>
-                  {diffSel.base === 'staged' ? t('diff.baseStaged') : t('diff.baseWorktree')}
-                </span>
+                {commitView !== null
+                  ? (
+                    // 提交基线徽标：短哈希 + title 全哈希——标识「该文件属于哪次提交」。
+                    <span style={{ ...css.diffBaseBadge, ...css.diffCommitBadge }} title={commitView.hash}>
+                      {commitView.hash.slice(0, 7)}
+                    </span>
+                  )
+                  : (
+                    <span style={css.diffBaseBadge}>
+                      {diffSel?.base === 'staged' ? t('diff.baseStaged') : t('diff.baseWorktree')}
+                    </span>
+                  )}
                 {(() => {
-                  const { name, dir } = splitChangePath(diffSel.path)
+                  const { name, dir } = splitChangePath(activePath)
                   return (
                     <>
-                      {dir !== '' && <span style={css.diffPathDir} title={diffSel.path}>{dir}</span>}
+                      {dir !== '' && <span style={css.diffPathDir} title={activePath}>{dir}</span>}
                       <span style={css.diffPathName}>{name}</span>
                     </>
                   )
@@ -427,50 +480,65 @@ export function ChangesTab({
                   />
                 )}
                 <span style={{ flex: 1 }} />
-                <button
-                  type="button"
-                  className="dsh-git-ui__icon-btn"
-                  style={css.rowIconButton}
-                  title={t('diff.prev')}
-                  aria-label={t('diff.prev')}
-                  disabled={busy || navEntries.length === 0}
-                  onClick={() => navigateDiff(-1)}
-                >
-                  <PrevIcon />
-                </button>
-                <button
-                  type="button"
-                  className="dsh-git-ui__icon-btn"
-                  style={css.rowIconButton}
-                  title={t('diff.next')}
-                  aria-label={t('diff.next')}
-                  disabled={busy || navEntries.length === 0}
-                  onClick={() => navigateDiff(1)}
-                >
-                  <NextIcon />
-                </button>
+                {commitView === null && (
+                  // 提交基线视图无「上一处/下一处」——导航序列是工作区变更，
+                  // 与提交内容无关。
+                  <>
+                    <button
+                      type="button"
+                      className="dsh-git-ui__icon-btn"
+                      style={css.rowIconButton}
+                      title={t('diff.prev')}
+                      aria-label={t('diff.prev')}
+                      disabled={busy || navEntries.length === 0}
+                      onClick={() => navigateDiff(-1)}
+                    >
+                      <PrevIcon />
+                    </button>
+                    <button
+                      type="button"
+                      className="dsh-git-ui__icon-btn"
+                      style={css.rowIconButton}
+                      title={t('diff.next')}
+                      aria-label={t('diff.next')}
+                      disabled={busy || navEntries.length === 0}
+                      onClick={() => navigateDiff(1)}
+                    >
+                      <NextIcon />
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   className="dsh-git-ui__icon-btn"
                   style={css.rowIconButton}
                   title={t('center.close')}
                   aria-label={t('center.close')}
-                  onClick={() => { diffSeq.current += 1; setDiffSel(null); setDiffText(null); setDiffFailed(false) }}
+                  onClick={() => {
+                    if (commitView !== null) {
+                      closeCommitView()
+                    } else {
+                      diffSeq.current += 1
+                      setDiffSel(null)
+                      setDiffText(null)
+                      setDiffFailed(false)
+                    }
+                  }}
                 >
                   <CloseIcon />
                 </button>
               </div>
-              {diffLoading
+              {activeLoading
                 ? <div style={css.emptyNote}>{t('center.loading')}</div>
-                : diffFailed
+                : activeFailed
                   ? <div style={css.emptyNote}>{t('diff.loadFailed')}</div>
-                  : diffText === null
+                  : activeText === null
                     ? <div style={css.emptyNote}>{t('center.diffEmpty')}</div>
                     : effectiveMode === 'rendered'
                     ? (
                       // md 渲染态（优先于单栏/并排分流——渲染语义覆盖原始形态）。
                       <MarkdownView
-                        key={`${diffSel.path}#rendered`}
+                        key={`${activePath}#rendered`}
                         source={renderedSource}
                         fontSize={settings.diff.fontSize}
                         highlight={settings.diff.syntaxHighlight}
@@ -480,9 +548,9 @@ export function ChangesTab({
                     : isNewFile
                     ? (
                       <SingleFileView
-                        key={diffSel.path}
-                        content={diffText === '' ? '' : extractAddedContent(diffText)}
-                        path={diffSel.path}
+                        key={activePath}
+                        content={activeText === '' ? '' : extractAddedContent(activeText)}
+                        path={activePath}
                         fontSize={settings.diff.fontSize}
                         highlight={settings.diff.syntaxHighlight}
                         t={t}
@@ -491,9 +559,9 @@ export function ChangesTab({
                     : isDeletedFile
                     ? (
                       <SingleFileView
-                        key={diffSel.path}
-                        content={extractDeletedContent(diffText)}
-                        path={diffSel.path}
+                        key={activePath}
+                        content={extractDeletedContent(activeText)}
+                        path={activePath}
                         fontSize={settings.diff.fontSize}
                         highlight={settings.diff.syntaxHighlight}
                         t={t}
@@ -501,9 +569,9 @@ export function ChangesTab({
                     )
                     : (
                       <DiffSideBySide
-                        key={diffSel.path}
-                        text={diffText}
-                        path={diffSel.path}
+                        key={commitView !== null ? `${activePath}@${commitView.hash}` : activePath}
+                        text={activeText}
+                        path={activePath}
                         diff={settings.diff}
                         mode={effectiveMode}
                         leftRatio={diffRatio}

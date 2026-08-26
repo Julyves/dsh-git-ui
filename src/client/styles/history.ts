@@ -86,6 +86,12 @@ export const treeRowActive: CSSProperties = {
 }
 
 
+/** 文件树叶子文件行按钮（提交详情深链）：treeRow 已是 button 复位形态
+ *  （border:none/transparent/pointer），此别名标识「可点击深链」语义；
+ *  hover/按压反馈由全局 __row/__change-link 类提供。 */
+export const treeRowFileBtn: CSSProperties = treeRow
+
+
 export const treeIcon: CSSProperties = {
   flex: 'none',
   width: 14,

@@ -236,6 +236,55 @@ describe('runQuery — diff', () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error.code).toBe('invalid-path')
   })
+
+  it('commit base: returns the change a path got in that commit', async () => {
+    const dir = await repoWithCommits()
+    // 第二次提交改了 a.txt（+two）；历史倒序 skip=1/limit=1 取到它。
+    const hist = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 1, skip: 1 }))
+    expect(hist.ok).toBe(true)
+    if (!hist.ok || hist.value.kind !== 'history' || hist.value.commits[0] === undefined) return
+    const hash = hist.value.commits[0]!.hash
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: 'a.txt', base: 'commit', commit: hash }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'diff') return
+    expect(result.value.text).toContain('+two')
+    // 只含该提交中该路径的变更——不含第三次提交的 b.txt 内容。
+    expect(result.value.text).not.toContain('three')
+  })
+
+  it('commit base: covers the root commit (diff against empty tree)', async () => {
+    const dir = await repoWithCommits()
+    // 根提交 = 倒序第三条；其 a.txt 差异为纯新增（--- /dev/null 形态）。
+    const hist = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 1, skip: 2 }))
+    expect(hist.ok).toBe(true)
+    if (!hist.ok || hist.value.kind !== 'history' || hist.value.commits[0] === undefined) return
+    const hash = hist.value.commits[0]!.hash
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: 'a.txt', base: 'commit', commit: hash }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'diff') return
+    expect(result.value.text).toContain('--- /dev/null')
+    expect(result.value.text).toContain('+one')
+  })
+
+  it('commit base: empty text for a path untouched in that commit', async () => {
+    const dir = await repoWithCommits()
+    // 第三次提交只新增 b.txt——对 a.txt 的提交基线差异为空。
+    const hist = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'history', limit: 1, skip: 0 }))
+    expect(hist.ok).toBe(true)
+    if (!hist.ok || hist.value.kind !== 'history' || hist.value.commits[0] === undefined) return
+    const hash = hist.value.commits[0]!.hash
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: 'a.txt', base: 'commit', commit: hash }))
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.value.kind !== 'diff') return
+    expect(result.value.text).toBe('')
+  })
+
+  it('commit base: rejects an invalid commit ref', async () => {
+    const dir = await repoWithCommits()
+    const result = await runQuery(depsFor(dir), CONFIG, request('s1', { kind: 'diff', path: 'a.txt', base: 'commit', commit: '--inject' }))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.code).toBe('invalid-name')
+  })
 })
 
 describe('runQuery — show', () => {

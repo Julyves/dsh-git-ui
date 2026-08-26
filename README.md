@@ -40,7 +40,7 @@ Clicking the pill opens: the repository root path, status counts with dirty and 
 
 ### Git center
 
-The full management panel, opened from the popover — four tabs: **Changes**, **History**, **Records** and **Settings**.
+The full management panel, opened from the popover — four tabs: **History** (the default landing tab), **Changes**, **Records** and **Settings**.
 
 #### Changes
 
@@ -50,11 +50,11 @@ IDE-style grouped lists (staged / unstaged / untracked), per-file and bulk stage
 
 #### History
 
-A paginated commit list with a rendered branch graph, filters by branch / tag / author / date / text-or-hash, a fetch-remote button, and per-commit details:
+A paginated commit list with a rendered branch graph, filters by branch / tag / author / date / text-or-hash, a fetch-remote button, and per-commit details. Prefixed branch groups (`feat/*`, `fix/*`, remote origins) in the branch tree start collapsed for a tidier list:
 
 <img src="docs/screenshots/04-Git中心查看分支历史.png" alt="Git center — History tab (commit list with branch graph)" width="720">
 
-Selecting a commit shows its subject · body · changed-file tree (foldable directories) in the detail pane:
+Selecting a commit shows its subject · body · changed-file tree (foldable directories) in the detail pane. Clicking a file in the tree jumps to the Changes tab and shows that file's diff **as of that commit**, with a commit-hash badge marking which commit the view belongs to:
 
 <img src="docs/screenshots/04-Git中心查看提交详情.png" alt="Git center — commit details and changed-file tree" width="720">
 

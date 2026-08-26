@@ -170,7 +170,10 @@ export type GitQuery =
     /** 日期下限（--since，如 '7 days ago'）。 */
     readonly since?: string
   }
+  /** 差异查询：worktree/staged 为工作区基线；commit = 某次提交中该路径的
+   * 变更（git show <hash> -- <path>，历史页文件树深链用）。 */
   | { readonly kind: 'diff'; readonly path: string; readonly base: 'worktree' | 'staged' }
+  | { readonly kind: 'diff'; readonly path: string; readonly base: 'commit'; readonly commit: string }
   | { readonly kind: 'show'; readonly ref: string }
   | { readonly kind: 'branches' }
   | { readonly kind: 'tags' }

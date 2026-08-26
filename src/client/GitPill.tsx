@@ -121,8 +121,8 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
   /** 从 pill 最近提交点击「打开 Git 中心 → 历史页定位该提交」的请求
    *  (nonce 保证重复点击同一提交也重触发定位,H8 语义)。 */
   const [centerCommitRequest, setCenterCommitRequest] = useState<{ hash: string; nonce: number } | null>(null)
-  /** Git 中心初始 Tab：常规打开 = 变更；齿轮打开 = 设置；记录入口 = 记录。 */
-  const [centerTab, setCenterTab] = useState<GitCenterTab>('changes')
+  /** Git 中心初始 Tab：常规打开 = 历史（默认首项）；齿轮打开 = 设置；记录入口 = 记录。 */
+  const [centerTab, setCenterTab] = useState<GitCenterTab>('history')
   /** 工作记录已读时刻(未读徽章的增量基准;查看即刷新)。 */
   const [seenAt, setSeenAt] = useState(() => readSeenAt(sessionId))
   /** 人工改判归因(仓库级,overrides.json;一次加载,改动即持久化)。 */
@@ -196,9 +196,9 @@ export function GitPill({ sessionId, useGit, useSession, refresh, run, query, st
     setCenterOpen(true)
   }
 
-  /** 打开 Git 中心（默认变更页）。 */
+  /** 打开 Git 中心（默认历史页——浏览是只读高频入口）。 */
   const openCenter = (): void => {
-    setCenterTab('changes')
+    setCenterTab('history')
     setOpen(false)
     setPos(null)
     setCenterOpen(true)

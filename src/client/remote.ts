@@ -123,7 +123,11 @@ export const gitActionRequestSchema = z.object({
 /** 一条只读查询（镜像 src/host/types.ts 的 GitQuery）。 */
 export const gitQuerySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('history'), limit: z.number(), skip: z.number(), ref: z.string().optional(), search: z.string().optional(), author: z.string().optional(), since: z.string().optional() }),
-  z.object({ kind: z.literal('diff'), path: z.string(), base: z.enum(['worktree', 'staged']) }),
+  // diff 基线三态：worktree/staged = 工作区基线；commit 携带提交哈希
+  // （历史页文件树深链）。refine 保证 commit 基线必带哈希——判别联合
+  // 不允许重复 discriminator 值，三态合为单对象。
+  z.object({ kind: z.literal('diff'), path: z.string(), base: z.enum(['worktree', 'staged', 'commit']), commit: z.string().optional() })
+    .refine((q) => q.base !== 'commit' || (q.commit !== undefined && q.commit !== ''), { message: 'commit base requires a commit hash' }),
   z.object({ kind: z.literal('show'), ref: z.string() }),
   z.object({ kind: z.literal('branches') }),
   z.object({ kind: z.literal('tags') }),

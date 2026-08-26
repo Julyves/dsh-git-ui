@@ -63,7 +63,9 @@ export async function runQuery(
     case 'history':
       return historyQuery(deps, root, query)
     case 'diff':
-      return diffQuery(deps, root, query.path, query.base)
+      return query.base === 'commit'
+        ? diffQuery(deps, root, query.path, 'commit', query.commit)
+        : diffQuery(deps, root, query.path, query.base)
     case 'show':
       return showQuery(deps, root, query.ref)
     case 'branches':
@@ -155,14 +157,30 @@ async function historyQuery(
  * 单文件差异（变更界面对照查看用）。
  * staged = --cached；worktree = 工作区对索引；
  * 未版本管理文件 worktree 差异为空 → 回退 --no-index 与 /dev/null 对比（退出码 1 视为有差异的成功）。
+ * commit = 某次提交中该路径的变更（git show --format= <hash> -- <path>；
+ * 根提交 diff 对空树、普通提交对首父——历史页文件树深链用）。
  */
 async function diffQuery(
   deps: SnapshotDeps,
   root: string,
   path: string,
-  base: 'worktree' | 'staged',
+  base: 'worktree' | 'staged' | 'commit',
+  commit?: string,
 ): Promise<GitQueryResponse> {
   if (!isSafePath(path, root)) return { ok: false, error: { code: 'invalid-path', message: `unsafe path: ${path}` } }
+  // 提交基线：哈希来自本插件解析的提交列表（受控来源），仍按 ref 规则校验
+  // 防注入（拒绝空白/短横开头），-- 分隔路径。
+  if (base === 'commit') {
+    const hash = commit ?? ''
+    if (!isValidRef(hash)) return { ok: false, error: { code: 'invalid-name', message: `invalid commit: ${hash}` } }
+    const show = await runCommand(deps.run, ['git', 'show', '--format=', '-U999999', hash, '--', path], root, 'show-diff', deps.signal)
+    if ('failure' in show) return { ok: false, error: operationError(show.failure).error }
+    if (show.run.timedOut) return { ok: false, error: { code: 'timeout' } }
+    if (show.run.exitCode !== 0) return gitError('show-diff', show.run.stderr, show.run.stdout)
+    // 提交中该路径无变更（或 merge 提交无 combined diff）→ 空文本，与
+    // worktree 空差异同形——由调用方呈现空态。
+    return { ok: true, value: { kind: 'diff', path, text: show.run.stdout } }
+  }
   // 使用 -U999999 显示完整文档上下文（而非仅变更 hunk），支持文档浏览体验。
   const argv = base === 'staged'
     ? ['git', 'diff', '--cached', '-U999999', '--', path]

@@ -285,3 +285,12 @@ export const diffDelBadge: CSSProperties = {
   borderColor: 'var(--dsw-alias-state-error-primary)',
 }
 
+
+/** 提交基线徽标（历史页文件树深链）：业务语义色 + 等宽短哈希——
+ *  标识「该对照属于哪次提交」，与暂存区/工作区基线徽标同族。 */
+export const diffCommitBadge: CSSProperties = {
+  fontFamily: 'var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace)',
+  color: 'var(--dsw-alias-state-business-primary)',
+  borderColor: 'var(--dsw-alias-state-business-primary)',
+}
+

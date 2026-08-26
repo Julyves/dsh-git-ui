@@ -91,3 +91,74 @@ describe('HistoryFilterTree — B4 缺 key / B9 星标误标', () => {
     expect(stars).toBe(1)
   })
 })
+
+describe('HistoryFilterTree — 前缀分组默认收起', () => {
+  const groupTree = {
+    current: 'main',
+    defaultBranch: 'main',
+    local: [branch('main'), branch('dev'), branch('feat/a'), branch('feat/b'), branch('fix/c')],
+    remote: [] as readonly GitBranch[],
+    tags: [] as readonly GitBranch[],
+  }
+
+  async function renderTree(tree: typeof groupTree): Promise<HTMLElement> {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    root.render(
+      <HistoryFilterTree
+        tree={tree}
+        filter={{ kind: 'all' }}
+        onFilter={() => {}}
+        closed={new Set(['tags'])}
+        onToggleSection={() => {}}
+        onFetch={async () => {}}
+        fetching={false}
+        fetchNote={null}
+        t={t}
+      />,
+    )
+    await new Promise((r) => setTimeout(r, 50))
+    return container
+  }
+
+  it('前缀组（feat/、fix/）默认收起：组头在场、组内分支不渲染', async () => {
+    const container = await renderTree(groupTree)
+    // 组头（文件夹行）在场。
+    expect(container.textContent).toContain('feat')
+    expect(container.textContent).toContain('fix')
+    // 组内分支行默认不渲染（收起）——行以 title=全名 标识（显示名为剥前缀 bare）。
+    expect(container.querySelector('button[title="feat/a"]')).toBeNull()
+    expect(container.querySelector('button[title="fix/c"]')).toBeNull()
+    // 根分支不受分组折叠影响（默认展开）。
+    expect(container.textContent).toContain('main')
+    expect(container.textContent).toContain('dev')
+  })
+
+  it('点击组头展开：组内分支出现；aria-expanded 正确翻转', async () => {
+    const container = await renderTree(groupTree)
+    const featHead = [...container.querySelectorAll('button')].find((b) => b.textContent === 'feat') as HTMLButtonElement
+    expect(featHead.getAttribute('aria-expanded')).toBe('false')
+    featHead.click()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(featHead.getAttribute('aria-expanded')).toBe('true')
+    expect(container.querySelector('button[title="feat/a"]')).not.toBeNull()
+    expect(container.querySelector('button[title="feat/b"]')).not.toBeNull()
+    // 其他组不受影响（仍收起）。
+    expect(container.querySelector('button[title="fix/c"]')).toBeNull()
+  })
+
+  it('远程组同样默认收起', async () => {
+    const tree = {
+      current: 'main',
+      defaultBranch: 'main',
+      local: [branch('main')],
+      remote: [branch('origin/main'), branch('origin/feat/x')],
+      tags: [] as readonly GitBranch[],
+    }
+    const container = await renderTree(tree)
+    expect(container.textContent).toContain('origin')
+    // 远程组内分支默认收起（行 title=全名标识）。
+    expect(container.querySelector('button[title="origin/feat/x"]')).toBeNull()
+  })
+})

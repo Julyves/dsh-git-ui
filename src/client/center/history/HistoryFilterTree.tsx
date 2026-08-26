@@ -26,6 +26,21 @@ export function HistoryFilterTree({
 }): JSX.Element {
   /** 搜索（分支或标签）：匹配行高亮，搜索时平铺展示并忽略折叠态。 */
   const [search, setSearch] = useState('')
+  /** 分组文件夹（feat/xxx 等前缀组、远程 origin 组）的展开集：默认全收起
+   *  ——分组本身即「收束归纳」语义，默认收起更规整；点开持续有效（组件
+   *  随 Tab 常驻挂载，跨 Tab 切换保持）。与顶层 section（本地/远程/标签，
+   *  默认展开）的 closed/onToggleSection 语义分离。 */
+  const [openFolders, setOpenFolders] = useState<ReadonlySet<string>>(new Set())
+  const toggleFolder = (key: string): void => {
+    setOpenFolders((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+  /** 搜索态自动视为全部展开（平铺展示忽略折叠态）。 */
+  const folderOpen = (key: string): boolean => searching || openFolders.has(key)
   const q = search.trim().toLowerCase()
   const searching = q !== ''
   const matches = (name: string): boolean => !searching || name.toLowerCase().includes(q)
@@ -183,14 +198,14 @@ export function HistoryFilterTree({
                   type="button"
                   className="dsh-git-ui__row"
                   style={{ ...css.treeRow, paddingLeft: 24 }}
-                  onClick={() => onToggleSection(`local:${group}`)}
-                  aria-expanded={!closed.has(`local:${group}`)}
+                  onClick={() => toggleFolder(`local:${group}`)}
+                  aria-expanded={folderOpen(`local:${group}`)}
                 >
-                  <span style={css.treeCaret}><ChevronIcon open={!closed.has(`local:${group}`)} /></span>
+                  <span style={css.treeCaret}><ChevronIcon open={folderOpen(`local:${group}`)} /></span>
                   <span style={css.treeFolderIcon}><FolderIcon /></span>
                   <span style={css.treeName}>{group}</span>
                 </button>
-                {!closed.has(`local:${group}`) && branches.map((b) => row(b.name, bareOf(b.name), filter.kind === 'ref' && filter.name === b.name, b.name === tree.current, 44, b))}
+                {folderOpen(`local:${group}`) && branches.map((b) => row(b.name, bareOf(b.name), filter.kind === 'ref' && filter.name === b.name, b.name === tree.current, 44, b))}
               </div>
             ))}
             {tree.remote.length > 0 && sectionHead('remote', t('center.remoteBranches'))}
@@ -200,14 +215,14 @@ export function HistoryFilterTree({
                   type="button"
                   className="dsh-git-ui__row"
                   style={{ ...css.treeRow, paddingLeft: 24 }}
-                  onClick={() => onToggleSection(`remote:${remoteName}`)}
-                  aria-expanded={!closed.has(`remote:${remoteName}`)}
+                  onClick={() => toggleFolder(`remote:${remoteName}`)}
+                  aria-expanded={folderOpen(`remote:${remoteName}`)}
                 >
-                  <span style={css.treeCaret}><ChevronIcon open={!closed.has(`remote:${remoteName}`)} /></span>
+                  <span style={css.treeCaret}><ChevronIcon open={folderOpen(`remote:${remoteName}`)} /></span>
                   <span style={css.treeFolderIcon}><FolderIcon /></span>
                   <span style={css.treeName}>{remoteName}</span>
                 </button>
-                {!closed.has(`remote:${remoteName}`) && branches.map((b) => row(b.name, bareOf(b.name), filter.kind === 'ref' && filter.name === b.name, false, 44))}
+                {folderOpen(`remote:${remoteName}`) && branches.map((b) => row(b.name, bareOf(b.name), filter.kind === 'ref' && filter.name === b.name, false, 44))}
               </div>
             ))}
             {tree.tags.length > 0 && sectionHead('tags', t('history.tags'))}

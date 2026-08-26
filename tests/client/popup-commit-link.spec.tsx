@@ -161,9 +161,41 @@ describe('GitCenter — 外部 commitRequest 深链接线（B）', () => {
     root.unmount()
   })
 
-  it('B3: 无 commitRequest → 初始标签不受影响（默认 changes）', async () => {
+  it('B3: 无 commitRequest → 显式 initialTab 不受影响（仍停在 changes）', async () => {
     const { container, root } = await renderCenter(null)
     expect(activeTab(container)).toBe('dsh-git-ui-tab-changes')
+    root.unmount()
+  })
+})
+
+describe('GitCenter — Tab 顺序与默认页', () => {
+  it('缺省 initialTab → 默认落在 history（历史为第一项）', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    root.render(
+      <UIPrimitivesProvider value={ui}>
+        <GitCenter open onClose={() => {}} snapshot={SNAPSHOT} run={run} query={query} t={t} />
+      </UIPrimitivesProvider>,
+    )
+    await flush()
+    expect(container.querySelector('.dsh-git-ui__tab--active')?.getAttribute('id')).toBe('dsh-git-ui-tab-history')
+    root.unmount()
+  })
+
+  it('DOM 顺序：history 在 changes 之前（历史第一项、变更第二项）', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    root.render(
+      <UIPrimitivesProvider value={ui}>
+        <GitCenter open onClose={() => {}} snapshot={SNAPSHOT} run={run} query={query} t={t} />
+      </UIPrimitivesProvider>,
+    )
+    await flush()
+    const ids = [...container.querySelectorAll('.dsh-git-ui__tab')].map((b) => b.id)
+    expect(ids.indexOf('dsh-git-ui-tab-history')).toBeLessThan(ids.indexOf('dsh-git-ui-tab-changes'))
+    expect(ids[0]).toBe('dsh-git-ui-tab-history')
     root.unmount()
   })
 })

@@ -15,7 +15,7 @@ import { FileTreeNodes } from './FileTreeNodes.tsx'
 import { CommitRow } from './CommitRow.tsx'
 
 export function HistoryTab({
-  query, run, t, focusRef = null,
+  query, run, t, focusRef = null, onOpenCommitFile,
 }: {
   query: GitCenterProps['query']
   run: GitCenterProps['run']
@@ -23,6 +23,8 @@ export function HistoryTab({
   /** 提交定位请求(记录页「已提交」条目深链):哈希前缀搜索 + 自动选中。
    * 对象态含 nonce——重复点击同一提交也产生新引用,重触发定位(H8)。 */
   focusRef?: { readonly hash: string; readonly nonce: number } | null
+  /** 提交详情文件树深链:在变更页以 commit 基线查看该文件的变更。 */
+  onOpenCommitFile?: (path: string, hash: string) => void
 }): JSX.Element {
   const [commits, setCommits] = useState<readonly GraphCommit[]>([])
   /**
@@ -577,6 +579,8 @@ export function HistoryTab({
                         nodes={fileTree}
                         collapsed={collapsed}
                         onToggle={toggleDir}
+                        onOpenFile={onOpenCommitFile === undefined ? undefined : (path) => onOpenCommitFile(path, detail.commit.hash)}
+                        t={t}
                       />
                     )}
               </div>
