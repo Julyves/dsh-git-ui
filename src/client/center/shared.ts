@@ -56,6 +56,38 @@ export function clampDiffRatio(value: number): number {
   return Math.min(DIFF_RATIO_MAX, Math.max(DIFF_RATIO_MIN, value))
 }
 
+// ── 历史时间过滤（since 哨兵 → git --since 值） ─────────────────────────────
+
+/** 时间过滤哨兵：今天 / 24小时内 / 近7/30/90天。空串 = 全部时间。 */
+export type SinceSentinel = '' | '@today' | '@24h' | '@7d' | '@30d' | '@90d'
+
+/**
+ * 哨兵 → git `--since` 值（查询时解析，选择器只存哨兵）。
+ *
+ * 关键语义（「今天 ≠ 24 小时内」bug 修复）：
+ *   - `@today` → **本地当日零点**的 ISO 串（`2026-08-27T00:00:00`）——git 的
+ *     相对表达 `1 day ago` 是「当前时刻减 24h」，会把昨晚的提交算进「今天」；
+ *   - `@24h` → 相对表达 `24 hours ago`（每次查询由 git 按当下解析，恒新鲜）；
+ *   - 其余档位 → 对应相对表达。
+ * 每次查询调用时解析（而非选择时定格），跨零点后语义自动跟随「今天」；
+ * 缓存键应使用解析结果（避免吃到跨零点前的陈旧缓存）。纯函数，可单测。
+ */
+export function resolveSince(sentinel: string, now: Date = new Date()): string {
+  switch (sentinel) {
+    case '@today': {
+      const y = now.getFullYear()
+      const m = String(now.getMonth() + 1).padStart(2, '0')
+      const d = String(now.getDate()).padStart(2, '0')
+      return `${y}-${m}-${d}T00:00:00`
+    }
+    case '@24h': return '24 hours ago'
+    case '@7d': return '7 days ago'
+    case '@30d': return '30 days ago'
+    case '@90d': return '90 days ago'
+    default: return ''
+  }
+}
+
 /** IDEA 式时间：不足 60 分钟「x 分钟前」、今天/昨天 HH:mm，其余 Y/M/D HH:mm。 */
 export function timeAgo(iso: string, now: number, t: (key: GitKey) => string): string {
   return formatWhen(iso, now, {

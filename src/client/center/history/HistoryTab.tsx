@@ -8,7 +8,7 @@ import type { GitKey } from '../../locales.ts'
 import { SelectMenu } from '../../select-menu.tsx'
 import * as css from '../../styles.ts'
 import { Splitter } from '../Splitter.tsx'
-import { clampNum, timeAgo, HISTORY_PAGE, GRAPH_COL_W, GRAPH_MAX_TRACK_W, GRAPH_LANE_MIN_W } from '../shared.ts'
+import { clampNum, timeAgo, resolveSince, HISTORY_PAGE, GRAPH_COL_W, GRAPH_MAX_TRACK_W, GRAPH_LANE_MIN_W } from '../shared.ts'
 import type { GitCenterProps } from '../shared.ts'
 import { HistoryFilterTree } from './HistoryFilterTree.tsx'
 import { FileTreeNodes } from './FileTreeNodes.tsx'
@@ -82,10 +82,11 @@ export function HistoryTab({
   const loadedSeq = useRef(0)
   /** 选中哈希实时镜像(select 响应守卫,H2):晚到 show 响应不覆盖新选中。 */
   const selectedHash = useRef<string | null>(null)
-  /** 按过滤组合的历史首页缓存（上限 10，切回瞬显，减缓“闪烁”与加载延迟）。 */
+  /** 按过滤组合的历史首页缓存（上限 10，切回瞬显，减缓“闪烁”与加载延迟）。
+   *  键含 since 的**解析结果**（@today 跨零点解析值变化 → 不吃陈旧缓存）。 */
   const historyCache = useRef(new Map<string, { commits: readonly GraphCommit[]; total: number }>())
   const cacheKey = (f: { ref: string | null; search: string; author: string; since: string }): string =>
-    JSON.stringify([f.ref, f.search, f.author, f.since])
+    JSON.stringify([f.ref, f.search, f.author, resolveSince(f.since)])
   const writeHistoryCache = (f: { ref: string | null; search: string; author: string; since: string }, commits: readonly GraphCommit[], total: number): void => {
     const cache = historyCache.current
     const key = cacheKey(f)
@@ -204,7 +205,8 @@ export function HistoryTab({
       ...(f.ref !== null ? { ref: f.ref } : {}),
       ...(f.search !== '' ? { search: f.search } : {}),
       ...(f.author !== '' ? { author: f.author } : {}),
-      ...(f.since !== '' ? { since: f.since } : {}),
+      // since 哨兵在查询时解析：@today = 本地当日零点（「今天 ≠ 24 小时内」）。
+      ...(resolveSince(f.since) !== '' ? { since: resolveSince(f.since) } : {}),
     })
     // 陈旧代响应:丢弃——不更新 state、不写缓存(剧本 A 第 3/5 步)。
     if (seq !== seqRef.current) {
@@ -464,10 +466,11 @@ export function HistoryTab({
               value={filter.since}
               options={[
                 { value: '', label: t('history.allTime') },
-                { value: '1 day ago', label: t('history.today') },
-                { value: '7 days ago', label: t('history.last7d') },
-                { value: '30 days ago', label: t('history.last30d') },
-                { value: '90 days ago', label: t('history.last90d') },
+                { value: '@today', label: t('history.today') },
+                { value: '@24h', label: t('history.last24h') },
+                { value: '@7d', label: t('history.last7d') },
+                { value: '@30d', label: t('history.last30d') },
+                { value: '@90d', label: t('history.last90d') },
               ]}
               onSelect={(value) => setFilter((prev) => ({ ...prev, since: value }))}
             />
