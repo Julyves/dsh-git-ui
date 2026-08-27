@@ -62,15 +62,8 @@ const globalCss = [
   '@keyframes dsh-git-sel-pop { from { transform: scale(1.35); opacity: 0.35; } to { transform: scale(1); opacity: 1; } }',
   '.dsh-git-ui__sel-ring { transform-box: fill-box; transform-origin: center; animation: dsh-git-sel-pop 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }',
   // ── V7 赛博轨道选中态（提交行）────────────────────────────────────────
-  // 行容器：relative + hidden 裁剪扫描带于圆角内（图列 overflow visible 的
-  // 选中光晕均在行界内，不受影响；行自身 focus-visible outline 不被裁剪）。
-  '.dsh-git-ui__commit-row { position: relative; overflow: hidden; }',
   // 图轨发光：选中行整条 SVG drop-shadow（单行小面积 filter，开销可忽略）。
   '.dsh-git-ui__graph--glow { filter: drop-shadow(0 0 5px color-mix(in srgb, var(--dsw-alias-state-business-primary) 65%, transparent)); }',
-  // 扫描线：水平亮带 3.2s 纵向循环扫过选中行（aria-current 即选中钩子，
-  // CommitRow 选中时已设置）。
-  '.dsh-git-ui__commit-row[aria-current="true"]::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, transparent 0, color-mix(in srgb, var(--dsw-alias-state-business-primary) 9%, transparent) 50%, transparent 100%); animation: dsh-git-ui-scan 3.2s linear infinite; }',
-  '@keyframes dsh-git-ui-scan { from { transform: translateY(-100%); } to { transform: translateY(100%); } }',
   // System tab underline: 2px bar below the active tab.
   '.dsh-git-ui__tab { transition: transform var(--ds-transition-duration-fast) ease-out, color var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
   '.dsh-git-ui__tab::after { content: ""; position: absolute; right: 0; bottom: 1px; left: 0; height: 2px; border-radius: 2px; background: transparent; transition: background var(--ds-transition-duration-fast) var(--ds-ease-in-out); }',
@@ -166,7 +159,6 @@ const globalCss = [
 
   // ── 减弱动效（保留辅助理解的透明度/颜色过渡，移除位移与缩放——apple 规则）──
   '@media (prefers-reduced-motion: reduce) {',
-  '  .dsh-git-ui__commit-row[aria-current="true"]::after { animation: none !important; opacity: 0 !important; }',
   '  .dsh-git-ui__pill, .dsh-git-ui__pop, .dsh-git-ui__select-menu, .dsh-git-ui__icon-btn, .dsh-git-ui__tab, .dsh-git-ui__commit-row, .dsh-git-ui__row, .dsh-git-ui__work-turn, .dsh-git-ui__branch-input, .dsh-git-ui__commit-input, .dsh-git-ui__toolbar-select, .dsh-git-ui__diff-fold, .dsh-git-ui__refresh, .dsh-git-ui__footer-primary, .dsh-git-ui__change-link, .dsh-git-ui__switch, .dsh-git-ui__switch-knob, .dsh-git-ui__segment, .dsh-git-ui__counts-badge, .dsh-git-ui__tool-button, .dsh-git-ui__sel-ring { transition: opacity 200ms ease, background 200ms ease, color 200ms ease, border-color 200ms ease !important; transform: none !important; animation: none !important; }',
   '}',
 ].join('\n')

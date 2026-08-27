@@ -194,8 +194,7 @@ export function GraphStrip({
         />
       ))}
       {/* 选中态（V7 · 赛博轨道）：大光晕（r+8 实心 30%）+ 细环落定动画；
-       *  轨道整体发光由 svg 上的 --glow 类（drop-shadow）承担，扫描线由
-       *  行级 aria-current 钩子的 ::after 承担（见 globals）。 */}
+       *  轨道整体发光由 svg 上的 --glow 类（drop-shadow）承担（见 globals）。 */}
       {selected === true && (
         <g className="dsh-git-ui__graph-sel">
           <circle cx={x(row.column)} cy={cy} r={nodeR + 8} fill="var(--dsw-alias-state-business-primary)" opacity={0.3} />

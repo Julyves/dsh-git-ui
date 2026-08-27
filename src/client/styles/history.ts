@@ -475,8 +475,7 @@ export const searchDotInner: CSSProperties = {
 /**
  * 选中态（V7 · 赛博轨道）：行底近乎不动——business 垂直渐变 8%→2% 压
  * 深色底托（layer-1 72%），重音全部交给图列：`.dsh-git-ui__graph--glow`
- * 轨道整体外发光 + 行内 `::after` 扫描线（见 globals，aria-current 钩子）。
- * 无左强调条——发光的轨道本身就是选中锚点；8px 圆角承住扫描带裁剪。
+ * 轨道整体外发光。无左强调条——发光的轨道本身就是选中锚点；8px 圆角。
  */
 export const historyRowSelected: CSSProperties = {
   background: [
