@@ -472,10 +472,24 @@ export const searchDotInner: CSSProperties = {
 }
 
 
+/**
+ * 选中态（V7 · 赛博轨道）：行底近乎不动——business 垂直渐变 8%→2% 压
+ * 深色底托（layer-1 72%），重音全部交给图列：`.dsh-git-ui__graph--glow`
+ * 轨道整体外发光 + 行内 `::after` 扫描线（见 globals，aria-current 钩子）。
+ * 无左强调条——发光的轨道本身就是选中锚点；8px 圆角承住扫描带裁剪。
+ */
 export const historyRowSelected: CSSProperties = {
-  background: 'var(--dsw-alias-interactive-bg-active)',
-  // 左侧 3px 强调条（inset 阴影不挤占 grid 布局）：与右侧详情面板的选中锚定联动。
-  boxShadow: 'inset 3px 0 0 0 var(--dsw-alias-state-business-primary)',
+  background: [
+    'linear-gradient(180deg, color-mix(in srgb, var(--dsw-alias-state-business-primary) 8%, transparent), color-mix(in srgb, var(--dsw-alias-state-business-primary) 2%, transparent))',
+    'color-mix(in srgb, var(--dsw-alias-bg-layer-1) 72%, transparent)',
+  ].join(', '),
+  borderRadius: 8,
+}
+
+
+/** 选中主题的辉光：文字微微泛业务色光（V7 的「通电」语汇，非加粗）。 */
+export const commitSubjectGlow: CSSProperties = {
+  textShadow: '0 0 12px color-mix(in srgb, var(--dsw-alias-state-business-primary) 35%, transparent)',
 }
 
 

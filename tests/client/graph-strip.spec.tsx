@@ -106,3 +106,23 @@ describe('GraphStrip — merge 分裂曲线染被合并分支色（回归）', (
     expect(rows[2]!.nodeColor).toBe(colorOf('dev'))
   })
 })
+
+describe('GraphStrip — V7 赛博轨道选中态', () => {
+  it('selected 行：svg 带 --glow 发光类 + 光晕/细环节点组在场', () => {
+    const seq: GraphCommit[] = [
+      commit('m1', ['base'], 'main'),
+      commit('base', []),
+    ]
+    const rows = buildGraph(seq)
+    const htmlSel = renderToStaticMarkup(<GraphStrip row={rows[0]!} cols={1} laneW={14} selected />)
+    // 轨道发光类（V7 的图列重音）。
+    expect(htmlSel).toContain('dsh-git-ui__graph--glow')
+    // 光晕（大半径实心）+ 落定细环。
+    expect(htmlSel).toContain('dsh-git-ui__sel-ring')
+    expect(htmlSel).toContain('dsh-git-ui__graph-sel')
+    // 非选中行：无发光类、无选中节点组。
+    const htmlPlain = renderToStaticMarkup(<GraphStrip row={rows[1]!} cols={1} laneW={14} />)
+    expect(htmlPlain).not.toContain('dsh-git-ui__graph--glow')
+    expect(htmlPlain).not.toContain('dsh-git-ui__graph-sel')
+  })
+})

@@ -45,15 +45,28 @@ export const CommitRow = memo(function CommitRow({
             style={{
               ...css.searchDotInner,
               background: dotColorOf(row.commit.hash),
-              ...(isSelected ? { boxShadow: '0 0 0 2px var(--dsw-alias-state-business-primary)' } : {}),
+              // 选中态与图列节点同语言：细环 + 外圈同色低透明光晕（无动画——
+              // 搜索态无 SVG，纯 boxShadow 光晕即足够的落定感）。
+              ...(isSelected
+                ? {
+                  boxShadow: '0 0 0 2px var(--dsw-alias-state-business-primary), 0 0 0 5px color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent)',
+                }
+                : {}),
             }}
           />
         </span>
       )}
       <span style={css.historySubjectCell}>
         <RefPills refs={row.commit.refs} />
-        {/* IDEA 式：merge 提交（多父）主题弱化——不喧宾夺主，与普通提交区分。 */}
-        <span style={isMerge ? { ...css.commitSubjectLine, ...css.commitSubjectMerge } : css.commitSubjectLine} title={row.commit.subject}>
+        {/* IDEA 式：merge 提交（多父）主题弱化——不喧宾夺主，与普通提交区分。
+            选中态（V7）：主题文字泛业务色辉光（通电语汇），merge 同样适用。 */}
+        <span
+          style={{
+            ...(isMerge ? { ...css.commitSubjectLine, ...css.commitSubjectMerge } : css.commitSubjectLine),
+            ...(isSelected ? css.commitSubjectGlow : {}),
+          }}
+          title={row.commit.subject}
+        >
           {row.commit.subject}
         </span>
       </span>
@@ -105,7 +118,8 @@ export function RefPills({ refs }: { refs: readonly GitRef[] }): JSX.Element | n
  * 颜色（IDEA 式）：由 git-graph 算法随行交付的 `lineColors`/`nodeColor`——
  * 每条线 = 其源分支链色（同链恒一色，跨行同色延续；汇聚线保持各自子链色）。
  * 线条等权细线（1.5px 全色，无分层透明度）——IDEA 日志图的统一权重语汇。
- * 选中行：节点外接 business 色细环，与右侧详情面板锚定联动。
+ * 选中行：business 色柔光晕（r+7 实心 18%）+ 细环（r+3，240ms 落定动画），
+ * 与右侧详情面板锚定联动。
  */
 
 export function GraphStrip({
@@ -127,9 +141,9 @@ export function GraphStrip({
   /** 节点色：所在链色（行内已解析；回退车道索引色）。 */
   const nodeColor = row.nodeColor ?? colorOfLane(row.column)
   return (
-    // overflow visible：选中环（r+3）在极窄车道（laneW=8 的 24+ 列图）下会超出
-    // SVG 边界——放行视觉溢出（display:block 不影响布局，仅选中行绘环）。
-    <svg width={w} height={h} className="dsh-git-ui__graph" style={{ display: 'block', flexShrink: 0, overflow: 'visible' }} aria-hidden="true">
+    // overflow visible：选中光晕（r+8）与细环在极窄车道（laneW=8 的 24+ 列图）
+    // 下会超出 SVG 边界——放行视觉溢出（display:block 不影响布局，仅选中行绘制）。
+    <svg width={w} height={h} className={selected === true ? 'dsh-git-ui__graph dsh-git-ui__graph--glow' : 'dsh-git-ui__graph'} style={{ display: 'block', flexShrink: 0, overflow: 'visible' }} aria-hidden="true">
       {row.verticals.map((col) => (
         // openLanes(H6):merge 副父等非节点延续线在过滤下贯到图尾未解析——
         // 末行以虚线 + 端止横杠标示(与 endOpen 诚实提示一致)。
@@ -179,16 +193,22 @@ export function GraphStrip({
           strokeLinejoin="round"
         />
       ))}
-      {/* 选中环：business 色细环 + 节点色核心，与右侧详情面板联动锚定。 */}
+      {/* 选中态（V7 · 赛博轨道）：大光晕（r+8 实心 30%）+ 细环落定动画；
+       *  轨道整体发光由 svg 上的 --glow 类（drop-shadow）承担，扫描线由
+       *  行级 aria-current 钩子的 ::after 承担（见 globals）。 */}
       {selected === true && (
-        <circle
-          cx={x(row.column)}
-          cy={cy}
-          r={nodeR + 3}
-          fill="none"
-          stroke="var(--dsw-alias-state-business-primary)"
-          strokeWidth={1.5}
-        />
+        <g className="dsh-git-ui__graph-sel">
+          <circle cx={x(row.column)} cy={cy} r={nodeR + 8} fill="var(--dsw-alias-state-business-primary)" opacity={0.3} />
+          <circle
+            className="dsh-git-ui__sel-ring"
+            cx={x(row.column)}
+            cy={cy}
+            r={nodeR + 3}
+            fill="none"
+            stroke="var(--dsw-alias-state-business-primary)"
+            strokeWidth={1.5}
+          />
+        </g>
       )}
       <circle
         cx={x(row.column)}
