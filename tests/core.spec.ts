@@ -22,6 +22,10 @@ const CONFIG: GitStatusConfig = {
   maxStatusBytes: 4 * 1024 * 1024,
   maxChanges: 100,
   defaultRefreshIntervalMs: 30_000,
+  watchEnabled: true,
+  watchDebounceMs: 300,
+  watchMaxWaitMs: 2000,
+  watchExcludes: ['node_modules', '.git'],
 }
 
 /** Programmable runner for failure-path tests. */
@@ -74,6 +78,7 @@ describe('normalizeConfig', () => {
   it('keeps valid values and coerces invalid ones', () => {
     expect(normalizeConfig({ timeoutMs: 100, maxChanges: 5, defaultRefreshIntervalMs: 0 })).toEqual({
       timeoutMs: 100, maxStatusBytes: CONFIG.maxStatusBytes, maxChanges: 5, defaultRefreshIntervalMs: 0,
+      watchEnabled: true, watchDebounceMs: 300, watchMaxWaitMs: 2000, watchExcludes: ['node_modules', '.git'],
     })
     expect(normalizeConfig({ timeoutMs: -1, maxChanges: 'x', maxStatusBytes: NaN }).timeoutMs).toBe(CONFIG.timeoutMs)
     expect(normalizeConfig({ timeoutMs: 0, maxChanges: 2.9 })).toMatchObject({ timeoutMs: 5000, maxChanges: 2 })
@@ -147,7 +152,7 @@ describe('snapshotForSession — failure codes', () => {
     fake.on(['git', 'branch', '--show-current'], { exitCode: 0, stdout: 'main\n', stderr: '', timedOut: false, stdoutLossy: false })
     // HEAD read fails (exit 128, e.g. corrupt repo) — NOT a timeout, NOT unborn.
     fake.on(['git', 'rev-parse', '--short', 'HEAD'], { exitCode: 128, stdout: '', stderr: 'fatal: Needed a single revision', timedOut: false, stdoutLossy: false })
-    fake.on(['git', 'status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all'], { exitCode: 0, stdout: '## main\u0000', stderr: '', timedOut: false, stdoutLossy: false })
+    fake.on(['git', '--no-optional-locks', 'status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all'], { exitCode: 0, stdout: '## main\u0000', stderr: '', timedOut: false, stdoutLossy: false })
     fake.on(['git', 'log', '-n', '5', '--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI'], { exitCode: 0, stdout: 'a'.repeat(40) + '\u001f' + 'aaaaaaa' + '\u001fsub\u001fA\u001f2026-01-01T00:00:00Z\n', stderr: '', timedOut: false, stdoutLossy: false })
     const result = await snapshotForSession(depsFor(dir, fixedSession(dir), fake as unknown as SnapshotDeps['run']), CONFIG, 's1')
     expect(result.ok).toBe(true)
@@ -161,7 +166,7 @@ describe('snapshotForSession — failure codes', () => {
     fake.on(['git', 'rev-parse', '--show-toplevel'], { exitCode: 0, stdout: `${dir}\n`, stderr: '', timedOut: false, stdoutLossy: false })
     fake.on(['git', 'branch', '--show-current'], { exitCode: 0, stdout: 'main\n', stderr: '', timedOut: false, stdoutLossy: false })
     fake.on(['git', 'rev-parse', '--short', 'HEAD'], { exitCode: 0, stdout: 'abc1234\n', stderr: '', timedOut: false, stdoutLossy: false })
-    fake.on(['git', 'status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all'], { exitCode: 0, stdout: '## main\u0000', stderr: '', timedOut: false, stdoutLossy: false })
+    fake.on(['git', '--no-optional-locks', 'status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all'], { exitCode: 0, stdout: '## main\u0000', stderr: '', timedOut: false, stdoutLossy: false })
     fake.on(['git', 'log', '-n', '5', '--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI'], { exitCode: null, stdout: '', stderr: '', timedOut: true, stdoutLossy: false })
     const result = await snapshotForSession(depsFor(dir, fixedSession(dir), fake as unknown as SnapshotDeps['run']), CONFIG, 's1')
     expect(result).toEqual({ ok: false, error: { code: 'timeout' } })
@@ -291,11 +296,36 @@ describe('snapshotForSession — real repositories', () => {
     fake.on(['git', 'rev-parse', '--show-toplevel'], { exitCode: 0, stdout: `${dir}\n`, stderr: '', timedOut: false, stdoutLossy: false })
     fake.on(['git', 'branch', '--show-current'], { exitCode: 0, stdout: 'main\n', stderr: '', timedOut: false, stdoutLossy: false })
     fake.on(['git', 'rev-parse', '--short', 'HEAD'], { exitCode: 0, stdout: 'abc1234\n', stderr: '', timedOut: false, stdoutLossy: false })
-    fake.on(['git', 'status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all'], { exitCode: 0, stdout: '## main\u0000', stderr: '', timedOut: false, stdoutLossy: true })
+    fake.on(['git', '--no-optional-locks', 'status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all'], { exitCode: 0, stdout: '## main\u0000', stderr: '', timedOut: false, stdoutLossy: true })
     fake.on(['git', 'log', '-n', '5', '--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI'], { exitCode: 0, stdout: '', stderr: '', timedOut: false, stdoutLossy: false })
     const result = await snapshotForSession(depsFor(dir, fixedSession(dir), fake as unknown as SnapshotDeps['run']), CONFIG, 's1')
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.value.truncated).toBe(true)
+  })
+
+  it('watchVersion 在 git 命令执行之前采样(复审 P1-2)', async () => {
+    const dir = await tempDir()
+    await gitInit(dir)
+    const order: string[] = []
+    const inner = createGitRunner(realSubprocess(), CONFIG.timeoutMs, CONFIG.maxStatusBytes)
+    const runner: SnapshotDeps['run'] = {
+      run: async (argv, opts) => {
+        order.push(argv[1] === '--no-optional-locks' ? String(argv[2]) : String(argv[1]))
+        return inner.run(argv, opts)
+      },
+    }
+    const deps: SnapshotDeps = {
+      ...depsFor(dir, fixedSession(dir), runner),
+      watchVersionOf: () => { order.push('watchVersion'); return 7 },
+    }
+    const result = await snapshotForSession(deps, CONFIG, 's1')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.watchVersion).toBe(7)
+    // 采样必须先于 status(内容读取):命令执行期内落地的变更会让宿主
+    // 版本前进超过快照戳 → 客户端重挂后不等式立即补刷(安全方向);
+    // 反之快照「带新版本号、装旧内容」,会吞掉本应感知的变更。
+    expect(order.indexOf('watchVersion')).toBeLessThan(order.indexOf('status'))
   })
 })

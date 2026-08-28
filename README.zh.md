@@ -118,23 +118,28 @@ dsh plugin --profile web add dsh-git-ui
 ```yaml
 - id: git-ui
   config:
-    defaultRefreshIntervalMs: 60000   # 轮询间隔（毫秒）；0 关闭轮询
+    defaultRefreshIntervalMs: 60000   # 兜底轮询间隔（毫秒）；0 关闭轮询定时器
     maxChanges: 200                   # 快照中变更文件条目上限
     timeoutMs: 3000                   # 每条 git 命令超时（毫秒）
     maxStatusBytes: 8388608           # status 输出截断上限
     dshHome: /path/to/harness-home    # 可选：Harness 家目录（默认 $DSH_HOME → ~/.dsh）
+    watchEnabled: true                # 事件驱动刷新（文件监听）
+    watchDebounceMs: 300              # 变更静默窗（防抖合并）
+    watchMaxWaitMs: 2000              # 防抖饥饿上限（事件风暴期间每 2 秒至多一刷）
+    watchExcludes: [node_modules, .git]  # 工作区监听的事件级排除目录
 ```
 
 ## 环境要求
 
 - Node.js `^22.19.0 || >=24.0.0`
 - dsh `>= 0.1.0-rc`（开发者预览版）
-- 宿主已安装 `git`
+- 宿主已安装 `git`（≥ 2.15，`--no-optional-locks` 所需）
 
 ## 已知限制
 
 - 仅展示会话工作目录的状态；push / pull / merge 未开放。
-- 刷新基于轮询（默认 30 秒）；文件监视事件推送为计划项。
+- 刷新为**事件驱动**：宿主监听仓库（工作区 + `.git`），客户端每会话驻留一条长轮询——文件变动约一秒内感知，空闲时零 git 子进程。轮询保留为有界兜底：慢速安全轮询（间隔 ×4）自愈漏事件（网络盘、监听降级）；监听彻底失败时退化为普通间隔轮询。
+- 只读 git 命令以 `--no-optional-locks` 运行：`git status`/`git diff` 不再机会性刷新索引 stat 缓存（该写入会反过来触发监听）。理论上的 racy-git 同 mtime 漏报窗口在现代纳秒粒度文件系统上可忽略。
 - 变更文件列表有上限（`maxChanges`）；超大 status 输出经 spill 文件兜底恢复计数。
 - 浏览器只发送 `sessionId`——宿主解析 cwd 并以路径守卫运行 git 命令。
 - Turn 记录对动态构造的 bash 目标（`$(...)`、glob、`eval`）为启发式——回落 `外` 并带可见 `≈` 标记；冷会话跳过；观测时间线有上限。

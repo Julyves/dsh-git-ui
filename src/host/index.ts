@@ -16,6 +16,7 @@
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { Context } from '@deepseek-ai/cordis'
 import { join } from 'node:path'
+import { watch as fsWatch } from 'node:fs'
 import { mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createGitRunner, type SubprocessLike } from './git.ts'
 import { normalizeConfig, resolveWorkspace, runCommand, type GitStatusConfig, type SnapshotDeps } from './core.ts'
@@ -26,6 +27,7 @@ import { RecordStore, OBS_FLUSH_DEBOUNCE_MS, type CommitProbe } from './record-s
 import { runTurnRecords, type TurnRecordSources } from './turn-records.ts'
 import { parseCommitPathsOutput, type CommitPath } from './parser.ts'
 import { PathStateTracker, type PathStateProbe } from './path-state.ts'
+import { RepoWatcherRegistry, type WatchFactory } from './repo-watcher.ts'
 import { sliceEvents, type SessionLike } from '../adapters/dsh/session-log.ts'
 import { createToolPresenter, type ToolRegistryLike } from '../adapters/dsh/tools-presenter.ts'
 import { collectSubagentWrites, type SessionsLike as SubagentSessionsLike } from '../adapters/dsh/subagent-adapter.ts'
@@ -61,6 +63,32 @@ const MTIME_STAT_CAP = 200
  * 命令把单查询拖到默认 5s 超时 × 配额条数(25→8)的顺序放大。 */
 const PROBE_TIMEOUT_MS = 2000
 
+/** watch 长轮询的等待上限(ms):客户端可请求更短,宿主 clamp 到此值——
+ * 驻留调用必须有界,防病态挂起。 */
+const WATCH_WAIT_CAP_MS = 60_000
+
+/** 引用触零后的释放宽限(ms):覆盖客户端「驻留结束→重挂」的间隙与
+ * 单会话心跳周期,避免每 25s 全量重建内核 watcher(复审 R5)。 */
+const WATCH_IDLE_RELEASE_MS = 60_000
+
+/**
+ * 真实 watcher 工厂(node:fs.watch → RepoWatcherRegistry 的结构化切片)。
+ *
+ * - `persistent: false`:watcher 不得独自维持宿主事件循环存活。
+ * - filename 可能是 Buffer(编码不确定)——统一 String 化;null(无法判定
+ *   来源)保守视为有效变更。
+ * - 异步 'error'(ENOSPC/EMFILE/EPERM/目录消失)交由 RepoWatch 降级。
+ */
+const fsWatchFactory: WatchFactory = (path, options, onEvent, onError) => {
+  const watcher = fsWatch(path, { recursive: options.recursive, persistent: false }, (_eventType, filename) => {
+    onEvent(filename === null ? null : String(filename))
+  })
+  watcher.on('error', (error) => { onError(error) })
+  return {
+    close: () => { watcher.close() },
+  }
+}
+
 /**
  * gitInfo Remote 服务:Cordis 壳。
  *
@@ -86,11 +114,27 @@ export class GitStatusService extends TypertRemoteService {
   private readonly snapshotCache = new Map<string, GitSnapshot>()
   /** 去向判定缓存(每会话一份;gone 条目按配额渐进升级)。 */
   private readonly pathStates = new Map<string, PathStateTracker>()
+  /** 仓库文件监听注册表(事件驱动刷新;按 root 共享 + 引用计数)。 */
+  private readonly watchers: RepoWatcherRegistry
 
   constructor(ctx: Context, config: unknown) {
     super(ctx, 'gitInfo')
     this.normalizedConfig = normalizeConfig(config)
-    this.deps = this.buildDeps(ctx, this.normalizedConfig)
+    // registry 先建(构造零副作用,不监听任何路径);resolveGitDir 运行时
+    // 才触达 this.deps,规避 registry↔deps 构造环。
+    this.watchers = new RepoWatcherRegistry(
+      fsWatchFactory,
+      {
+        debounceMs: this.normalizedConfig.watchDebounceMs,
+        maxWaitMs: this.normalizedConfig.watchMaxWaitMs,
+        excludes: this.normalizedConfig.watchExcludes,
+        idleReleaseMs: WATCH_IDLE_RELEASE_MS,
+      },
+      (root) => this.resolveGitDir(root),
+    )
+    const deps = this.buildDeps(ctx, this.normalizedConfig)
+    // 快照随路携带 watchVersion(watch 循环的协调锚点);纯业务测试缺省 0。
+    this.deps = { ...deps, watchVersionOf: (root) => this.watchers.versionOf(root) }
     this.sessions = ctx.get<SessionsService>('sessions')
     this.storage = createPluginDataStore(pluginDataFs(), {
       root: resolvePluginDataRoot(this.normalizedConfig.dshHome),
@@ -105,6 +149,8 @@ export class GitStatusService extends TypertRemoteService {
     )
     this.endpoints = createHostEndpoints(this.deps, this.normalizedConfig, {
       run: (sessionId, signal) => this.runTurnRecords(sessionId, signal),
+    }, {
+      run: (sessionId, version, waitMs, signal) => this.runWatchQuery(sessionId, version, waitMs, signal),
     })
     this.wireLifecycle(ctx)
   }
@@ -153,6 +199,9 @@ export class GitStatusService extends TypertRemoteService {
     })
     ctx.on('dispose', () => {
       this.records.flushAll()
+      // 事件监听整体回收:驻留中的 watch 调用由各自的超时/中止自然结算
+      // (ctx 已亡,结果无人接收,无害)。
+      this.watchers.disposeAll()
     })
   }
 
@@ -395,6 +444,126 @@ export class GitStatusService extends TypertRemoteService {
       await this.track(request.sessionId, result.value)
     }
     return result
+  }
+
+  // ── watch 查询(事件驱动刷新的宿主半) ────────────────────────────────────
+
+  /**
+   * gitdir 解析(promise 缓存):`rev-parse --absolute-git-dir`——linked
+   * worktree 场景下 `<root>/.git` 是文件,真实 HEAD/index/refs 在主仓
+   * gitdir 下;直接监听 `<root>/.git` 会漏掉全部 git 状态变化。
+   * promise 级去重(并发 acquire 只 spawn 一次);仅缓存**成功**结果——
+   * 瞬时失败在下一次实例重建时自愈重试(复审 P2-7);失败 → null(单面)。
+   */
+  private readonly gitDirPromises = new Map<string, Promise<string | null>>()
+  private resolveGitDir(root: string): Promise<string | null> {
+    let pending = this.gitDirPromises.get(root)
+    if (pending === undefined) {
+      pending = runCommand(
+        this.deps.run,
+        ['git', 'rev-parse', '--absolute-git-dir'],
+        root,
+        'rev-parse gitdir',
+      ).then((outcome) => {
+        const value = 'run' in outcome && !outcome.run.timedOut && outcome.run.exitCode === 0
+          && outcome.run.stdout.trim() !== ''
+          ? outcome.run.stdout.trim()
+          : null
+        if (value === null) {
+          // 瞬时失败不缓存(复审增量 P2-b):删除条目,下次实例重建时
+          // 重新解析——gitdir 单面降级可自愈,而非进程级永久。
+          this.gitDirPromises.delete(root)
+        }
+        return value
+      })
+      this.gitDirPromises.set(root, pending)
+    }
+    return pending
+  }
+
+  /**
+   * watch 长轮询编排:版本不一致立即返回(不等式——重启归零自愈);一致时
+   * 挂起至 版本变化 / waitMs(clamp 上限 60s) / 调用方中止 任一先至。
+   *
+   * - watcher 关闭 / root 不可解析 / **双监听面全挂** → git-error:客户端
+   *   功能探测(连续失败计数)后终态降级为纯轮询——两面全挂时版本永不
+   *   bump,若仍应答 changed:false 会令客户端误判健康、把兜底轮询拉长
+   *   4×,反而劣于纯轮询现状(降级路径回归,复审 M2)。
+   * - 驻留期间持有 root 引用(release 于 finally);客户端卸载会话 → RPC
+   *   取消槽 abort → 即时释放,不占内核资源。
+   * - 超时/中止返回 changed:false(客户端原样重挂;中止时结果已无人收)。
+   * - root 经 probeRoots 会话级缓存解析——与 turn-records 探测同源;
+   *   会话 cwd 变化属既有边角(快照路径新鲜解析,watch 锚定旧 root)。
+   */
+  private async runWatchQuery(sessionId: string, version: number, waitMs: number, signal?: AbortSignal): Promise<GitQueryResponse> {
+    if (!this.normalizedConfig.watchEnabled) {
+      return { ok: false, error: { code: 'git-error', message: 'watch disabled' } }
+    }
+    if (signal?.aborted) {
+      // 预中止短路:addEventListener 不重放已发生的 abort,不短路会让
+      // 已离场的调用驻留到 waitMs 自然超时(有界但无谓占用引用)。
+      return { ok: true, value: { kind: 'watch', changed: false, version } }
+    }
+    // root 与快照同源(复审 P1-3):优先复用最近一次真实快照的 root——
+    // 客户端锚点正来自该快照,锚点与被监听 root 永远同一计数器空间。
+    // 若走 probeRoots(陈旧缓存),cwd 切换后 watch 锚定旧 root,不同
+    // 计数器永不相等 → changed:true 永续循环。无缓存(冷会话)才惰性解析。
+    const root = this.snapshotCache.get(sessionId)?.root ?? await this.resolveRoot(sessionId)
+    if (root === null) {
+      return { ok: false, error: { code: 'git-error', message: 'watch unavailable: no repository root' } }
+    }
+    const watch = await this.watchers.acquire(root)
+    if (!watch.healthy) {
+      // 双面全挂(EMFILE/ENOSPC/不支持递归):版本永不 bump,如实上报
+      // 错误驱动客户端降级,而不是假装健康(恒 changed:false)。
+      watch.release()
+      return { ok: false, error: { code: 'git-error', message: 'watch degraded: no live watch surface' } }
+    }
+    // 非有限 waitMs(畸形直连帧;JSON wire 本身不可达)按 0 处理——立即
+    // 判定结算,不走 setTimeout(NaN) 的隐式立即行为。
+    const wait = Number.isFinite(waitMs) ? Math.min(Math.max(waitMs, 0), WATCH_WAIT_CAP_MS) : 0
+    const finish = (changed: boolean): GitQueryResponse =>
+      ({ ok: true, value: { kind: 'watch', changed, version: watch.currentVersion() } })
+    try {
+      // 立即判定:不等式语义同时覆盖「快照与挂起之间的事件窗」与「宿主
+      // 重启计数归零」两种错位。
+      if (watch.changedSince(version)) return finish(true)
+      if (wait === 0) return finish(false)
+      return await new Promise<GitQueryResponse>((resolve) => {
+        let settled = false
+        const settle = (response: GitQueryResponse): void => {
+          if (settled) return
+          settled = true
+          off()
+          clearTimeout(timer)
+          signal?.removeEventListener('abort', onAbort)
+          resolve(response)
+        }
+        const onAbort = (): void => { settle(finish(false)) }
+        const timer = setTimeout(() => { settle(finish(false)) }, wait)
+        // 驻留计时器不得独自维持宿主事件循环存活(ctx dispose 后在途
+        // 调用至多等到自然超时,不阻塞进程退出;复审 R7)。
+        ;(timer as { unref?: () => void }).unref?.()
+        // 先订阅后复查(复审 P2-3):闭合「即时判定与订阅注册」之间的
+        // 微任务间隙——间隙内落地的变更由复查补上,此后由订阅接管。
+        const off = watch.onChange(() => {
+          // 唤醒后复核健康(复审 P1-4):驻留中途双面全挂的死亡唤醒 →
+          // 如实报错驱动客户端即时降级;变更唤醒 → changed:true。
+          if (!watch.healthy) {
+            settle({ ok: false, error: { code: 'git-error', message: 'watch degraded: no live watch surface' } })
+          } else {
+            settle(finish(true))
+          }
+        })
+        if (watch.changedSince(version)) settle(finish(true))
+        // 订阅后复查中止(复审增量建议):abort 落在入口短路之后的 await
+        // 间隙时不会被重放,在此兜底即时结算。
+        if (signal?.aborted) settle(finish(false))
+        signal?.addEventListener('abort', onAbort, { once: true })
+      })
+    } finally {
+      watch.release()
+    }
   }
 
   // ── @Remote 端点(仅委托) ─────────────────────────────────────────────────

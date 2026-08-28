@@ -54,6 +54,11 @@ export async function runQuery(
   if (request.query.kind === 'turn-records') {
     return { ok: false, error: { code: 'git-error', message: 'turn-records handled by the record backend' } }
   }
+  // watch 同理：由宿主编排层(RepoWatcherRegistry)处理;到达此处说明
+  // 编排层未注入(watcher 关闭/旧装配)——返回错误让客户端功能探测降级。
+  if (request.query.kind === 'watch') {
+    return { ok: false, error: { code: 'git-error', message: 'watch handled by the watcher backend' } }
+  }
   const workspace = await resolveWorkspace(deps, request.sessionId)
   if (!workspace.ok) return { ok: false, error: operationError(workspace.error).error }
   const root = workspace.root
@@ -182,9 +187,12 @@ async function diffQuery(
     return { ok: true, value: { kind: 'diff', path, text: show.run.stdout } }
   }
   // 使用 -U999999 显示完整文档上下文（而非仅变更 hunk），支持文档浏览体验。
+  // --no-optional-locks：git diff 在 stat cache 陈旧时会做可选索引刷新
+  // (写 .git/index)——宿主文件监听会把该写入当外部变更,触发一次多余
+  // 刷新(复审 S4);与 core.ts 的 status 同理,输出形状不变。
   const argv = base === 'staged'
-    ? ['git', 'diff', '--cached', '-U999999', '--', path]
-    : ['git', 'diff', '-U999999', '--', path]
+    ? ['git', '--no-optional-locks', 'diff', '--cached', '-U999999', '--', path]
+    : ['git', '--no-optional-locks', 'diff', '-U999999', '--', path]
   const run = await runCommand(deps.run, argv, root, 'diff', deps.signal)
   if ('failure' in run) return { ok: false, error: operationError(run.failure).error }
   if (run.run.timedOut) return { ok: false, error: { code: 'timeout' } }

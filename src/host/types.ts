@@ -47,6 +47,12 @@ export interface GitSnapshot {
   readonly truncated: boolean
   /** Polling interval the client should use after this snapshot (0 = off). */
   readonly refreshIntervalMs: number
+  /**
+   * 仓库监听版本号（事件驱动刷新的协调锚点）：客户端携带此值发起 watch
+   * 长轮询，宿主按不等式判定变更。客户端侧该字段视为可选（旧宿主缺失
+   * → 不启用 watch，退化为纯轮询——升降级混布保护）。
+   */
+  readonly watchVersion: number
   /** Epoch millis of the snapshot. */
   readonly checkedAt: number
 }
@@ -179,6 +185,12 @@ export type GitQuery =
   | { readonly kind: 'tags' }
   | { readonly kind: 'authors' }
   | { readonly kind: 'turn-records' }
+  /**
+   * 变更监听（长轮询）：携带客户端已知的仓库版本号，宿主在版本不一致
+   * 时立即返回，一致时挂起至 `waitMs`（宿主 clamp）。版本语义为**不等式**
+   * （`version !== known` 即 changed）——宿主重启计数归零后自愈对齐。
+   */
+  | { readonly kind: 'watch'; readonly version: number; readonly waitMs: number }
 
 /** 提交变更文件行(`--name-status` 源:状态 + 路径,不再携带 +/- 行数)。 */
 export interface GitFileStat {
@@ -260,6 +272,8 @@ export type GitQueryResult =
   | { readonly kind: 'tags'; readonly tags: readonly GitBranch[] }
   | { readonly kind: 'authors'; readonly authors: readonly string[] }
   | { readonly kind: 'turn-records'; readonly turns: readonly TurnWorkRecord[] }
+  /** 变更监听结果：changed=false 为超时未变（客户端原样重挂）；version 为当前值。 */
+  | { readonly kind: 'watch'; readonly changed: boolean; readonly version: number }
 
 export type GitQueryResponse =
   | { readonly ok: true; readonly value: GitQueryResult }

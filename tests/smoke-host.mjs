@@ -212,6 +212,64 @@ if (scratchState !== 'reverted') {
 const missing = await service.query({ sessionId: 'nope', query: { kind: 'turn-records' } })
 console.log(`[smoke] unknown session -> ok=${missing.ok} code=${missing.error?.code}`)
 
+// ── 7. watch 长轮询(事件驱动刷新,真实 fs.watch) ─────────────────────
+// 7a. 快照携带 watchVersion(wire 契约)
+const freshSnap = await service.snapshot(request)
+const freshVersion = freshSnap.value.watchVersion
+console.log(`[smoke] snapshot watchVersion=${String(freshVersion)}`)
+if (typeof freshVersion !== 'number') {
+  console.error('[smoke] EXPECTED watchVersion on snapshot')
+  process.exit(1)
+}
+
+// 7b. 版本不等式:stale 版本 → 立即 changed:true(不挂起)
+const staleStarted = Date.now()
+const stale = await service.query({ sessionId: sessionRecord.id, query: { kind: 'watch', version: freshVersion - 1, waitMs: 3000 } })
+console.log(`[smoke] watch stale -> ok=${stale.ok} changed=${String(stale.value.changed)} ms=${Date.now() - staleStarted}`)
+if (!stale.ok || stale.value.kind !== 'watch' || stale.value.changed !== true) {
+  console.error('[smoke] EXPECTED immediate changed=true for stale version')
+  process.exit(1)
+}
+
+// 7c. 当前版本 → 驻留;写入工作区文件 → 防抖(300ms)后唤醒 changed:true
+const parked = service.query({ sessionId: sessionRecord.id, query: { kind: 'watch', version: freshVersion, waitMs: 5000 } })
+await new Promise((resolve) => setTimeout(resolve, 150)) // 确保已驻留
+await writeFile(join(dir, 'watch-trigger.txt'), 'event driven refresh\n')
+const wokeStart = Date.now()
+const woke = await parked
+console.log(`[smoke] watch parked -> ok=${woke.ok} changed=${String(woke.value.changed)} wakeMs=${Date.now() - wokeStart}`)
+if (!woke.ok || woke.value.kind !== 'watch' || woke.value.changed !== true) {
+  console.error('[smoke] EXPECTED parked watch to wake changed=true on file write')
+  process.exit(1)
+}
+
+// 7d. 超时心跳:无变更 → changed:false(客户端原样重挂)。
+// 真实 FSEvents 一次写入可能产生多波事件(各自防抖合并)——先排干事件
+// 流,再用最新快照对齐版本,避免迟到 bump 干扰「无变更」前提。
+await new Promise((resolve) => setTimeout(resolve, 600))
+const settleSnap = await service.snapshot(request)
+const beatStarted = Date.now()
+const beat = await service.query({ sessionId: sessionRecord.id, query: { kind: 'watch', version: settleSnap.value.watchVersion, waitMs: 300 } })
+console.log(`[smoke] watch heartbeat -> ok=${beat.ok} changed=${String(beat.value.changed)} ms=${Date.now() - beatStarted}`)
+if (!beat.ok || beat.value.changed !== false) {
+  console.error('[smoke] EXPECTED heartbeat changed=false')
+  process.exit(1)
+}
+
+// 7e. 取消:驻留中 abort → 即时结算(dispose 场景,引用即时释放)
+const ac = new AbortController()
+const parked2 = service.query({ sessionId: sessionRecord.id, query: { kind: 'watch', version: beat.value.version, waitMs: 8000 } }, ac.signal)
+await new Promise((resolve) => setTimeout(resolve, 120))
+ac.abort()
+const aborted = await parked2
+console.log(`[smoke] watch abort -> ok=${aborted.ok} changed=${String(aborted.value.changed)}`)
+if (!aborted.ok || aborted.value.changed !== false) {
+  console.error('[smoke] EXPECTED abort to settle changed=false')
+  process.exit(1)
+}
+// 清理触发文件(保持仓库语义)
+await rm(join(dir, 'watch-trigger.txt'))
+
 // 6. 未捕获 rejection 检查
 const warnings = []
 process.on('unhandledRejection', (reason) => warnings.push(reason))

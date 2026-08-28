@@ -30,7 +30,7 @@ function snap(root: string): GitSnapshot {
     root, branch: 'main', head: 'abc', unborn: false, dirty: false,
     staged: 0, modified: 0, untracked: 0, ahead: 0, behind: 0,
     lastCommit: null, recentCommits: [], changes: [], truncated: false,
-    refreshIntervalMs: 30_000, checkedAt: T0 + 5000,
+    refreshIntervalMs: 30_000, watchVersion: 0, checkedAt: T0 + 5000,
   }
 }
 

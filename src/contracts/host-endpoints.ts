@@ -27,17 +27,28 @@ export interface TurnRecordsBackend {
 }
 
 /**
+ * watch 查询后端(适配层注入;业务端点只做路由)。
+ * 携带客户端已知版本与等待时长;版本不一致立即返回,一致时挂起至
+ * waitMs(clamp 后)或版本变化/中止。signal 为 RPC 取消槽——客户端
+ * 卸载会话时宿主侧驻留即时释放。
+ */
+export interface WatchBackend {
+  run(sessionId: string, version: number, waitMs: number, signal?: AbortSignal): Promise<GitQueryResponse>
+}
+
+/**
  * 构造业务端点实例。
  *
  * `deps` 携带全部宿主能力(子进程、会话查找、文件系统);`config` 携带
- * 运行参数;`records`(可选)承载 turn-records 查询后端,缺省时该查询
- * 返回 git-error(降级)。返回的端点对象可直接绑定到 RPC 装饰器、HTTP
- * 路由、或测试桩。
+ * 运行参数;`records`(可选)承载 turn-records 查询后端,`watch`(可选)
+ * 承载文件监听后端——两者缺省时对应查询返回 git-error(降级)。返回的
+ * 端点对象可直接绑定到 RPC 装饰器、HTTP 路由、或测试桩。
  */
 export function createHostEndpoints(
   deps: SnapshotDeps,
   config: GitStatusConfig,
   records?: TurnRecordsBackend,
+  watch?: WatchBackend,
 ): HostEndpoints {
   return {
     snapshot(request, signal) {
@@ -61,6 +72,15 @@ export function createHostEndpoints(
           })
         }
         return records.run(request.sessionId, signal)
+      }
+      if (request.query.kind === 'watch') {
+        if (watch === undefined) {
+          return Promise.resolve({
+            ok: false,
+            error: { code: 'git-error', message: 'watch unavailable' },
+          })
+        }
+        return watch.run(request.sessionId, request.query.version, request.query.waitMs, signal)
       }
       const merged = mergeSignals(deps.signal, signal)
       const effectiveDeps = merged === deps.signal ? deps : { ...deps, signal: merged }

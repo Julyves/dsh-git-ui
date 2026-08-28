@@ -22,7 +22,7 @@ function sampleSnapshot(overrides: Partial<GitSnapshot> = {}): GitSnapshot {
       { path: 'new.txt', status: 'untracked', staged: false, isDirectory: false },
       { path: 'old.ts', status: 'renamed', staged: true, isDirectory: false },
     ],
-    truncated: false, refreshIntervalMs: 30_000, checkedAt: 1_700_000_000_000,
+    truncated: false, refreshIntervalMs: 30_000, watchVersion: 0, checkedAt: 1_700_000_000_000,
     ...overrides,
   }
 }
@@ -257,6 +257,32 @@ describe('gitInfoRemote query endpoint', () => {
     expect(() => gitQueryResultSchema.parse({ ok: false } as never)).not.toBeNull()
     const failure = gitOperationErrorSchema.parse({ code: 'git-unavailable', message: 'spawn failed' })
     expect(failure.code).toBe('git-unavailable')
+  })
+
+  it('round-trips a watch request and result (wire contract sync)', () => {
+    // 请求:版本 + 等待时长(宿主 clamp 至 60s,wire 不设上限——clamp 是宿主行为)。
+    const request = gitQueryRequestSchema.parse({ sessionId: 's1', query: { kind: 'watch', version: 3, waitMs: 25_000 } })
+    expect(request).toMatchObject({ sessionId: 's1' })
+    // 结果:changed=false 超时心跳 / changed=true 变更。
+    const heartbeat = gitQueryResultSchema.parse({ kind: 'watch', changed: false, version: 3 })
+    expect(heartbeat).toEqual({ kind: 'watch', changed: false, version: 3 })
+    const changed = gitQueryResultSchema.parse({ kind: 'watch', changed: true, version: 4 })
+    expect(changed).toEqual({ kind: 'watch', changed: true, version: 4 })
+    // strict 镜像:缺 version/waitMs 会被 reject(host 类型演进时此处先行失败)。
+    expect(() => gitQueryResultSchema.parse({ kind: 'watch', changed: true } as never)).toThrow()
+    expect(() => gitQueryRequestSchema.parse({ sessionId: 's1', query: { kind: 'watch', version: 1 } as never })).toThrow()
+  })
+
+  it('accepts snapshots without watchVersion (old-host skew) and preserves it when present', () => {
+    // 旧宿主混布:快照缺失 watchVersion → parse 成功且为 undefined(客户端
+    // 不启用 watch,退化为纯轮询——升降级保护的关键行为)。
+    const { watchVersion: _present, ...legacySample } = sampleSnapshot()
+    void _present
+    const legacy = gitSnapshotSchema.parse(legacySample)
+    expect(legacy.watchVersion).toBeUndefined()
+    // 新宿主:字段保留。
+    const modern = gitSnapshotSchema.parse(sampleSnapshot({ watchVersion: 7 }))
+    expect(modern.watchVersion).toBe(7)
   })
 })
 

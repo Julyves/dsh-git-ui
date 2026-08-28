@@ -12,6 +12,12 @@
         maxStatusBytes: 4194304
         maxChanges: 500
         defaultRefreshIntervalMs: 30000
+        # 事件驱动刷新(文件监听)——文件变动后插件亚秒级感知,稳态零 git
+        # 子进程;轮询退化为兜底自愈通道。部署方可按环境调优:
+        #   watchEnabled: true            # false = 关闭监听,回纯轮询
+        #   watchDebounceMs: 300          # trailing 防抖窗(变更合并)
+        #   watchMaxWaitMs: 2000          # 防抖饥饿上限(事件风暴每 2s 至多一刷)
+        #   watchExcludes: [node_modules, .git]  # 工作区监听的事件级排除目录
         # 出厂预设(可选):部署方可在 profile 的 cordis.patch.yml 覆盖此字段,
         # 定制"安装即用"的默认设置;用户未自定义 settings.json 时使用此预设,
         # 「恢复预设」按钮也恢复到此值。缺省时回退到代码内 DEFAULT_SETTINGS(标准档)。

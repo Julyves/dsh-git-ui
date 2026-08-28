@@ -48,7 +48,7 @@ function snapshot(changes: readonly { path: string; status: string; staged?: boo
     changes: changes.map((c) => ({
       path: c.path, status: c.status as 'modified', staged: c.staged === true, isDirectory: false,
     })),
-    truncated: false, refreshIntervalMs: 30_000, checkedAt: Date.now(),
+    truncated: false, refreshIntervalMs: 30_000, watchVersion: 0, checkedAt: Date.now(),
   }
 }
 

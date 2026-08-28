@@ -21,7 +21,11 @@ export type RemoteEnvelope<T> =
 export interface GitRemoteLike {
   snapshot(request: GitSnapshotRequest): Promise<RemoteEnvelope<GitSnapshotResult>>
   run(request: GitActionRequest): Promise<RemoteEnvelope<GitActionResult>>
-  query(request: GitQueryRequest): Promise<RemoteEnvelope<GitQueryResponse>>
+  /**
+   * 只读查询;可选尾随 AbortSignal 经描述符取消槽直达宿主(取消帧 →
+   * 方法末参)。watch 长轮询依赖它:会话卸载时驻留调用即时释放。
+   */
+  query(request: GitQueryRequest, signal?: AbortSignal): Promise<RemoteEnvelope<GitQueryResponse>>
   /** 读取插件数据文件（磁盘 `~/.dsh/plugin-data/dsh-git-ui/<file>`）。 */
   storageRead(request: GitStorageReadRequest): Promise<RemoteEnvelope<GitStorageReadResult>>
   /** 原子写入插件数据文件。 */

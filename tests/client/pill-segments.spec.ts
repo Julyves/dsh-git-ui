@@ -54,6 +54,7 @@ function readyView(overrides: Partial<GitSnapshot> = {}): ReadyView {
       changes: [],
       truncated: false,
       refreshIntervalMs: 30_000,
+      watchVersion: 0,
       checkedAt: 0,
       ...overrides,
     },

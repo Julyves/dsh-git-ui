@@ -118,23 +118,28 @@ All defaults work out of the box. Advanced users may override the plugin config 
 ```yaml
 - id: git-ui
   config:
-    defaultRefreshIntervalMs: 60000   # polling interval (ms); 0 disables polling
+    defaultRefreshIntervalMs: 60000   # fallback polling interval (ms); 0 disables polling
     maxChanges: 200                   # max changed-file entries in a snapshot
     timeoutMs: 3000                   # per git-command timeout (ms)
     maxStatusBytes: 8388608           # status-output cap before truncation
     dshHome: /path/to/harness-home    # optional: Harness home (default $DSH_HOME → ~/.dsh)
+    watchEnabled: true                # event-driven refresh via file watching
+    watchDebounceMs: 300              # change-quiet window before notifying
+    watchMaxWaitMs: 2000              # debounce starvation cap (build storms)
+    watchExcludes: [node_modules, .git]  # worktree-watch noise exclusions
 ```
 
 ## Requirements
 
 - Node.js `^22.19.0 || >=24.0.0`
 - dsh `>= 0.1.0-rc` (developer preview)
-- `git` on the host machine
+- `git` ≥ 2.15 on the host machine (for `--no-optional-locks`)
 
 ## Known limitations
 
 - Shows the session's working directory only; push / pull / merge are not exposed.
-- Refresh is polling-based (default 30 s); event-push via file watchers is planned.
+- Refresh is **event-driven**: the host watches the repository (worktree + `.git`) and the client holds one long-poll per session, so file changes surface in ~a second with zero git spawns at idle. Polling remains as a bounded fallback — a slow safety pass (4× the interval) self-heals missed events (network filesystems, watcher degradation); if watching fails outright, the client degrades to plain interval polling.
+- Read-only git commands run with `--no-optional-locks`: `git status`/`git diff` no longer opportunistically refresh the index stat cache (which would re-trigger the watcher). The theoretical racy-git same-mtime window is negligible on modern nanosecond-granularity filesystems.
 - The changed-file list is capped (`maxChanges`), with spill-file recovery for oversized status output.
 - The browser only ever sends a `sessionId` — the host resolves cwd and runs git with path guards.
 - Turn records are heuristic for dynamically-constructed bash targets (`$(...)`, globs, `eval`) — they fall back to `外` with a visible `≈` mark; cold sessions are skipped; observation timelines are capped.

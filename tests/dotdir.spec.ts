@@ -34,6 +34,10 @@ const CONFIG: GitStatusConfig = {
   maxStatusBytes: 4 * 1024 * 1024,
   maxChanges: 100,
   defaultRefreshIntervalMs: 30_000,
+  watchEnabled: false,
+  watchDebounceMs: 300,
+  watchMaxWaitMs: 2000,
+  watchExcludes: ['node_modules', '.git'],
 }
 
 /** 会话查找：固定指向一个 cwd（live + persisted 同值）。 */

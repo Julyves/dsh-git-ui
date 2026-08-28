@@ -120,7 +120,7 @@ function snapshotOk(changes: readonly GitChange[]): GitSnapshot {
     root: '/repo', branch: 'main', head: 'abc1234', unborn: false, dirty: true,
     staged: 0, modified: changes.length, untracked: 0, ahead: 0, behind: 0,
     lastCommit: null, recentCommits: [], changes, truncated: false,
-    refreshIntervalMs: 30_000, checkedAt: 4000,
+    refreshIntervalMs: 30_000, watchVersion: 0, checkedAt: 4000,
   }
 }
 

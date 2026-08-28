@@ -46,19 +46,19 @@ const FAST_POLL_MS = 50
 /** 观察窗（真实毫秒）。 */
 const WINDOW_MS = 700
 
-interface Counter { snapshot: number; records: number; history: number; branches: number; tags: number; authors: number; diff: number; show: number }
+interface Counter { snapshot: number; records: number; history: number; branches: number; tags: number; authors: number; diff: number; show: number; watch: number }
 
 function makeSnapshot(seq: number): GitSnapshot {
   return {
     root: '~/p/demo', branch: 'main', head: 'abc1234', unborn: false,
     dirty: false, staged: 0, modified: 0, untracked: 0, ahead: 0, behind: 0,
     lastCommit: null, recentCommits: [], changes: [], truncated: false,
-    refreshIntervalMs: FAST_POLL_MS, checkedAt: 1_000 + seq,
+    refreshIntervalMs: FAST_POLL_MS, watchVersion: 0, checkedAt: 1_000 + seq,
   }
 }
 
-function makeStub(opts: { snapshotFail?: boolean; recordsFail?: boolean } = {}) {
-  const calls: Counter = { snapshot: 0, records: 0, history: 0, branches: 0, tags: 0, authors: 0, diff: 0, show: 0 }
+function makeStub(opts: { snapshotFail?: boolean; recordsFail?: boolean; watchFail?: boolean } = {}) {
+  const calls: Counter = { snapshot: 0, records: 0, history: 0, branches: 0, tags: 0, authors: 0, diff: 0, show: 0, watch: 0 }
   let snapSeq = 0
   const remote = {
     async snapshot() {
@@ -92,6 +92,16 @@ function makeStub(opts: { snapshotFail?: boolean; recordsFail?: boolean } = {}) 
         case 'show':
           calls.show += 1
           return { ok: true, value: { kind: 'show', ref: q.ref, commit: null, body: '', stats: [] } }
+        case 'watch':
+          // 驻留语义的真实形状：真实宿主挂 25s;此处返回永不结算的
+          // promise(测试结束随 controller dispose 中止)——窗口内 watch
+          // 调用数有界(每会话 ≤ 1)是断言对象。
+          calls.watch += 1
+          if (opts.watchFail === true) {
+            // 传输/业务错误(立即结算)：驱动失败退避路径，验风暴有界。
+            return { ok: false, error: { code: 'git-error', message: 'watch unavailable' } }
+          }
+          return new Promise(() => {})
       }
     },
   }
@@ -157,6 +167,9 @@ describe('负载审计 — 每会话 RPC 量有界（风暴探测）', () => {
     expect(calls.snapshot).toBeGreaterThan(3)
     expect(calls.snapshot).toBeLessThan(40)
     expect(calls.records).toBeLessThanOrEqual(calls.snapshot + 2)
+    // watch 驻留有界:每会话恰好一条挂起的长轮询(稳态零 git spawn 的
+    // 前提),窗口内不得翻倍(重挂风暴=回归)。
+    expect(calls.watch).toBe(1)
     const total = Object.values(calls).reduce((a, b) => a + b, 0)
     expect(total).toBeLessThan(60)
   })
@@ -219,5 +232,26 @@ describe('负载审计 — 每会话 RPC 量有界（风暴探测）', () => {
     expect(calls.history).toBe(1)
     expect(calls.branches).toBe(1)
     root.unmount()
+  })
+
+  it('E: watch 永远失败 — 退避有界,终态后纯轮询,无重试风暴', async () => {
+    const { calls, remote } = makeStub({ watchFail: true })
+    const controller = new GitController(remote as never, 's1')
+    cleanup.push(() => controller.dispose())
+    const { root } = await mountPill(controller)
+    cleanup.push(() => root.unmount())
+
+    await observe(WINDOW_MS)
+    controller.dispose()
+    root.unmount()
+
+    // 失败退避 3s + 终态上限 5 次:0.7s 窗口内至多首败 1 次 + 0 次退避
+    // 重试(3s 未到);watch 不热转、不与快照轮询叠加成风暴。
+    expect(calls.watch).toBeLessThanOrEqual(2)
+    // 快照轮询照常有界(降级不劣于纯轮询现状)。
+    expect(calls.snapshot).toBeGreaterThan(3)
+    expect(calls.snapshot).toBeLessThan(40)
+    const total = Object.values(calls).reduce((a, b) => a + b, 0)
+    expect(total).toBeLessThan(60)
   })
 })

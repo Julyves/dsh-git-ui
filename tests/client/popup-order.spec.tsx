@@ -36,7 +36,7 @@ const VIEW: GitView & { state: 'ready' } = {
     lastCommit: null,
     recentCommits: [{ hash: 'aaaa1111bbbb2222cccc3333dddd4444eeee5555', shortHash: 'aaaa111', subject: 's1', author: 'a', dateIso: '2026-01-01T00:00:00Z' }],
     changes: [{ path: 'src/a.ts', status: 'modified', staged: false, isDirectory: false }],
-    truncated: false, refreshIntervalMs: 30_000, checkedAt: 0,
+    truncated: false, refreshIntervalMs: 30_000, watchVersion: 0, checkedAt: 0,
   },
 }
 

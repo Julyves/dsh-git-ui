@@ -59,6 +59,8 @@ export const gitSnapshotSchema = z.object({
   changes: z.array(gitChangeSchema),
   truncated: z.boolean(),
   refreshIntervalMs: z.number(),
+  // 可选(升降级混布保护):旧宿主不携带 → 客户端不启用 watch,纯轮询。
+  watchVersion: z.number().optional(),
   checkedAt: z.number(),
 })
 
@@ -133,6 +135,8 @@ export const gitQuerySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('tags') }),
   z.object({ kind: z.literal('authors') }),
   z.object({ kind: z.literal('turn-records') }),
+  // 变更监听长轮询:携带已知版本与等待时长(宿主 clamp 至 60s)。
+  z.object({ kind: z.literal('watch'), version: z.number(), waitMs: z.number() }),
 ])
 
 /** Turn 工作记录(wire 镜像 host/types.ts 的 TurnWorkRecord/WorkEntry)。 */
@@ -178,6 +182,8 @@ export const gitQueryResultSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('tags'), tags: z.array(gitBranchSchema) }),
   z.object({ kind: z.literal('authors'), authors: z.array(z.string()) }),
   z.object({ kind: z.literal('turn-records'), turns: z.array(turnWorkRecordSchema) }),
+  // watch 结果:changed=false 为超时未变(原样重挂);version 为宿主当前值。
+  z.object({ kind: z.literal('watch'), changed: z.boolean(), version: z.number() }),
 ])
 
 export const gitQueryResponseSchema = z.discriminatedUnion('ok', [

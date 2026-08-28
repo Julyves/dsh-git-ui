@@ -31,7 +31,7 @@ const SNAPSHOT: GitSnapshot = {
   root: '~/p/demo', branch: 'main', head: 'abc1234', unborn: false,
   dirty: true, staged: 1, modified: 1, untracked: 0, ahead: 0, behind: 0,
   lastCommit: null, recentCommits: [], changes: [], truncated: false,
-  refreshIntervalMs: 30_000, checkedAt: 0,
+  refreshIntervalMs: 30_000, watchVersion: 0, checkedAt: 0,
 }
 
 const HASH = 'aaaa1111bbbb2222cccc3333dddd4444eeee5555'

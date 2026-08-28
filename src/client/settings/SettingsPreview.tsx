@@ -28,6 +28,7 @@ const DEMO_SNAPSHOT: GitSnapshot = {
   changes: [],
   truncated: false,
   refreshIntervalMs: 30_000,
+  watchVersion: 0,
   checkedAt: 0,
 }
 

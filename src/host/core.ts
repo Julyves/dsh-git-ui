@@ -15,6 +15,17 @@ export interface GitStatusConfig {
   readonly maxChanges: number
   readonly defaultRefreshIntervalMs: number
   /**
+   * 事件驱动刷新（文件监听）开关；false = 不建 watcher，watch 查询返回
+   * git-error（客户端功能探测后退化纯轮询）。
+   */
+  readonly watchEnabled: boolean
+  /** watcher trailing 防抖窗（ms）；默认 300。 */
+  readonly watchDebounceMs: number
+  /** 防抖饥饿防护上限（ms）：事件风暴期间每 maxWait 至多 bump 一次；默认 2000。 */
+  readonly watchMaxWaitMs: number
+  /** 工作区监听的事件级排除目录（相对首段；默认 node_modules + .git）。 */
+  readonly watchExcludes: readonly string[]
+  /**
    * Harness home 显式覆盖（dsh 惯例：`$DSH_HOME` → `~/.dsh` 之上的最高优先级）。
    * 插件数据存放于 `<home>/plugin-data/dsh-git-ui/`。
    */
@@ -53,6 +64,12 @@ export interface SnapshotDeps {
   readonly now?: () => number
   /** Caller-side cancellation (Remote `signal` slot): aborts in-flight git runs. */
   readonly signal?: AbortSignal
+  /**
+   * 仓库监听版本提供者（宿主编排层注入 repo-watcher 注册表）：快照携带
+   * 当前 watchVersion 供客户端发起 watch 长轮询。缺省 = 0（纯业务测试/
+   * watcher 关闭时仍输出合法字段）。
+   */
+  readonly watchVersionOf?: (root: string) => number
 }
 
 /** Defaults applied by normalizeConfig when a value is absent or invalid. */
@@ -61,6 +78,10 @@ export const DEFAULT_CONFIG: GitStatusConfig = {
   maxStatusBytes: 4 * 1024 * 1024,
   maxChanges: 100,
   defaultRefreshIntervalMs: 30_000,
+  watchEnabled: true,
+  watchDebounceMs: 300,
+  watchMaxWaitMs: 2000,
+  watchExcludes: ['node_modules', '.git'],
 }
 
 /** Coerce a raw patch config value into a validated GitStatusConfig. */
@@ -72,11 +93,27 @@ export function normalizeConfig(raw: unknown): GitStatusConfig {
       ? candidate
       : fallback
   }
+  const excludesOr = (key: string, fallback: readonly string[]): readonly string[] => {
+    const candidate = value[key]
+    if (!Array.isArray(candidate)) return fallback
+    const entries = candidate.filter((entry): entry is string => typeof entry === 'string' && entry !== '' && !entry.includes('/'))
+    return entries.length > 0 ? entries : fallback
+  }
   return {
     timeoutMs: numberOr('timeoutMs', DEFAULT_CONFIG.timeoutMs) || DEFAULT_CONFIG.timeoutMs,
     maxStatusBytes: numberOr('maxStatusBytes', DEFAULT_CONFIG.maxStatusBytes) || DEFAULT_CONFIG.maxStatusBytes,
     maxChanges: Math.floor(numberOr('maxChanges', DEFAULT_CONFIG.maxChanges) || DEFAULT_CONFIG.maxChanges),
     defaultRefreshIntervalMs: numberOr('defaultRefreshIntervalMs', DEFAULT_CONFIG.defaultRefreshIntervalMs),
+    watchEnabled: value.watchEnabled === undefined
+      ? DEFAULT_CONFIG.watchEnabled
+      // 布尔归一(复审 P2-4):仅 boolean false / 0 / 'false' 视为关闭,
+      // 其余真值开启——数字/字符串形态的关闭意图不被宽松真值误判。
+      : (value.watchEnabled !== false && value.watchEnabled !== 0 && value.watchEnabled !== 'false'),
+    watchDebounceMs: Math.max(1, numberOr('watchDebounceMs', DEFAULT_CONFIG.watchDebounceMs)),
+    // maxWait 下限基于**归一化后**的 debounce(复审 S3):显式 maxWait < debounce
+    // 会令第二个事件立即 bump,越过 trailing 语义——maxWait 必须严格更大。
+    watchMaxWaitMs: Math.max(Math.max(1, numberOr('watchDebounceMs', DEFAULT_CONFIG.watchDebounceMs)) + 1, numberOr('watchMaxWaitMs', DEFAULT_CONFIG.watchMaxWaitMs)),
+    watchExcludes: excludesOr('watchExcludes', DEFAULT_CONFIG.watchExcludes),
     ...(typeof value.dshHome === 'string' && value.dshHome !== ''
       ? { dshHome: value.dshHome }
       : {}),
@@ -191,6 +228,11 @@ export async function snapshotForSession(
   const workspace = await resolveWorkspace(deps, sessionId)
   if (!workspace.ok) return { ok: false, error: workspace.error }
   const root = workspace.root
+  // 版本戳在 git 命令执行**之前**采样(复审 P1-2):命令执行期间落地的
+  // 变更会使宿主版本前进超过本快照的戳 → 客户端重挂后不等式立即判
+  // changed → 补一次刷新(安全方向)。若在内容读取之后采样,快照会
+  // 「带新版本号、装旧内容」,恰好吞掉本应感知的下一笔变更。
+  const watchVersion = deps.watchVersionOf?.(root) ?? 0
 
   const branchRun = await runCommand(deps.run, ['git', 'branch', '--show-current'], root, 'branch', deps.signal)
   if ('failure' in branchRun) return { ok: false, error: branchRun.failure }
@@ -206,7 +248,11 @@ export async function snapshotForSession(
   const head = headRun.run.exitCode === 0 ? (headRun.run.stdout.trim() || null) : null
 
   // --untracked-files=all：强制枚举未跟踪目录内部文件（根因修复——见模块注释）。
-  const status = await runCommand(deps.run, ['git', 'status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all'], root, 'status', deps.signal)
+  // --no-optional-locks：git status 默认会 opportunistically 刷新索引
+  // stat 缓存（写 .git/index）。宿主侧文件监听会把该写入当成外部变更 →
+  // 触发 watcher → 再 snapshot → 再写索引 → 死循环。此标志从根上消除
+  // 「自己的读取触发自己的监听」回路（快照全链路唯一写索引的只读命令）。
+  const status = await runCommand(deps.run, ['git', '--no-optional-locks', 'status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all'], root, 'status', deps.signal)
   if ('failure' in status) return { ok: false, error: status.failure }
   if (status.run.timedOut) return { ok: false, error: { code: 'timeout' } }
   if (status.run.exitCode !== 0) {
@@ -236,6 +282,7 @@ export async function snapshotForSession(
     changes: parsed.changes,
     truncated: parsed.truncated || ('run' in status && status.run.stdoutLossy),
     refreshIntervalMs: config.defaultRefreshIntervalMs,
+    watchVersion,
     checkedAt,
   }
   return { ok: true, value: snapshot }

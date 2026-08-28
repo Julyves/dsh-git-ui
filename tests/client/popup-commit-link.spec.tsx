@@ -49,7 +49,7 @@ const SNAPSHOT: GitSnapshot = {
   root: '~/projects/demo-repo', branch: 'main', head: 'aaaa111', unborn: false,
   dirty: true, staged: 2, modified: 1, untracked: 3, ahead: 1, behind: 2,
   lastCommit: null, recentCommits: COMMITS, changes: [], truncated: false,
-  refreshIntervalMs: 30_000, checkedAt: 0,
+  refreshIntervalMs: 30_000, watchVersion: 0, checkedAt: 0,
 }
 
 const VIEW: GitView & { state: 'ready' } = { state: 'ready', snapshot: SNAPSHOT }

@@ -22,7 +22,7 @@ function snapshotOk(overrides: Partial<GitSnapshot> = {}): GitSnapshot {
     staged: 0, modified: 1, untracked: 0, ahead: 0, behind: 0,
     lastCommit: null, recentCommits: [],
     changes: [{ path: 'ext.txt', status: 'modified', staged: false, isDirectory: false }],
-    truncated: false, refreshIntervalMs: 30_000, checkedAt: 4000,
+    truncated: false, refreshIntervalMs: 30_000, watchVersion: 0, checkedAt: 4000,
     ...overrides,
   }
 }
