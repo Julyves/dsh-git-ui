@@ -40,7 +40,7 @@ function showResult(ref: string): ShowOutcome {
 }
 
 /** show 桩：记录调用序列；holdRef[ref] 存在时挂起（测试手动放行）。 */
-function makeQuery() {
+function makeQuery(commits: readonly GraphCommit[] = [A, B]) {
   const showLog: string[] = []
   const held: Record<string, Array<(v: GitQueryOutcome) => void>> = {}
   const query = async (q: GitQueryRequest['query']): Promise<GitQueryOutcome> => {
@@ -52,7 +52,7 @@ function makeQuery() {
       return showResult(q.ref)
     }
     if (q.kind === 'history') {
-      return { ok: true, value: { kind: 'history', commits: [A, B], total: 2 } }
+      return { ok: true, value: { kind: 'history', commits, total: commits.length } }
     }
     if (q.kind === 'branches') return { ok: true, value: { kind: 'branches', current: 'main', defaultBranch: 'main', local: [], remote: [] } }
     if (q.kind === 'tags') return { ok: true, value: { kind: 'tags', tags: [] } }
@@ -148,6 +148,34 @@ describe('HistoryTab — 提交详情缓存与加载体验', () => {
     await flush()
     expect(h.showLog.filter((r) => r === A.hash)).toHaveLength(1)
     expect(container.textContent).toContain('a1.ts')
+    root.unmount()
+  })
+
+  it('连点多条目无堆叠:旧头部/正文节点被替换,不残留(重复 key 回归锁)', async () => {
+    const C = commitOf('ccccccc3', 'commit C subject')
+    const D = commitOf('ddddddd4', 'commit D subject')
+    const h = makeQuery([A, B, C, D])
+    const { container, root, rows } = await mount(h.query)
+    expect(rows).toHaveLength(4)
+    // 依序点击 A→B→C→D:每一步旧内容必须被替换(曾因同父容器重复 key
+    // ——头部与正文用相同哈希值——React 调和未定义,旧节点累积成堆叠)。
+    for (const row of rows) {
+      row.click()
+      await flush(4)
+    }
+    expect(container.textContent).toContain('commit D subject')
+    expect(container.textContent).toContain('body of ddddddd4')
+    // 详情区只允许存在当前提交的 3 个表面(文件树/头部/正文)——旧提交的
+    // 头部/正文残留即堆叠复发。
+    const detailEls = Array.from(container.querySelectorAll('.dsh-git-ui__detail-in'))
+    expect(detailEls).toHaveLength(3)
+    const detailText = detailEls.map((el) => el.textContent ?? '').join('|')
+    expect(detailText).toContain('commit D subject')
+    expect(detailText).toContain('body of ddddddd4')
+    expect(detailText).not.toContain('commit A subject')
+    expect(detailText).not.toContain('commit B subject')
+    expect(detailText).not.toContain('commit C subject')
+    expect(detailText).not.toContain('body of aaaaaaa1')
     root.unmount()
   })
 })

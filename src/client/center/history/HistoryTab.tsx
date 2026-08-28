@@ -602,7 +602,11 @@ export function HistoryTab({
               )
               : (
                 <>
-                  <div style={{ ...css.rightFiles, flex: 'none', height: `${rightTopPct}%` }}>
+                  <div
+                key={detail !== null ? `d-${detail.commit.hash}` : detailError ? 'err' : 'skel'}
+                className="dsh-git-ui__detail-in"
+                style={{ ...css.rightFiles, flex: 'none', height: `${rightTopPct}%` }}
+              >
                 {detail === null
                   ? detailError
                     ? <div style={css.centeredEmpty}>{t('history.detailFailed')}</div>
@@ -636,7 +640,10 @@ export function HistoryTab({
                     }}
                   />
                   <div style={css.rightMsg}>
-                    <div style={css.commitDetailHeader}>
+                    {/* key 命名空间(复审-回归):头部前缀 h-,正文前缀 b-。两者在同
+                        父容器下曾用相同哈希值作 key,重复 key 使 React 调和未定义、
+                        旧节点不被卸载,逐次累积成「message 堆叠」。 */}
+                    <div key={`h-${selected.hash}`} className="dsh-git-ui__detail-in" style={css.commitDetailHeader}>
                       <span style={css.commitDetailSubject}>{selected.subject}</span>
                       <div style={css.commitDetailMetaRow}>
                         <span style={css.commitDetailHash}>{selected.shortHash}</span>
@@ -647,8 +654,8 @@ export function HistoryTab({
                     </div>
                     {detail !== null
                       ? (detail.body !== ''
-                          ? <pre style={css.msgBody}>{detail.body}</pre>
-                          : <div style={css.centeredEmpty}>{t('right.noMessage')}</div>)
+                          ? <pre key={`b-${detail.commit.hash}`} className="dsh-git-ui__detail-in" style={css.msgBody}>{detail.body}</pre>
+                          : <div key={`b-${detail.commit.hash}`} className="dsh-git-ui__detail-in" style={css.centeredEmpty}>{t('right.noMessage')}</div>)
                       : null}
                     {/* 载入中(null)时正文区保持留白——不再闪「无提交信息」 */}
                   </div>
