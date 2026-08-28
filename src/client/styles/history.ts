@@ -643,6 +643,22 @@ export const rightFiles: CSSProperties = {
   gap: 1,
 }
 
+/** 详情骨架屏容器（首次载入提交详情的稳定占位，替代「加载…」文字闪烁）。 */
+export const detailSkeleton: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+  padding: '16px 14px',
+}
+
+/** 骨架条：脉动动画由全局 .dsh-git-ui__skel-bar 承担（reduced-motion 豁免）。 */
+export const detailSkeletonBar: CSSProperties = {
+  height: 10,
+  borderRadius: 5,
+  background: 'var(--dsw-alias-bg-layer-3, var(--dsw-alias-bg-layer-2))',
+  opacity: 0.5,
+}
+
 
 export const rightMsg: CSSProperties = {
   flex: 1,

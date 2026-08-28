@@ -85,6 +85,13 @@ export function HistoryTab({
   /** 按过滤组合的历史首页缓存（上限 10，切回瞬显，减缓“闪烁”与加载延迟）。
    *  键含 since 的**解析结果**（@today 跨零点解析值变化 → 不吃陈旧缓存）。 */
   const historyCache = useRef(new Map<string, { commits: readonly GraphCommit[]; total: number }>())
+  /**
+   * 提交详情缓存（标签页生命周期，上限 50，LRU）：提交内容对哈希不可变——
+   * 同一提交重复点击零 RPC、零闪烁，持续显示已载入数据（复审-UX）。
+   */
+  const detailCache = useRef(new Map<string, { commit: GraphCommit; body: string; stats: readonly GitFileStat[] }>())
+  /** 在途详情加载的哈希：同提交连点去重（不重复发 RPC，保留骨架态）。 */
+  const loadingDetailHash = useRef<string | null>(null)
   const cacheKey = (f: { ref: string | null; search: string; author: string; since: string }): string =>
     JSON.stringify([f.ref, f.search, f.author, resolveSince(f.since)])
   const writeHistoryCache = (f: { ref: string | null; search: string; author: string; since: string }, commits: readonly GraphCommit[], total: number): void => {
@@ -340,15 +347,40 @@ export function HistoryTab({
   const select = useCallback(async (commit: GraphCommit): Promise<void> => {
     selectedHash.current = commit.hash
     setSelected(commit)
+    // 缓存命中：瞬显已载入数据——零 RPC、不清空、无加载态（同提交重复
+    // 点击即「持续显示已加载过的数据」；setSelected/setDetail 同引用时
+    // React 直接跳过重渲染，连点无任何视觉扰动）。
+    const cached = detailCache.current.get(commit.hash)
+    if (cached !== undefined) {
+      setDetail(cached)
+      setDetailError(false)
+      return
+    }
+    // 同提交已在途：不重复发请求（骨架态保留，等待在途响应）。
+    if (loadingDetailHash.current === commit.hash) return
     setDetail(null)
     setDetailError(false)
+    loadingDetailHash.current = commit.hash
     const outcome = await query({ kind: 'show', ref: commit.hash })
+    // 按哈希身份清理在途标记——不得误清后续点击写入的标记。
+    if (loadingDetailHash.current === commit.hash) loadingDetailHash.current = null
     // 响应守卫(H2):仅当本次点击仍是当前选中时落地——晚到响应不乱序覆盖(A→B 点选)。
     if (selectedHash.current !== commit.hash) return
     if (outcome.ok && outcome.value.kind === 'show' && outcome.value.commit !== null) {
-      setDetail({ commit: outcome.value.commit as GraphCommit, body: outcome.value.body, stats: outcome.value.stats })
+      const loaded = { commit: outcome.value.commit as GraphCommit, body: outcome.value.body, stats: outcome.value.stats }
+      // LRU 写缓存(上限 50):提交内容对哈希不可变,缓存跨过滤切换持续有效。
+      const cache = detailCache.current
+      cache.delete(commit.hash)
+      cache.set(commit.hash, loaded)
+      while (cache.size > 50) {
+        const first = cache.keys().next().value
+        if (first === undefined) break
+        cache.delete(first)
+      }
+      setDetail(loaded)
     } else {
-      // 查询失败/超时:进入失败态,不再永久「加载中」(H3)。
+      // 查询失败/超时:进入失败态,不再永久「加载中」(H3)。失败不写缓存——
+      // 再次点击即重试。
       setDetailError(true)
     }
   }, [query])
@@ -574,7 +606,16 @@ export function HistoryTab({
                 {detail === null
                   ? detailError
                     ? <div style={css.centeredEmpty}>{t('history.detailFailed')}</div>
-                    : <div style={css.centeredEmpty}>{t('center.loading')}</div>
+                    : (
+                      // 骨架屏(复审-UX):首次载入的稳定占位——不再整区切换
+                      // 「加载…」文字造成单次闪烁;条宽差异模拟即将到来的
+                      // 文件树,视觉连续。reduced-motion 下静态显示。
+                      <div style={css.detailSkeleton} aria-hidden="true">
+                        {[92, 74, 84, 60, 88, 68].map((w, i) => (
+                          <div key={i} className="dsh-git-ui__skel-bar" style={{ ...css.detailSkeletonBar, width: `${w}%` }} />
+                        ))}
+                      </div>
+                    )
                   : detail.stats.length === 0
                     ? <div style={css.centeredEmpty}>{t('center.diffEmpty')}</div>
                     : (
@@ -604,9 +645,12 @@ export function HistoryTab({
                         <span style={css.commitDetailMeta}>{timeAgo(selected.dateIso, now, t)}</span>
                       </div>
                     </div>
-                    {detail !== null && detail.body !== ''
-                      ? <pre style={css.msgBody}>{detail.body}</pre>
-                      : <div style={css.centeredEmpty}>{t('right.noMessage')}</div>}
+                    {detail !== null
+                      ? (detail.body !== ''
+                          ? <pre style={css.msgBody}>{detail.body}</pre>
+                          : <div style={css.centeredEmpty}>{t('right.noMessage')}</div>)
+                      : null}
+                    {/* 载入中(null)时正文区保持留白——不再闪「无提交信息」 */}
                   </div>
                 </>
               )}
