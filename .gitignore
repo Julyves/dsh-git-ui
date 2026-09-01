@@ -29,9 +29,13 @@ coverage/
 AGENT.md
 .claude/
 .agent/
+.agents/
 .mimocode/
 .codegraph/
 .workbuddy/
+
+# Demo (graph-styles 演示工程，后续独立开发)
+demo/
 
 # Release
 release/
