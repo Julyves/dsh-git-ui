@@ -66,7 +66,7 @@ IDE 式三段分组（已暂存/更改/未跟踪）、单文件与批量暂存/�
 - **视图三态** — `对照`（前后并排，默认）/ `变更前` / `变更后`；并排分隔条可**拖拽调占比**（20%–80%）
 - **Markdown 渲染** — `.md` 文件提供 `渲染` 档：标题/列表/表格/围栏代码高亮；`mermaid` 图原生渲染（含渲染/源码切换与解析失败提示）
 - **新增/删除文件** — 纯新增与纯删除差异单栏全宽展示完整文件内容，带 `新增`/`已删除` 徽标
-- **语法高亮与上下文折叠** — 整块 tokenize 一次、长冗余上下文可折叠
+- **语法高亮与上下文折叠** — 整块 tokenize 一次（shiki），覆盖主流工程语言：TS/JS（含 JSX/TSX）、HTML/Vue/Svelte/Astro、PHP/Blade、SCSS/CSS、Python/Go/Rust/Java/C#/Kotlin/Swift/C/C++、SQL、Dockerfile（含变体）、GraphQL、Prisma、Terraform/HCL 等；长冗余上下文可折叠
 
 ### 记录
 
@@ -143,7 +143,7 @@ dsh plugin --profile web add dsh-git-ui
 - 变更文件列表有上限（`maxChanges`）；超大 status 输出经 spill 文件兜底恢复计数。
 - 浏览器只发送 `sessionId`——宿主解析 cwd 并以路径守卫运行 git 命令。
 - Turn 记录对动态构造的 bash 目标（`$(...)`、glob、`eval`）为启发式——回落 `外` 并带可见 `≈` 标记；冷会话跳过；观测时间线有上限。
-- 语法高亮为预算裁剪的语言子集；mermaid 支持 flowchart/graph 与 sequenceDiagram 子集。
+- 语法高亮覆盖主流工程语言集（TS/JS/JSX/TSX、HTML/Vue/Svelte/Astro、PHP/Blade、SCSS/CSS、Python/Go/Rust/Java/C#/Kotlin/Swift/C/C++、SQL、Dockerfile、GraphQL、Prisma、Terraform/HCL 等）；个别语言仍为近似（如 C++→C、LESS→CSS），未知类型回落纯文本；mermaid 支持 flowchart/graph 与 sequenceDiagram 子集。
 
 ## 开发
 

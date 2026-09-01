@@ -66,7 +66,7 @@ The diff viewer:
 - **View modes** — `对照` (side-by-side, default) / `变更前` / `变更后`; the split divider is **draggable** (20%–80%)
 - **Markdown rendering** — `.md` files get a `渲染` mode: formatted headings, lists, tables and fenced-code highlighting; `mermaid` diagrams render natively (with a source/rendered toggle and a clear parse-error fallback)
 - **New / deleted files** — pure-add and pure-delete diffs render the full file content in a single column, with a `新增` / `已删除` badge
-- **Syntax highlighting & context folding** — tokenized once per file, foldable long unchanged runs
+- **Syntax highlighting & context folding** — tokenized once per file (shiki), covering mainstream engineering languages: TS/JS (+JSX/TSX), HTML/Vue/Svelte/Astro, PHP/Blade, SCSS/CSS, Python/Go/Rust/Java/C#/Kotlin/Swift/C/C++, SQL, Dockerfile (incl. variants), GraphQL, Prisma, Terraform/HCL, etc.; foldable long unchanged runs
 
 ### Records
 
@@ -143,7 +143,7 @@ All defaults work out of the box. Advanced users may override the plugin config 
 - The changed-file list is capped (`maxChanges`), with spill-file recovery for oversized status output.
 - The browser only ever sends a `sessionId` — the host resolves cwd and runs git with path guards.
 - Turn records are heuristic for dynamically-constructed bash targets (`$(...)`, globs, `eval`) — they fall back to `外` with a visible `≈` mark; cold sessions are skipped; observation timelines are capped.
-- Syntax highlighting ships a bundle-budget language subset; mermaid support covers flowchart / graph and sequenceDiagram subsets.
+- Syntax highlighting covers the mainstream engineering language set (TS/JS/JSX/TSX, HTML/Vue/Svelte/Astro, PHP/Blade, SCSS/CSS, Python/Go/Rust/Java/C#/Kotlin/Swift/C/C++, SQL, Dockerfile, GraphQL, Prisma, Terraform/HCL, etc.); some languages stay approximate (e.g. C++ via C, LESS via CSS) and unknown types fall back to plain text; mermaid support covers flowchart / graph and sequenceDiagram subsets.
 
 ## Development
 

@@ -26,13 +26,20 @@ import { createHighlighterCoreSync, createCssVariablesTheme } from 'shiki/core'
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
 import type { HighlighterCore } from 'shiki/core'
 import langTs from '@shikijs/langs/typescript'
+import langTsx from '@shikijs/langs/tsx'
+import langJs from '@shikijs/langs/javascript'
+import langJsx from '@shikijs/langs/jsx'
 import langJson from '@shikijs/langs/json'
 import langYaml from '@shikijs/langs/yaml'
 import langToml from '@shikijs/langs/toml'
 import langIni from '@shikijs/langs/ini'
 import langMarkdown from '@shikijs/langs/markdown'
 import langXml from '@shikijs/langs/xml'
+import langHtml from '@shikijs/langs/html'
+import langHtmlDerivative from '@shikijs/langs/html-derivative'
 import langCss from '@shikijs/langs/css'
+import langScss from '@shikijs/langs/scss'
+import langPostcss from '@shikijs/langs/postcss'
 import langPython from '@shikijs/langs/python'
 import langBash from '@shikijs/langs/shellscript'
 import langJava from '@shikijs/langs/java'
@@ -43,6 +50,28 @@ import langCsharp from '@shikijs/langs/csharp'
 import langKotlin from '@shikijs/langs/kotlin'
 import langSql from '@shikijs/langs/sql'
 import langMake from '@shikijs/langs/make'
+import langVue from '@shikijs/langs/vue'
+import langVueDirectives from '@shikijs/langs/vue-directives'
+import langVueInterpolations from '@shikijs/langs/vue-interpolations'
+import langVueSfcStyleVariableInjection from '@shikijs/langs/vue-sfc-style-variable-injection'
+import langMarkdownVue from '@shikijs/langs/markdown-vue'
+import langSvelte from '@shikijs/langs/svelte'
+import langAstro from '@shikijs/langs/astro'
+import langPhp from '@shikijs/langs/php'
+import langBlade from '@shikijs/langs/blade'
+import langSwift from '@shikijs/langs/swift'
+import langLua from '@shikijs/langs/lua'
+import langDart from '@shikijs/langs/dart'
+import langDocker from '@shikijs/langs/docker'
+import langDockerfile from '@shikijs/langs/dockerfile'
+import langGraphql from '@shikijs/langs/graphql'
+import langPrisma from '@shikijs/langs/prisma'
+import langProto from '@shikijs/langs/proto'
+import langCmake from '@shikijs/langs/cmake'
+import langTerraform from '@shikijs/langs/terraform'
+import langHcl from '@shikijs/langs/hcl'
+import langPowershell from '@shikijs/langs/powershell'
+import langVerilog from '@shikijs/langs/verilog'
 
 /**
  * 一个高亮片段：文本 + shiki 分配的 inline 颜色（CSS 变量引用）。
@@ -55,17 +84,33 @@ export interface HighlightSpan {
 /**
  * 显式 grammar 白名单（单文件 bundle 预算约束下的取舍）。
  *
- * 排除的重量级 grammar 与替代（详见 lang-map 注释）：
- *   - ruby → 依赖图携带 cpp(817KB)+graphql+haml+JS 全家，拉入成本极高；
- *   - html/javascript/jsx/tsx → html 以 xml 近似（超集，基础 token 正确）；
- *   - cpp/php/swift/less/scss/lua → 由近邻 grammar 近似或回落纯文本。
- * 缺语言的类型回落纯文本（无错误），不会炸渲染。
+ * 语言分两层注册：
+ *   1. 用户可寻址语言（lang-map.ts 的映射终点）——按实际文件类型逐一注册；
+ *   2. 嵌入式语言（embeddedLangs 依赖）——html 内嵌 javascript/css、vue 内嵌
+ *      html/javascript/typescript/json、svelte/astro 内嵌 postcss 等。shiki 的
+ *      `createHighlighterCoreSync` 需要**全部**嵌入式 grammar 显式注册，否则
+ *      内嵌代码段（如 html 的 `<script>`、vue 的 `<style>`）回落纯文本。
+ *
+ * 体积说明（@shikijs/langs/dist 实测，mjs 文件大小）：
+ *   - html 仅依赖 javascript(184K)+css，不拖「JS 全家」——旧注释的 570KB
+ *     描述已过时（html.mjs 独立引入 javascript/css，不再依赖 jsx/tsx 链）；
+ *   - vue 依赖 html+javascript+typescript+json+6 个 vue 衍生 grammar；
+ *   - php/blade 依赖 html/xml/sql/javascript/json/css；
+ *   - graphql 依赖 javascript/typescript/jsx/tsx。
+ * 单文件 bundle 预算约束下仍保留的近似：
+ *   - cpp/php 的近邻……（见 lang-map 注释，映射层负责）
  */
 const LANGS = [
-  langTs, langJson, langYaml, langToml, langIni, langMarkdown,
-  langXml, langCss,
+  langTs, langTsx, langJs, langJsx,
+  langJson, langYaml, langToml, langIni, langMarkdown,
+  langXml, langHtml, langHtmlDerivative, langCss, langScss, langPostcss,
   langPython, langBash, langJava, langGo, langRust,
   langC, langCsharp, langKotlin, langSql, langMake,
+  langVue, langVueDirectives, langVueInterpolations, langVueSfcStyleVariableInjection, langMarkdownVue,
+  langSvelte, langAstro,
+  langPhp, langBlade, langSwift, langLua, langDart,
+  langDocker, langDockerfile, langGraphql, langPrisma, langProto, langCmake,
+  langTerraform, langHcl, langPowershell, langVerilog,
 ]
 
 /** 全部 token 颜色经 `--shiki-*` 自定义属性解析（宿主主题 sheet 提供亮/暗两套）。 */
